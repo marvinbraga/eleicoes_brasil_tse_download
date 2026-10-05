@@ -1,0 +1,14 @@
+.git
+.venv
+downloads
+docs
+tests
+__pycache__
+.env
+*.pyc
+.mypy_cache
+.pytest_cache
+.ruff_cache
+.idea
+.coverage
+.cadence

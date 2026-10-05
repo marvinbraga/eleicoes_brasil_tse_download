@@ -7,9 +7,10 @@ from typing import NoReturn, cast
 
 from dotenv import load_dotenv
 
-from eleicoes.composition.settings import build_command
-from eleicoes.composition.wiring import build_app
+from eleicoes.composition.settings import build_command, build_import_command
+from eleicoes.composition.wiring import build_app, build_import
 from eleicoes.domain.errors import (
+    DatabaseConfigError,
     ElectionError,
     InvalidElectionYearError,
     InvalidPackageRefError,
@@ -17,9 +18,11 @@ from eleicoes.domain.errors import (
     TransportError,
     UnexpectedHttpStatusError,
 )
+from eleicoes.domain.importing import ImportReport, ImportStatus
 from eleicoes.domain.layout import write_index
-from eleicoes.domain.report import EXIT_FAILURE, RunReport
+from eleicoes.domain.report import EXIT_FAILURE, EXIT_NOT_PUBLISHED, RunReport
 from eleicoes.ports.download import ElectionDownloader
+from eleicoes.ports.importer import ElectionImporter
 
 
 class _Parser(argparse.ArgumentParser):
@@ -34,8 +37,19 @@ def main(
     *,
     environ: Mapping[str, str] | None = None,
     app: ElectionDownloader | None = None,
+    importer: ElectionImporter | None = None,
 ) -> int:
     args = _parse(argv)
+    if args.command == "import":
+        return _run_import(args, environ, importer)
+    return _run_download(args, environ, app)
+
+
+def _run_download(
+    args: argparse.Namespace,
+    environ: Mapping[str, str] | None,
+    app: ElectionDownloader | None,
+) -> int:
     try:
         command = build_command(
             _year_argument(args),
@@ -52,27 +66,61 @@ def main(
     return report.exit_code
 
 
+def _run_import(
+    args: argparse.Namespace,
+    environ: Mapping[str, str] | None,
+    importer: ElectionImporter | None,
+) -> int:
+    env = _environment(environ)
+    try:
+        command = build_import_command(_year_argument(args), _origem_argument(args), env)
+        application = importer if importer is not None else build_import(env)
+        try:
+            report = application.execute(command)
+        finally:
+            application.close()
+    except ElectionError as error:
+        print(_import_message(error), file=sys.stderr)
+        return EXIT_FAILURE
+    except Exception:
+        print("Não foi possível concluir a importação.", file=sys.stderr)
+        return EXIT_FAILURE
+    print(_render_import(report))
+    return report.exit_code
+
+
 def _parse(argv: Sequence[str] | None) -> argparse.Namespace:
     parser = _Parser(
         prog="eleicoes",
-        description="Baixa os arquivos abertos de uma eleição do TSE.",
+        description="Baixa e importa os arquivos abertos de uma eleição do TSE.",
     )
     commands = parser.add_subparsers(dest="command", required=True)
     download = commands.add_parser("download", help="Descobre e baixa os zips do ano informado.")
-    download.add_argument(
-        "--ano",
-        type=int,
-        default=None,
-        help="Ano da eleição. Sobrescreve ANO_ELEICAO.",
-    )
+    _add_year(download)
     download.add_argument(
         "--destino",
         default=None,
         help="Pasta de destino. Padrão: downloads/{ano} ou DIRETORIO_SAIDA.",
     )
+    incoming = commands.add_parser("import", help="Importa os CSV de correspondência já baixados.")
+    _add_year(incoming)
+    incoming.add_argument(
+        "--origem",
+        default=None,
+        help="Pasta do ano, com indice.csv. Padrão: downloads/{ano} ou DIRETORIO_SAIDA.",
+    )
     if argv is None:
         return parser.parse_args()
     return parser.parse_args(list(argv))
+
+
+def _add_year(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--ano",
+        type=int,
+        default=None,
+        help="Ano da eleição. Sobrescreve ANO_ELEICAO.",
+    )
 
 
 def _environment(environ: Mapping[str, str] | None) -> Mapping[str, str]:
@@ -92,12 +140,47 @@ def _year_argument(args: argparse.Namespace) -> int | None:
 
 
 def _destino_argument(args: argparse.Namespace) -> str | None:
-    value = cast(object, getattr(args, "destino", None))
+    return _text_argument(args, "destino")
+
+
+def _origem_argument(args: argparse.Namespace) -> str | None:
+    return _text_argument(args, "origem")
+
+
+def _text_argument(args: argparse.Namespace, name: str) -> str | None:
+    value = cast(object, getattr(args, name, None))
     if value is None:
         return None
     if isinstance(value, str):
         return value
-    raise ElectionError("destino inválido")
+    raise ElectionError(f"{name} inválido")
+
+
+def _import_message(error: ElectionError) -> str:
+    if isinstance(error, DatabaseConfigError):
+        return (
+            "Configuração do Postgres incompleta. Defina POSTGRES_HOST, POSTGRES_PORT, "
+            "POSTGRES_USER, POSTGRES_PASSWORD e POSTGRES_DB."
+        )
+    if isinstance(error, (InvalidElectionYearError, MissingElectionYearError)):
+        return _user_message(error)
+    return "Não foi possível concluir a importação."
+
+
+def _render_import(report: ImportReport) -> str:
+    if report.exit_code == EXIT_NOT_PUBLISHED:
+        return "Nenhum arquivo tabular para importar."
+    loaded = report.count(ImportStatus.LOADED)
+    ignored = report.count(ImportStatus.IGNORED)
+    failed = report.count(ImportStatus.FAILED)
+    lines = [
+        (
+            f"Importação concluída: {loaded} tabelas, "
+            f"{report.loaded_rows} linhas, {ignored} ignorados."
+        ),
+        f"Falhas: {failed}",
+    ]
+    return "\n".join(lines)
 
 
 def _user_message(error: ElectionError) -> str:

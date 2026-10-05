@@ -2,8 +2,10 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from eleicoes.composition.command_builder import DownloadCommandBuilder
+from eleicoes.composition.import_command_builder import ImportCommandBuilder
 from eleicoes.domain.command import DownloadCommand
 from eleicoes.domain.errors import InvalidElectionYearError, MissingElectionYearError
+from eleicoes.domain.importing import ImportCommand
 from eleicoes.domain.values import ElectionYear
 
 
@@ -31,6 +33,25 @@ def resolve_destination(
     if chosen is None:
         return Path("downloads") / str(year.value)
     return Path(chosen)
+
+
+def resolve_origin(cli_origem: str | None, env: Mapping[str, str], year: ElectionYear) -> Path:
+    """Argumento, DIRETORIO_SAIDA, ou downloads/{ano}. Não grava essa variável no .env."""
+    return resolve_destination(cli_origem, env, year)
+
+
+def build_import_command(
+    cli_year: int | None,
+    cli_origem: str | None,
+    env: Mapping[str, str],
+) -> ImportCommand:
+    year = resolve_year(cli_year, env)
+    return (
+        ImportCommandBuilder()
+        .with_year(year)
+        .with_origin(resolve_origin(cli_origem, env, year))
+        .build()
+    )
 
 
 def build_command(

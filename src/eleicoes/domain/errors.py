@@ -61,3 +61,34 @@ class UnexpectedHttpStatusError(TransportError):
 class CkanPayloadError(TransportError):
     def __init__(self, message: str) -> None:
         super().__init__(message)
+
+
+class InvalidGenerationError(ElectionError):
+    def __init__(self, value: object) -> None:
+        self.value = value
+        super().__init__(f"invalid generation stamp: {value}")
+
+
+class SchemaMismatchError(ElectionError):
+    def __init__(self, member: str) -> None:
+        self.member = member
+        super().__init__(f"unexpected csv header: {member}")
+
+
+class MissingIndexError(ElectionError):
+    def __init__(self, path: str) -> None:
+        self.path = path
+        super().__init__(f"missing index: {path}")
+
+
+class ArchiveUnreadableError(ElectionError):
+    def __init__(self, path: str) -> None:
+        self.path = path
+        super().__init__(f"unreadable archive: {path}")
+
+
+class DatabaseConfigError(ElectionError):
+    def __init__(self, missing: tuple[str, ...]) -> None:
+        self.missing = missing
+        joined = ", ".join(missing)
+        super().__init__(f"missing database configuration: {joined}")
