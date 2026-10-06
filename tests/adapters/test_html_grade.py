@@ -1,4 +1,4 @@
-"""HTML grid: one decimal, escaped text, and a scale per grade."""
+"""HTML grid: two decimals, state tables, escaped text, and a scale per grade."""
 
 import re
 
@@ -27,18 +27,21 @@ def test_share_uses_two_decimals_over_valid_votes_and_escapes_names() -> None:
     assert "Rio <Branco>" not in page
     assert "dep&lt;utado&gt;" in page
     assert "nominais 42407, legenda 308, votos 42715, votos válidos 42715" in page
-    assert '<th class="validos">Votos válidos</th>' in page
-    assert '<td class="validos">42.715</td>' in page
+    assert '<th class="validos" aria-sort="none">Votos válidos</th>' in page
+    assert '<td class="validos" data-ord="42715">42.715</td>' in page
+    assert 'data-ord="1000000000"' in page
     assert page.index("Votos válidos") < page.index(">22<")
-    assert "<h1>Poder do partido</h1>" in page
+    assert '<h1 class="h3 mb-4">Poder do partido</h1>' in page
     assert "Por município — 2026, turno 1, dep&lt;utado&gt;" in page
     assert "nominais e de legenda são somados" in page
     assert "Brancos e nulos ficam de fora" in page
     assert "sobre os votos válidos" in page
     assert "sem candidato a presidente conta como nulo" in page
-    assert "<script" not in page
+    assert "Clique no título da coluna para ordenar." in page
+    assert "bootstrap@5.3.3" in page
+    assert page.count("https://") == 1
     assert "http://" not in page
-    assert "https://" not in page
+    assert "localeCompare" in page
     assert 'charset="utf-8"' in page
 
 
@@ -56,7 +59,7 @@ def test_each_grade_keeps_its_own_color_scale() -> None:
     )
     page = html_das_grades((small, mixed))
     assert page.index("Por município") < page.index("Por estado")
-    first, second = page.split("<section>")[1:]
+    first, second = page.split("<section ")[1:]
     assert "rgb(13,111,110)" in _style(first, "100,00%")
     assert "rgb(13,111,110)" in _style(second, "88,89%")
     assert "rgb(13,111,110)" not in _style(second, "11,11%")
@@ -112,7 +115,48 @@ def test_zero_turnout_stays_white() -> None:
     grade = _grade("municipio", (LugarVotos("1", "A", (_party(1, 13, 0, 0),)),))
     page = html_da_grade(grade)
     assert 'background-color:rgb(255,255,255);color:rgb(20,20,20)">0,00%' in page
-    assert '<td class="validos">0</td>' in page
+    assert '<td class="validos" data-ord="0">0</td>' in page
+
+
+def test_municipio_is_split_by_state_and_keeps_one_color_scale() -> None:
+    grade = _grade(
+        "municipio",
+        (
+            LugarVotos(
+                "27030",
+                "Anadia (AL)",
+                (_party(27030, 13, 45, 100), _party(27030, 22, 55, 100)),
+            ),
+            LugarVotos(
+                "1",
+                "Foo (NO)",
+                (_party(1, 13, 1, 10), _party(1, 22, 1, 10)),
+            ),
+            LugarVotos(
+                "1392",
+                "Rio Branco (AC)",
+                (_party(1392, 13, 90, 100), _party(1392, 22, 10, 100)),
+            ),
+        ),
+    )
+    page = html_da_grade(grade)
+    acre = page.split("Acre (AC)", 1)[1].split("Alagoas (AL)", 1)[0]
+    alagoas = page.split("Alagoas (AL)", 1)[1]
+    assert page.index("Acre (AC)") < page.index("Rio Branco (AC)")
+    assert page.index("Rio Branco (AC)") < page.index("Alagoas (AL)")
+    assert page.index("Alagoas (AL)") < page.index("Anadia (AL)")
+    assert page.index("Anadia (AL)") < page.index("Foo (NO)")
+    assert acre.count("<table") == 1
+    assert "rgb(13,111,110)" in _style(acre, "90,00%")
+    assert "rgb(13,111,110)" not in alagoas
+    only = html_da_grade(
+        _grade(
+            "municipio",
+            (LugarVotos("1392", "Rio Branco (AC)", (_party(1392, 13, 1, 10),)),),
+        )
+    )
+    assert only.count("<h3") == 1
+    assert only.count("<table") == 1
 
 
 def _grade(
