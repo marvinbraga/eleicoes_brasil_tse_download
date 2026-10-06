@@ -7,22 +7,42 @@ from typing import NoReturn, cast
 
 from dotenv import load_dotenv
 
-from eleicoes.composition.settings import build_command, build_import_command
-from eleicoes.composition.wiring import build_app, build_import
+from eleicoes.composition.settings import (
+    build_boletim_command,
+    build_command,
+    build_import_command,
+    build_urna_command,
+)
+from eleicoes.composition.wiring import (
+    build_app,
+    build_boletim_import,
+    build_import,
+    build_urna_download,
+)
+from eleicoes.domain.boletim import BoletimImportReport
 from eleicoes.domain.errors import (
+    AnnouncedFilesMissingError,
     DatabaseConfigError,
     ElectionError,
+    InvalidBoletimError,
     InvalidElectionYearError,
     InvalidPackageRefError,
+    InvalidTurnoError,
+    InvalidUfError,
     MissingElectionYearError,
     TransportError,
+    TseBlockedError,
     UnexpectedHttpStatusError,
+    UnexpectedTsePayloadError,
 )
 from eleicoes.domain.importing import ImportReport, ImportStatus
 from eleicoes.domain.layout import write_index
 from eleicoes.domain.report import EXIT_FAILURE, EXIT_NOT_PUBLISHED, RunReport
+from eleicoes.domain.urna_models import UrnaRunReport
+from eleicoes.ports.boletim import BoletimImporter
 from eleicoes.ports.download import ElectionDownloader
 from eleicoes.ports.importer import ElectionImporter
+from eleicoes.ports.urna import UrnaDownloader
 
 
 class _Parser(argparse.ArgumentParser):
@@ -38,10 +58,16 @@ def main(
     environ: Mapping[str, str] | None = None,
     app: ElectionDownloader | None = None,
     importer: ElectionImporter | None = None,
+    urnas: UrnaDownloader | None = None,
+    boletins: BoletimImporter | None = None,
 ) -> int:
     args = _parse(argv)
     if args.command == "import":
         return _run_import(args, environ, importer)
+    if args.command == "urnas":
+        return _run_urnas(args, environ, urnas)
+    if args.command == "boletins":
+        return _run_boletins(args, environ, boletins)
     return _run_download(args, environ, app)
 
 
@@ -63,6 +89,56 @@ def _run_download(
         print(_user_message(error), file=sys.stderr)
         return EXIT_FAILURE
     print(_render(report, index))
+    return report.exit_code
+
+
+def _run_urnas(
+    args: argparse.Namespace,
+    environ: Mapping[str, str] | None,
+    urnas: UrnaDownloader | None,
+) -> int:
+    try:
+        command = build_urna_command(
+            _year_argument(args),
+            _destino_argument(args),
+            _environment(environ),
+            turnos=_turnos_argument(args),
+            ufs=_ufs_argument(args),
+        )
+        application = urnas if urnas is not None else build_urna_download()
+        report = application.execute(command)
+    except ElectionError as error:
+        print(_urna_message(error), file=sys.stderr)
+        return EXIT_FAILURE
+    print(_render_urnas(report))
+    return report.exit_code
+
+
+def _run_boletins(
+    args: argparse.Namespace,
+    environ: Mapping[str, str] | None,
+    boletins: BoletimImporter | None,
+) -> int:
+    env = _environment(environ)
+    try:
+        command = build_boletim_command(
+            _year_argument(args),
+            _optional_turno(args),
+            _optional_uf(args),
+            env,
+        )
+        application = boletins if boletins is not None else build_boletim_import(env)
+        try:
+            report = application.execute(command)
+        finally:
+            application.close()
+    except ElectionError as error:
+        print(_boletim_message(error), file=sys.stderr)
+        return EXIT_FAILURE
+    except Exception:
+        print("Não foi possível concluir a importação dos boletins.", file=sys.stderr)
+        return EXIT_FAILURE
+    print(_render_boletins(report))
     return report.exit_code
 
 
@@ -109,9 +185,40 @@ def _parse(argv: Sequence[str] | None) -> argparse.Namespace:
         default=None,
         help="Pasta do ano, com indice.csv. Padrão: downloads/{ano} ou DIRETORIO_SAIDA.",
     )
+    boxes = commands.add_parser("urnas", help="Baixa os arquivos de urna de cada seção.")
+    _add_urnas(boxes)
+    bulletins = commands.add_parser(
+        "boletins",
+        help="Importa os boletins de urna (bu.dat) de uma UF.",
+    )
+    _add_year(bulletins)
+    bulletins.add_argument("--turno", type=int, default=None, help="Turno 1 ou 2.")
+    bulletins.add_argument("--uf", default=None, help="Sigla da UF.")
     if argv is None:
         return parser.parse_args()
     return parser.parse_args(list(argv))
+
+
+def _add_urnas(parser: argparse.ArgumentParser) -> None:
+    _add_year(parser)
+    parser.add_argument(
+        "--destino",
+        default=None,
+        help="Pasta de destino. Padrão: downloads/{ano} ou DIRETORIO_SAIDA.",
+    )
+    parser.add_argument(
+        "--turno",
+        action="append",
+        type=int,
+        default=None,
+        help="Turno 1 ou 2. Pode repetir. Padrão: os dois.",
+    )
+    parser.add_argument(
+        "--uf",
+        action="append",
+        default=None,
+        help="Sigla da UF. Pode repetir. Padrão: todas.",
+    )
 
 
 def _add_year(parser: argparse.ArgumentParser) -> None:
@@ -139,6 +246,52 @@ def _year_argument(args: argparse.Namespace) -> int | None:
     raise InvalidElectionYearError(value)
 
 
+def _turnos_argument(args: argparse.Namespace) -> tuple[int, ...] | None:
+    value = cast(object, getattr(args, "turno", None))
+    if value is None:
+        return None
+    if not isinstance(value, list):
+        raise InvalidTurnoError(value)
+    numbers: list[int] = []
+    for item in value:
+        if isinstance(item, bool) or not isinstance(item, int):
+            raise InvalidTurnoError(item)
+        numbers.append(item)
+    return tuple(numbers)
+
+
+def _ufs_argument(args: argparse.Namespace) -> tuple[str, ...] | None:
+    value = cast(object, getattr(args, "uf", None))
+    if value is None:
+        return None
+    if not isinstance(value, list):
+        raise InvalidUfError(value)
+    codes: list[str] = []
+    for item in value:
+        if not isinstance(item, str):
+            raise InvalidUfError(item)
+        codes.append(item)
+    return tuple(codes)
+
+
+def _optional_turno(args: argparse.Namespace) -> int | None:
+    value = cast(object, getattr(args, "turno", None))
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise InvalidTurnoError(value)
+    return value
+
+
+def _optional_uf(args: argparse.Namespace) -> str | None:
+    value = cast(object, getattr(args, "uf", None))
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise InvalidUfError(value)
+    return value
+
+
 def _destino_argument(args: argparse.Namespace) -> str | None:
     return _text_argument(args, "destino")
 
@@ -154,6 +307,29 @@ def _text_argument(args: argparse.Namespace, name: str) -> str | None:
     if isinstance(value, str):
         return value
     raise ElectionError(f"{name} inválido")
+
+
+def _boletim_message(error: ElectionError) -> str:
+    if isinstance(error, InvalidBoletimError):
+        return f"Boletim inválido: {error.arquivo}."
+    if isinstance(error, DatabaseConfigError):
+        return (
+            "Configuração do Postgres incompleta. Defina POSTGRES_HOST, POSTGRES_PORT, "
+            "POSTGRES_USER, POSTGRES_PASSWORD e POSTGRES_DB."
+        )
+    if isinstance(error, InvalidTurnoError):
+        return "Turno inválido. Informe 1 ou 2."
+    if isinstance(error, InvalidUfError):
+        return "UF inválida."
+    if isinstance(error, (InvalidElectionYearError, MissingElectionYearError)):
+        return _user_message(error)
+    return "Não foi possível concluir a importação dos boletins."
+
+
+def _render_boletins(report: BoletimImportReport) -> str:
+    if report.exit_code == EXIT_NOT_PUBLISHED:
+        return "Nenhum boletim de urna encontrado."
+    return f"Boletins gravados: {report.boletins}. Votos: {report.votos}."
 
 
 def _import_message(error: ElectionError) -> str:
@@ -180,6 +356,34 @@ def _render_import(report: ImportReport) -> str:
         ),
         f"Falhas: {failed}",
     ]
+    return "\n".join(lines)
+
+
+def _urna_message(error: ElectionError) -> str:
+    if isinstance(error, InvalidTurnoError):
+        return "Turno inválido. Informe 1 ou 2."
+    if isinstance(error, InvalidUfError):
+        return "UF inválida."
+    if isinstance(error, (TseBlockedError, AnnouncedFilesMissingError, UnexpectedTsePayloadError)):
+        return str(error)
+    return _user_message(error)
+
+
+def _render_urnas(report: UrnaRunReport) -> str:
+    lines: list[str] = []
+    notice = "O TSE ainda não publicou os arquivos de urna deste turno."
+    if report.unpublished_turnos or report.exit_code == EXIT_NOT_PUBLISHED:
+        lines.append(notice)
+    if report.exit_code == EXIT_NOT_PUBLISHED:
+        return "\n".join(lines)
+    lines.extend(
+        [
+            f"Arquivos encontrados: {report.discovered}",
+            f"Baixados: {report.downloaded}",
+            f"Ignorados: {report.skipped}",
+            f"Ausentes: {report.missing}",
+        ]
+    )
     return "\n".join(lines)
 
 

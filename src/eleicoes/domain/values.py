@@ -47,6 +47,36 @@ UF_CODES: Final[tuple[str, ...]] = (
     "TO",
     "ZZ",
 )
+UF_NAMES: Final[dict[str, str]] = {
+    "AC": "Acre",
+    "AL": "Alagoas",
+    "AM": "Amazonas",
+    "AP": "Amapá",
+    "BA": "Bahia",
+    "CE": "Ceará",
+    "DF": "Distrito Federal",
+    "ES": "Espírito Santo",
+    "GO": "Goiás",
+    "MA": "Maranhão",
+    "MT": "Mato Grosso",
+    "MS": "Mato Grosso do Sul",
+    "MG": "Minas Gerais",
+    "PA": "Pará",
+    "PB": "Paraíba",
+    "PE": "Pernambuco",
+    "PI": "Piauí",
+    "PR": "Paraná",
+    "RJ": "Rio de Janeiro",
+    "RN": "Rio Grande do Norte",
+    "RS": "Rio Grande do Sul",
+    "RO": "Rondônia",
+    "RR": "Roraima",
+    "SC": "Santa Catarina",
+    "SP": "São Paulo",
+    "SE": "Sergipe",
+    "TO": "Tocantins",
+    "ZZ": "Exterior",
+}
 _UF_SET: Final[frozenset[str]] = frozenset(UF_CODES)
 _ZIP_SUFFIX: Final = ".zip"
 _SHA512_SUFFIX: Final = ".zip.sha512"
@@ -85,6 +115,10 @@ class Uf:
         if normalized not in _UF_SET:
             raise InvalidUfError(self.code)
         object.__setattr__(self, "code", normalized)
+
+
+def uf_name(code: str) -> str:
+    return UF_NAMES[Uf(code).code]
 
 
 def default_turnos() -> tuple[Turno, ...]:

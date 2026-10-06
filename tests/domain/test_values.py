@@ -12,6 +12,7 @@ from eleicoes.domain.values import (
     MAX_ELECTION_YEAR,
     MIN_ELECTION_YEAR,
     UF_CODES,
+    UF_NAMES,
     DiscoveryRequest,
     ElectionYear,
     PackageRef,
@@ -20,6 +21,7 @@ from eleicoes.domain.values import (
     Uf,
     default_turnos,
     default_ufs,
+    uf_name,
 )
 
 
@@ -57,6 +59,43 @@ class TestUf:
 
     def test_normalizes_lowercase(self) -> None:
         assert Uf("sp").code == "SP"
+
+    def test_every_uf_code_has_a_name(self) -> None:
+        expected = {
+            "AC": "Acre",
+            "AL": "Alagoas",
+            "AM": "Amazonas",
+            "AP": "Amapá",
+            "BA": "Bahia",
+            "CE": "Ceará",
+            "DF": "Distrito Federal",
+            "ES": "Espírito Santo",
+            "GO": "Goiás",
+            "MA": "Maranhão",
+            "MT": "Mato Grosso",
+            "MS": "Mato Grosso do Sul",
+            "MG": "Minas Gerais",
+            "PA": "Pará",
+            "PB": "Paraíba",
+            "PE": "Pernambuco",
+            "PI": "Piauí",
+            "PR": "Paraná",
+            "RJ": "Rio de Janeiro",
+            "RN": "Rio Grande do Norte",
+            "RS": "Rio Grande do Sul",
+            "RO": "Rondônia",
+            "RR": "Roraima",
+            "SC": "Santa Catarina",
+            "SP": "São Paulo",
+            "SE": "Sergipe",
+            "TO": "Tocantins",
+            "ZZ": "Exterior",
+        }
+        assert set(UF_NAMES) == set(UF_CODES)
+        assert expected == UF_NAMES
+        for code in UF_CODES:
+            assert uf_name(code) == expected[code]
+            assert uf_name(code.lower()) == expected[code]
 
     @pytest.mark.parametrize("value", ["", "BR", "XX", "S", "SPP"])
     def test_rejects_unknown_code(self, value: str) -> None:
