@@ -8,6 +8,8 @@ from eleicoes.domain.errors import ElectionError, InvalidBoletimError
 from eleicoes.ports.boletim import BoletimReader, BoletimSink
 
 _SECTION_BULLETIN: Final = "*/*/*/*-bu.dat"
+_ABSENT_GLOB: Final = "*.ausente"
+_ABSENT_SUFFIX: Final = ".ausente"
 
 
 class ImportBoletins:
@@ -19,12 +21,13 @@ class ImportBoletins:
 
     def execute(self, command: ImportBoletinsCommand) -> BoletimImportReport:
         paths = _bulletin_paths(command.origin)
+        ausentes = _absent_names(command.origin)
         if not paths:
-            return BoletimImportReport(0, 0)
+            return BoletimImportReport(0, 0, ausentes)
         parsed = tuple(self._read(command.origin, path) for path in paths)
         self._sink.ensure_model()
         votos = self._sink.replace_uf(command.year, command.turno, command.uf, parsed)
-        return BoletimImportReport(len(parsed), votos)
+        return BoletimImportReport(len(parsed), votos, ausentes)
 
     def close(self) -> None:
         self._sink.close()
@@ -45,6 +48,13 @@ def _bulletin_paths(origin: Path) -> tuple[Path, ...]:
         return ()
     found = [path for path in origin.glob(_SECTION_BULLETIN) if path.is_file()]
     return tuple(sorted(found))
+
+
+def _absent_names(origin: Path) -> tuple[str, ...]:
+    if not origin.is_dir():
+        return ()
+    markers = sorted(path for path in origin.rglob(_ABSENT_GLOB) if path.is_file())
+    return tuple(path.name.removesuffix(_ABSENT_SUFFIX) for path in markers)
 
 
 def _payload(arquivo: str, path: Path) -> bytes:

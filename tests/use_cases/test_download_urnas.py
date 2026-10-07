@@ -47,10 +47,6 @@ BLOCKED = (
     "O TSE bloqueou o endereço por excesso de requisições. "
     "A espera de 10 minutos não liberou o acesso."
 )
-INTERRUPTED = (
-    "Download interrompido: o TSE respondeu 404 para arquivos anunciados. "
-    "Novas tentativas podem bloquear o IP."
-)
 
 
 def _config(pleitos: list[dict[str, object]] | None = None) -> bytes:
@@ -264,7 +260,10 @@ def test_two_announced_404s_are_missing_and_the_run_continues(tmp_path: Path) ->
     assert text.count(",ausente,") == 2
 
 
-def test_the_third_announced_404_aborts(tmp_path: Path) -> None:
+def test_the_third_announced_404_aborts(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     names = [
         "o03220ac0139200010003-bu.dat",
         "o03220ac0139200010003-rdv.dat",
@@ -275,16 +274,50 @@ def test_the_third_announced_404_aborts(tmp_path: Path) -> None:
             CONFIG_URL: [(200, _config())],
             INDEX_URL: [(200, _index([_ready()]))],
             AUX_URL: [(200, _aux([_hash(HASH, "Totalizado", names)]))],
-            **{_file(name): [(404, b"")] for name in names},
+            **{_file(name): [(404, b"pagina inexistente")] for name in names},
         }
     )
-    with pytest.raises(AnnouncedFilesMissingError) as caught:
-        _app(http).execute(_command(tmp_path))
-    assert str(caught.value) == INTERRUPTED
+    report = _app(http).execute(_command(tmp_path))
+    assert report.exit_code == EXIT_SUCCESS
+    assert report.missing == 3
+    output = capsys.readouterr().out
+    folder = tmp_path / "arquivo-urna" / "turno-1" / "AC" / "01392" / "0001" / "0003"
+    for name in names:
+        assert f"[ausente] {name}\n" in output
+        assert _file(name) in http.urls
+        marker = folder / f"{name}.ausente"
+        assert marker.is_file()
+        assert marker.read_bytes() == b""
+        assert not (folder / name).exists()
     text = (tmp_path / "indice-urnas.csv").read_text(encoding="utf-8")
-    assert text.count(",ausente,") >= 2
-    assert _file(names[0]) in http.urls
-    assert _file(names[1]) in http.urls
+    assert text.count(",ausente,") == 3
+    assert list(tmp_path.rglob("*.partial")) == []
+
+
+def test_existing_absent_marker_is_not_requested(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    folder = tmp_path / "arquivo-urna" / "turno-1" / "AC" / "01392" / "0001" / "0003"
+    folder.mkdir(parents=True)
+    marker = folder / f"{BU}.ausente"
+    marker.write_bytes(b"")
+    http = QueueHttp(
+        {
+            CONFIG_URL: [(200, _config())],
+            INDEX_URL: [(200, _index([_ready()]))],
+            AUX_URL: [(200, _aux([_hash(HASH, "Totalizado", [BU])]))],
+            FILE_URL: [(200, b"should-not")],
+        }
+    )
+    report = _app(http).execute(_command(tmp_path))
+    assert FILE_URL not in http.urls
+    assert report.exit_code == EXIT_SUCCESS
+    assert not (folder / BU).exists()
+    assert marker.read_bytes() == b""
+    assert f"[ausente] {BU}\n" in capsys.readouterr().out
+    ledger = (tmp_path / "indice-urnas.csv").read_text(encoding="utf-8")
+    assert f"arquivo-urna/turno-1/AC/01392/0001/0003/{BU},ausente," in ledger
 
 
 def test_existing_file_is_skipped_without_a_request(tmp_path: Path) -> None:

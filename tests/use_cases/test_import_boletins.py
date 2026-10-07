@@ -37,6 +37,23 @@ def test_missing_directory_is_not_found(tmp_path: Path) -> None:
     assert sink.ensured is False
 
 
+def test_absent_marker_does_not_block_the_bulletin(tmp_path: Path) -> None:
+    relative = "01104/0005/0028/a-bu.dat"
+    _write(tmp_path, relative)
+    section = tmp_path / "01104" / "0005" / "0028"
+    (section / "skip.ausente").mkdir()
+    marker = _write(tmp_path, "01104/0005/0028/imgbu.dat.ausente", b"")
+    sink = _Sink()
+    reader = _Reader({relative: bulletin(relative)})
+    report = ImportBoletins(reader, sink).execute(_command(tmp_path))
+    assert report.boletins == 1
+    assert report.exit_code == EXIT_SUCCESS
+    assert sink.calls == [(2026, 1, "AC", (relative,))]
+    assert reader.reads == [relative]
+    assert report.ausentes == ("imgbu.dat",)
+    assert marker.read_bytes() == b""
+
+
 def test_directory_without_bulletins_is_not_found(tmp_path: Path) -> None:
     _write(tmp_path, "01104/0005/0028/o-rdv.dat", b"rdv")
     sink = _Sink()

@@ -12,6 +12,8 @@ from eleicoes.composition.settings import (
     build_command,
     build_import_command,
     build_urna_command,
+    resolve_destination,
+    resolve_year,
 )
 from eleicoes.composition.wiring import (
     build_app,
@@ -37,12 +39,14 @@ from eleicoes.domain.errors import (
 )
 from eleicoes.domain.importing import ImportReport, ImportStatus
 from eleicoes.domain.layout import write_index
-from eleicoes.domain.report import EXIT_FAILURE, EXIT_NOT_PUBLISHED, RunReport
+from eleicoes.domain.report import EXIT_FAILURE, EXIT_NOT_PUBLISHED, EXIT_SUCCESS, RunReport
 from eleicoes.domain.urna_models import UrnaRunReport
+from eleicoes.domain.values import ElectionYear, Turno, Uf
 from eleicoes.ports.boletim import BoletimImporter
 from eleicoes.ports.download import ElectionDownloader
 from eleicoes.ports.importer import ElectionImporter
 from eleicoes.ports.urna import UrnaDownloader
+from eleicoes.use_cases.list_ausentes import list_ausentes
 
 
 class _Parser(argparse.ArgumentParser):
@@ -68,6 +72,8 @@ def main(
         return _run_urnas(args, environ, urnas)
     if args.command == "boletins":
         return _run_boletins(args, environ, boletins)
+    if args.command == "ausentes":
+        return _run_ausentes(args, environ)
     return _run_download(args, environ, app)
 
 
@@ -142,6 +148,75 @@ def _run_boletins(
     return report.exit_code
 
 
+def _run_ausentes(
+    args: argparse.Namespace,
+    environ: Mapping[str, str] | None,
+) -> int:
+    try:
+        year, turno, uf, root = _ausentes_request(args, environ)
+        lines = list_ausentes(root, turno, uf)
+        report = _write_ausentes_report(year, turno, uf, lines)
+    except ElectionError as error:
+        print(_ausentes_message(error), file=sys.stderr)
+        return EXIT_FAILURE
+    print(_render_ausentes(len(lines), report))
+    return EXIT_SUCCESS
+
+
+def _ausentes_request(
+    args: argparse.Namespace,
+    environ: Mapping[str, str] | None,
+) -> tuple[ElectionYear, Turno, Uf | None, Path]:
+    env = _environment(environ)
+    year = resolve_year(_year_argument(args), env)
+    raw_turno = _optional_turno(args)
+    if raw_turno is None:
+        raise InvalidTurnoError(raw_turno)
+    raw_uf = _optional_uf(args)
+    uf = None if raw_uf is None else Uf(raw_uf)
+    return year, Turno(raw_turno), uf, resolve_destination(None, env, year)
+
+
+def _write_ausentes_report(
+    year: ElectionYear,
+    turno: Turno,
+    uf: Uf | None,
+    lines: tuple[str, ...],
+) -> Path:
+    path = _ausentes_report_path(year, turno, uf)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(_ausentes_text(lines), encoding="utf-8")
+    return path
+
+
+def _ausentes_report_path(year: ElectionYear, turno: Turno, uf: Uf | None) -> Path:
+    name = f"ausentes-{year.value}-turno-{turno.value}"
+    if uf is not None:
+        name = f"{name}-{uf.code.lower()}"
+    return Path("relatorios") / f"{name}.txt"
+
+
+def _ausentes_text(lines: tuple[str, ...]) -> str:
+    if not lines:
+        return ""
+    return "\n".join(lines) + "\n"
+
+
+def _render_ausentes(count: int, path: Path) -> str:
+    location = path.as_posix()
+    if count == 0:
+        return f"Nenhum arquivo ausente. Relatório: {location}"
+    return f"Arquivos ausentes: {count}. Relatório: {location}"
+
+
+def _ausentes_message(error: ElectionError) -> str:
+    if isinstance(error, InvalidTurnoError):
+        return "Turno inválido. Informe 1 ou 2."
+    if isinstance(error, InvalidUfError):
+        return "UF inválida."
+    return _user_message(error)
+
+
 def _run_import(
     args: argparse.Namespace,
     environ: Mapping[str, str] | None,
@@ -194,6 +269,13 @@ def _parse(argv: Sequence[str] | None) -> argparse.Namespace:
     _add_year(bulletins)
     bulletins.add_argument("--turno", type=int, default=None, help="Turno 1 ou 2.")
     bulletins.add_argument("--uf", default=None, help="Sigla da UF.")
+    missing = commands.add_parser(
+        "ausentes",
+        help="Lista os arquivos de urna marcados como ausentes, sem baixar nem importar.",
+    )
+    _add_year(missing)
+    missing.add_argument("--turno", type=int, default=None, help="Turno 1 ou 2.")
+    missing.add_argument("--uf", default=None, help="Sigla da UF. Padrão: todas.")
     if argv is None:
         return parser.parse_args()
     return parser.parse_args(list(argv))
@@ -329,7 +411,12 @@ def _boletim_message(error: ElectionError) -> str:
 def _render_boletins(report: BoletimImportReport) -> str:
     if report.exit_code == EXIT_NOT_PUBLISHED:
         return "Nenhum boletim de urna encontrado."
-    return f"Boletins gravados: {report.boletins}. Votos: {report.votos}."
+    summary = f"Boletins gravados: {report.boletins}. Votos: {report.votos}."
+    if not report.ausentes:
+        return summary
+    lines = [f"[ausente] {name}" for name in report.ausentes]
+    lines.append(summary)
+    return "\n".join(lines)
 
 
 def _import_message(error: ElectionError) -> str:

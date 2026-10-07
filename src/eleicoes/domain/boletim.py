@@ -113,6 +113,7 @@ class ImportBoletinsCommand:
 class BoletimImportReport:
     boletins: int
     votos: int
+    ausentes: tuple[str, ...] = ()
 
     @property
     def exit_code(self) -> int:

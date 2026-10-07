@@ -27,6 +27,10 @@ class UrnaDocuments(Protocol):
 class UrnaFileStore(Protocol):
     def is_complete(self, path: Path) -> bool: ...
 
+    def is_marked_absent(self, path: Path) -> bool: ...
+
+    def mark_absent(self, path: Path) -> Path: ...
+
     def write(
         self,
         body: BinaryBody,

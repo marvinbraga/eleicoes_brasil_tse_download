@@ -47,6 +47,23 @@ def test_empty_file_is_not_complete(tmp_path: Path) -> None:
     assert PartialUrnaStore().is_complete(target) is False
 
 
+def test_absent_marker_is_an_empty_sibling_and_a_second_call_keeps_it(tmp_path: Path) -> None:
+    target = tmp_path / "zona" / "o03220ma0843500500102-imgbu.dat"
+    store = PartialUrnaStore()
+    assert store.is_marked_absent(target) is False
+    marker = store.mark_absent(target)
+    assert marker == target.with_name("o03220ma0843500500102-imgbu.dat.ausente")
+    assert marker.read_bytes() == b""
+    assert not target.exists()
+    assert store.is_complete(target) is False
+    assert store.is_marked_absent(target) is True
+    marker.write_bytes(b"keep")
+    assert store.mark_absent(target) == marker
+    assert marker.read_bytes() == b"keep"
+    assert not target.exists()
+    assert list(tmp_path.rglob("*.partial")) == []
+
+
 def test_write_reports_cumulative_bytes_after_every_chunk(tmp_path: Path) -> None:
     seen: list[int] = []
     body = FakeBody(b"abcdef")

@@ -59,10 +59,10 @@ class _Tally:
         self.unpublished: list[int] = []
         self._lock = threading.Lock()
 
-    def add(self, status: TransferStatus) -> bool:
+    def add(self, status: TransferStatus, *, counts_toward_abort: bool = True) -> bool:
         with self._lock:
-            _count(self, status)
-            return status is TransferStatus.MISSING and self.not_found >= _NOT_FOUND_LIMIT
+            _count(self, status, counts_toward_abort=counts_toward_abort)
+            return _abort_after_announced_miss(self, status, counts_toward_abort)
 
     def report(self) -> UrnaRunReport:
         return UrnaRunReport(self.downloaded, self.skipped, self.missing, tuple(self.unpublished))
@@ -302,6 +302,11 @@ class DownloadUrnaFiles:
                 lines,
             )
             return
+        if self._store.is_marked_absent(target):
+            self._record_section_absence(
+                command, turno, address, filename, relative, target, tally, lines
+            )
+            return
         response = self._exchange(file_url)
         try:
             self._consume(
@@ -333,13 +338,9 @@ class DownloadUrnaFiles:
         status = response.status_code
         caminho = relative.as_posix()
         if status == _HTTP_NOT_FOUND:
-            self._remember(
-                command.destination,
-                tally,
-                TransferStatus.MISSING,
-                target,
-                _absent_file_row(turno, address, filename, caminho),
-                lines,
+            self._store.mark_absent(target)
+            self._record_section_absence(
+                command, turno, address, filename, relative, target, tally, lines
             )
             return
         if status != _HTTP_OK:
@@ -404,6 +405,27 @@ class DownloadUrnaFiles:
         retried.body.close()
         raise TseBlockedError()
 
+    def _record_section_absence(
+        self,
+        command: UrnaDownloadCommand,
+        turno: Turno,
+        address: UrnaAddress,
+        filename: str,
+        relative: Path,
+        target: Path,
+        tally: _Tally,
+        lines: list[str],
+    ) -> None:
+        self._remember(
+            command.destination,
+            tally,
+            TransferStatus.MISSING,
+            target,
+            _absent_file_row(turno, address, filename, relative.as_posix()),
+            lines,
+            counts_toward_abort=False,
+        )
+
     def _remember(
         self,
         destination: Path,
@@ -412,9 +434,11 @@ class DownloadUrnaFiles:
         target: Path,
         row: UrnaLedgerRow,
         lines: list[str] | None,
+        *,
+        counts_toward_abort: bool = True,
     ) -> None:
         line = _status_line(_LABEL[status], target.name, row.tamanho_bytes)
-        abort = tally.add(status)
+        abort = tally.add(status, counts_toward_abort=counts_toward_abort)
         if lines is None:
             self._progress.emit_lines((line,))
         else:
@@ -424,7 +448,19 @@ class DownloadUrnaFiles:
             raise AnnouncedFilesMissingError()
 
 
-def _count(tally: _Tally, status: TransferStatus) -> None:
+def _abort_after_announced_miss(
+    tally: _Tally,
+    status: TransferStatus,
+    counts_toward_abort: bool,
+) -> bool:
+    return (
+        counts_toward_abort
+        and status is TransferStatus.MISSING
+        and tally.not_found >= _NOT_FOUND_LIMIT
+    )
+
+
+def _count(tally: _Tally, status: TransferStatus, *, counts_toward_abort: bool) -> None:
     if status is TransferStatus.DOWNLOADED:
         tally.downloaded += 1
         return
@@ -432,7 +468,8 @@ def _count(tally: _Tally, status: TransferStatus) -> None:
         tally.skipped += 1
         return
     tally.missing += 1
-    tally.not_found += 1
+    if counts_toward_abort:
+        tally.not_found += 1
 
 
 def _index_row(turno: Turno, uf: Uf, url: str) -> UrnaLedgerRow:

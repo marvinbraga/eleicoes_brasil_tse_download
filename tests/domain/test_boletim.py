@@ -81,6 +81,8 @@ def test_inconsistent_lines_are_rejected() -> None:
 def test_report_without_bulletins_is_not_found() -> None:
     assert BoletimImportReport(0, 0).exit_code == EXIT_NOT_PUBLISHED
     assert BoletimImportReport(1, 0).exit_code == EXIT_SUCCESS
+    assert BoletimImportReport(0, 0).ausentes == ()
+    assert BoletimImportReport(1, 0, ("imgbu.dat",)).exit_code == EXIT_SUCCESS
 
 
 def _fields(**overrides: object) -> dict[str, object]:

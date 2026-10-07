@@ -29,7 +29,21 @@ def test_boletins_prints_the_portuguese_summary(capsys: pytest.CaptureFixture[st
         Path("downloads/2026/arquivo-urna/turno-1/AC"),
     )
     assert "Boletins gravados: 2. Votos: 15." in captured.out
+    assert "[ausente]" not in captured.out
     assert app.closed is True
+
+
+def test_boletins_lists_absent_files_before_the_summary(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    app = _Boletins(BoletimImportReport(1, 4, ("imgbu.dat",)))
+    code = main(
+        ["boletins", "--ano", "2026", "--turno", "1", "--uf", "AC"],
+        environ={},
+        boletins=app,
+    )
+    assert code == EXIT_SUCCESS
+    assert capsys.readouterr().out == "[ausente] imgbu.dat\nBoletins gravados: 1. Votos: 4.\n"
 
 
 def test_boletins_without_files_exits_2(capsys: pytest.CaptureFixture[str]) -> None:
