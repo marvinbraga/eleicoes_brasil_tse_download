@@ -1,6 +1,8 @@
 import json
 from collections.abc import Iterator
+from io import StringIO
 from pathlib import Path
+from typing import TextIO
 
 import pytest
 from tests.support import FakeHttpResponse
@@ -527,6 +529,7 @@ class _ExplodingBody:
 
 class _ExplodingResponse:
     status_code = 200
+    content_length: int | None = None
 
     def __init__(self) -> None:
         self.body = _ExplodingBody()
@@ -538,3 +541,188 @@ class _ExplodingFileHttp(QueueHttp):
             self.urls.append(url)
             return _ExplodingResponse()
         return super().get(url)
+
+
+RDV = "o03220ac0139200010003-rdv.dat"
+_SECTION = "AC 01392  zona 0001  seção 0003"
+
+
+class _TtyBuffer(StringIO):
+    def isatty(self) -> bool:
+        return True
+
+
+class _LengthHttp(QueueHttp):
+    def __init__(
+        self,
+        routes: dict[str, list[tuple[int, bytes]]],
+        length: int | None,
+    ) -> None:
+        super().__init__(routes)
+        self._length = length
+
+    def get(self, url: str) -> FakeHttpResponse:
+        response = super().get(url)
+        if url == FILE_URL:
+            response.content_length = self._length
+        return response
+
+
+def _lines(output: str) -> list[str]:
+    return output.replace("\r", "\n").splitlines()
+
+
+def _finished(output: str, label: str, name: str, size: str | None = None) -> bool:
+    expected = f"[{label}] {name}" if size is None else f"[{label}] {name}  {size}"
+    return any(line.rstrip(" ") == expected for line in _lines(output))
+
+
+def _watching(http: QueueHttp, output: TextIO) -> DownloadUrnaFiles:
+    clock = ManualClock()
+    waiter = ManualSleeper(clock, http)
+    return DownloadUrnaFiles(
+        http=http,
+        pace=RequestPace(clock, waiter),
+        documents=UrnaJsonReader(),
+        store=PartialUrnaStore(),
+        ledger=CsvUrnaLedger(),
+        sleeper=waiter,
+        output=output,
+    )
+
+
+def test_tty_download_rewrites_one_line_and_finishes_with_the_size(tmp_path: Path) -> None:
+    payload = b"a" * 1000
+    http = _LengthHttp(
+        {
+            CONFIG_URL: [(200, _config())],
+            INDEX_URL: [(200, _index([_ready()]))],
+            AUX_URL: [(200, _aux([_hash(HASH, "Totalizado", [BU])]))],
+            FILE_URL: [(200, payload)],
+        },
+        len(payload),
+    )
+    screen = _TtyBuffer()
+    _watching(http, screen).execute(_command(tmp_path))
+    output = screen.getvalue()
+    assert "\r" in output
+    assert output.count("\r") >= 2
+    assert "[  50,0% -----..... ]" in output
+    assert f"[  50,0% -----..... ] {BU}" in output
+    assert "[baixando]" not in output
+    assert "arquivo-urna/turno-1" not in output
+    assert _finished(output, "baixado", BU, "1000 B")
+    assert output.count(f"{_SECTION}\n") == 1
+    ledger = (tmp_path / "indice-urnas.csv").read_text(encoding="utf-8")
+    assert f"arquivo-urna/turno-1/AC/01392/0001/0003/{BU},baixado,1000" in ledger
+
+
+def test_non_tty_prints_the_section_once_and_only_the_final_line(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    http = QueueHttp(
+        {
+            CONFIG_URL: [(200, _config())],
+            INDEX_URL: [(200, _index([_ready()]))],
+            AUX_URL: [(200, _aux([_hash(HASH, "Totalizado", [BU, RDV])]))],
+            _file(BU): [(200, b"abc")],
+            _file(RDV): [(200, b"rdv")],
+        }
+    )
+    _app(http).execute(_command(tmp_path))
+    output = capsys.readouterr().out
+    assert "\r" not in output
+    assert "[baixando]" not in output
+    assert ".........." not in output
+    assert "," not in output
+    assert output.count(f"{_SECTION}\n") == 1
+    assert output.count(f"[baixado] {BU}  3 B\n") == 1
+    assert output.count(f"[baixado] {RDV}  3 B\n") == 1
+    ledger = (tmp_path / "indice-urnas.csv").read_text(encoding="utf-8")
+    assert f"arquivo-urna/turno-1/AC/01392/0001/0003/{BU},baixado,3" in ledger
+    assert f"arquivo-urna/turno-1/AC/01392/0001/0003/{RDV},baixado,3" in ledger
+
+
+def test_tty_without_content_length_shows_received_size_not_percent(tmp_path: Path) -> None:
+    payload = b"x" * (256 * 1024)
+    http = _LengthHttp(
+        {
+            CONFIG_URL: [(200, _config())],
+            INDEX_URL: [(200, _index([_ready()]))],
+            AUX_URL: [(200, _aux([_hash(HASH, "Totalizado", [BU])]))],
+            FILE_URL: [(200, payload)],
+        },
+        None,
+    )
+    screen = _TtyBuffer()
+    _watching(http, screen).execute(_command(tmp_path))
+    output = screen.getvalue()
+    assert "[baixando]" not in output
+    assert "\r" in output
+    pieces = [piece for piece in output.split("\r") if ".........." in piece]
+    assert pieces
+    assert all("%" not in piece for piece in pieces)
+    assert all("KiB" in piece or " B" in piece for piece in pieces)
+    assert _finished(output, "baixado", BU, "256 KiB")
+    assert output.count(f"{_SECTION}\n") == 1
+
+
+def test_stream_without_isatty_still_prints_only_the_final_line(tmp_path: Path) -> None:
+    class _Log:
+        def __init__(self) -> None:
+            self.parts: list[str] = []
+
+        def write(self, text: str) -> int:
+            self.parts.append(text)
+            return len(text)
+
+        def flush(self) -> None:
+            return None
+
+    http = QueueHttp(
+        {
+            CONFIG_URL: [(200, _config())],
+            INDEX_URL: [(200, _index([_ready()]))],
+            AUX_URL: [(200, _aux([_hash(HASH, "Totalizado", [BU])]))],
+            FILE_URL: [(200, b"abc")],
+        }
+    )
+    screen = _Log()
+    _watching(http, screen).execute(_command(tmp_path))  # type: ignore[arg-type]
+    output = "".join(screen.parts)
+    assert "\r" not in output
+    assert "[baixando]" not in output
+    assert output.count(f"{_SECTION}\n") == 1
+    assert f"[baixado] {BU}  3 B\n" in output
+
+
+def test_ignored_and_absent_lines_have_no_bar(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    target = tmp_path / "arquivo-urna" / "turno-1" / "AC" / "01392" / "0001" / "0003" / BU
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b"already")
+    http = QueueHttp(
+        {
+            CONFIG_URL: [(200, _config())],
+            INDEX_URL: [(200, _index([_ready()]))],
+            AUX_URL: [(200, _aux([_hash(HASH, "Totalizado", [BU, RDV])]))],
+            _file(RDV): [(404, b"")],
+        }
+    )
+    _app(http).execute(_command(tmp_path))
+    output = capsys.readouterr().out
+    assert f"[ignorado] {BU}\n" in output
+    assert f"[ausente] {RDV}\n" in output
+    assert output.count(f"{_SECTION}\n") == 1
+    assert "[baixando]" not in output
+    for line in output.splitlines():
+        if line.startswith("[ignorado]") or line.startswith("[ausente]"):
+            assert "%" not in line
+            assert ".." not in line
+            assert "  " not in line
+    ledger = (tmp_path / "indice-urnas.csv").read_text(encoding="utf-8")
+    assert f"arquivo-urna/turno-1/AC/01392/0001/0003/{BU},ignorado,7" in ledger
+    assert f"arquivo-urna/turno-1/AC/01392/0001/0003/{RDV},ausente," in ledger

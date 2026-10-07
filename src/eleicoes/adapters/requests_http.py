@@ -59,3 +59,16 @@ class _RequestsHttpResponse:
     @property
     def body(self) -> BinaryBody:
         return self._body
+
+    @property
+    def content_length(self) -> int | None:
+        return _content_length(self._response.headers.get("Content-Length"))
+
+
+def _content_length(value: str | None) -> int | None:
+    if value is None:
+        return None
+    text = value.strip()
+    if not text.isdecimal():
+        return None
+    return int(text)

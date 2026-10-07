@@ -45,3 +45,22 @@ def test_empty_file_is_not_complete(tmp_path: Path) -> None:
     target = tmp_path / "bu.dat"
     target.write_bytes(b"")
     assert PartialUrnaStore().is_complete(target) is False
+
+
+def test_write_reports_cumulative_bytes_after_every_chunk(tmp_path: Path) -> None:
+    seen: list[int] = []
+    body = FakeBody(b"abcdef")
+    target = tmp_path / "zona" / "bu.dat"
+    size = PartialUrnaStore().write(body, target, on_chunk=seen.append)
+    assert size == 6
+    assert seen == [3, 6]
+    assert body.chunk_size == 256 * 1024
+    assert target.read_bytes() == b"abcdef"
+
+
+def test_empty_body_does_not_require_a_chunk_callback(tmp_path: Path) -> None:
+    seen: list[int] = []
+    target = tmp_path / "bu.dat"
+    assert PartialUrnaStore().write(FakeBody(b""), target, on_chunk=seen.append) == 0
+    assert seen == []
+    assert target.read_bytes() == b""

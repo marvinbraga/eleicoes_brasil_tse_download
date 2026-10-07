@@ -105,9 +105,15 @@ class FakeBody:
 
 
 class FakeHttpResponse:
-    def __init__(self, status_code: int, payload: bytes) -> None:
+    def __init__(
+        self,
+        status_code: int,
+        payload: bytes,
+        content_length: int | None = None,
+    ) -> None:
         self.status_code = status_code
         self.body = FakeBody(payload)
+        self.content_length = content_length
 
 
 class FakeHttp:

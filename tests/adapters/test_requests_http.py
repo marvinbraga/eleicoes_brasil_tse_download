@@ -8,9 +8,14 @@ from eleicoes.domain.errors import TransportError
 
 
 class _Response:
-    def __init__(self, payload: bytes | str) -> None:
+    def __init__(
+        self,
+        payload: bytes | str,
+        headers: dict[str, str] | None = None,
+    ) -> None:
         self.status_code = 200
         self._payload = payload
+        self.headers = {} if headers is None else headers
         self.closed = False
         self.chunk_size: int | None = None
 
@@ -69,3 +74,27 @@ def test_non_bytes_body_is_rejected() -> None:
     response = client.get("https://cdn.example/meta")
     with pytest.raises(TransportError):
         response.body.read_bytes()
+
+
+@pytest.mark.parametrize(
+    ("header", "expected"),
+    [
+        ("256", 256),
+        ("0", 0),
+        (None, None),
+        ("", None),
+        ("nope", None),
+        ("-1", None),
+        (" 12 ", 12),
+        ("12.5", None),
+    ],
+)
+def test_content_length_keeps_only_a_non_negative_integer(
+    header: str | None,
+    expected: int | None,
+) -> None:
+    headers = None if header is None else {"Content-Length": header}
+    session = _Session(_Response(b"abc", headers))
+    client = RequestsHttpClient(session=session)  # type: ignore[arg-type]
+    response = client.get("https://cdn.example/file.dat")
+    assert response.content_length == expected

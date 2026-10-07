@@ -1,7 +1,8 @@
 """Downloads the urna files the divulgação index says are ready."""
 
+import sys
 from pathlib import Path
-from typing import Final
+from typing import Final, TextIO
 
 from eleicoes.domain.errors import (
     AnnouncedFilesMissingError,
@@ -24,6 +25,7 @@ from eleicoes.domain.urna_urls import CONFIG_URL, UrnaUrlBuilder
 from eleicoes.domain.values import Turno, Uf
 from eleicoes.ports.http import HttpClient, HttpResponse
 from eleicoes.ports.urna import UrnaDocuments, UrnaFileStore, UrnaLedger
+from eleicoes.use_cases.urna_file_progress import UrnaFilePresenter
 
 _HTTP_OK: Final = 200
 _HTTP_FORBIDDEN: Final = 403
@@ -33,6 +35,9 @@ _BLOCK_WAIT_SECONDS: Final = 600.0
 _NOT_FOUND_LIMIT: Final = 3
 _BLOCKED: Final = frozenset({_HTTP_FORBIDDEN, _HTTP_TOO_MANY})
 _BAR_WIDTH: Final = 10
+_KIB: Final = 1024
+_MIB: Final = 1024 * 1024
+_GIB: Final = 1024 * 1024 * 1024
 _STORED_SUFFIXES: Final = ("bu.dat", "log.jez", "rdv.dat", "vota.vsc")
 _LABEL: Final = {
     TransferStatus.DOWNLOADED: "baixado",
@@ -64,6 +69,7 @@ class DownloadUrnaFiles:
         store: UrnaFileStore,
         ledger: UrnaLedger,
         sleeper: Sleeper,
+        output: TextIO | None = None,
     ) -> None:
         self._http = http
         self._pace = pace
@@ -71,6 +77,8 @@ class DownloadUrnaFiles:
         self._store = store
         self._ledger = ledger
         self._sleeper = sleeper
+        self._output = sys.stdout if output is None else output
+        self._progress = UrnaFilePresenter(self._output)
 
     def execute(self, command: UrnaDownloadCommand) -> UrnaRunReport:
         config = self._load_config()
@@ -129,10 +137,10 @@ class DownloadUrnaFiles:
         ready = [item for item in self._documents.read_sections(payload, uf) if item.has_auxiliary]
         shown = -1
         if ready:
-            shown = _emit_progress(0, len(ready), shown)
+            shown = _emit_progress(0, len(ready), shown, self._output)
         for done, section in enumerate(ready, start=1):
             self._download_section(command, builder, turno, pleito, section, tally)
-            shown = _emit_progress(done, len(ready), shown)
+            shown = _emit_progress(done, len(ready), shown, self._output)
         return bool(ready)
 
     def _download_section(
@@ -176,6 +184,7 @@ class DownloadUrnaFiles:
         ]
         if not all(self._store.is_complete(target) for target in targets):
             return False
+        self._progress.begin_section(section.address)
         for name, target in zip(names, targets, strict=True):
             relative = urna_relative_path(turno, section.address, name)
             self._remember(
@@ -205,6 +214,7 @@ class DownloadUrnaFiles:
     ) -> None:
         relative = urna_relative_path(turno, address, filename)
         target = command.destination / relative
+        self._progress.begin_section(address)
         if self._store.is_complete(target):
             self._remember(
                 command.destination,
@@ -221,7 +231,6 @@ class DownloadUrnaFiles:
                 ),
             )
             return
-        print(f"[baixando] {target}", flush=True)
         response = self._exchange(file_url)
         try:
             self._consume(response, command, turno, address, filename, relative, target, tally)
@@ -252,7 +261,14 @@ class DownloadUrnaFiles:
             return
         if status != _HTTP_OK:
             raise UnexpectedHttpStatusError(status, filename)
-        size = self._store.write(response.body, target)
+        total = response.content_length
+        size = self._store.write(
+            response.body,
+            target,
+            on_chunk=lambda received: self._progress.advance(
+                f"{file_progress_line(received, total)} {filename}",
+            ),
+        )
         self._remember(
             command.destination,
             tally,
@@ -318,7 +334,7 @@ class DownloadUrnaFiles:
         row: UrnaLedgerRow,
     ) -> None:
         _count(tally, status)
-        print(f"[{_LABEL[status]}] {target}", flush=True)
+        self._progress.outcome(_status_line(_LABEL[status], target.name, row.tamanho_bytes))
         self._ledger.append(destination, row)
         if status is TransferStatus.MISSING and tally.not_found >= _NOT_FOUND_LIMIT:
             raise AnnouncedFilesMissingError()
@@ -380,12 +396,64 @@ def progress_line(percent: int) -> str:
     return f"[ {percent:>3}% {bar} ]"
 
 
-def _emit_progress(done: int, total: int, shown: int) -> int:
+def file_progress_line(received: int, total: int | None) -> str:
+    """One file slot. A percent is shown only when the length is a positive int."""
+    if total is not None and total > 0:
+        return _percent_slot(received, total)
+    return _volume_slot(received)
+
+
+def format_byte_size(amount: int) -> str:
+    """1024-based size. One decimal, half up; the comma appears only when it is not zero."""
+    scaled = _scale_bytes(amount)
+    if scaled is None:
+        return f"{amount} B"
+    tenths, unit = scaled
+    whole, fraction = divmod(tenths, 10)
+    if fraction == 0:
+        return f"{whole} {unit}"
+    return f"{whole},{fraction} {unit}"
+
+
+def _emit_progress(done: int, total: int, shown: int, output: TextIO) -> int:
     percent = min(100, done * 100 // total)
     if percent == shown:
         return shown
-    print(progress_line(percent), flush=True)
+    print(progress_line(percent), file=output, flush=True)
     return percent
+
+
+def _percent_slot(received: int, total: int) -> str:
+    tenths = min(1000, received * 1000 // total)
+    label = f"{tenths // 10},{tenths % 10}%"
+    filled = min(_BAR_WIDTH, received * 10 // total)
+    bar = f"{'-' * filled}{'.' * (_BAR_WIDTH - filled)}"
+    return f"[ {label:>6} {bar} ]"
+
+
+def _volume_slot(received: int) -> str:
+    return f"[ {format_byte_size(received):>8} {'.' * _BAR_WIDTH} ]"
+
+
+def _scale_bytes(amount: int) -> tuple[int, str] | None:
+    if amount >= _GIB:
+        return _tenths(amount, _GIB), "GiB"
+    if amount >= _MIB:
+        return _tenths(amount, _MIB), "MiB"
+    if amount >= _KIB:
+        return _tenths(amount, _KIB), "KiB"
+    return None
+
+
+def _tenths(amount: int, divisor: int) -> int:
+    return (amount * 10 + divisor // 2) // divisor
+
+
+def _status_line(label: str, name: str, size: int | None) -> str:
+    if label != "baixado":
+        return f"[{label}] {name}"
+    amount = 0 if size is None else size
+    return f"[baixado] {name}  {format_byte_size(amount)}"
 
 
 def _file_row(

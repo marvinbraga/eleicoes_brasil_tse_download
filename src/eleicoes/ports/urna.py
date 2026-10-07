@@ -1,5 +1,6 @@
 """Ports for reading divulgação JSON and storing one urna file."""
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
 
@@ -26,7 +27,13 @@ class UrnaDocuments(Protocol):
 class UrnaFileStore(Protocol):
     def is_complete(self, path: Path) -> bool: ...
 
-    def write(self, body: BinaryBody, path: Path) -> int: ...
+    def write(
+        self,
+        body: BinaryBody,
+        path: Path,
+        *,
+        on_chunk: Callable[[int], None] | None = None,
+    ) -> int: ...
 
 
 class UrnaLedger(Protocol):

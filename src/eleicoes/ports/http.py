@@ -17,6 +17,9 @@ class HttpResponse(Protocol):
     @property
     def body(self) -> BinaryBody: ...
 
+    @property
+    def content_length(self) -> int | None: ...
+
 
 class HttpClient(Protocol):
     def get(self, url: str) -> HttpResponse: ...
