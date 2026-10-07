@@ -19,7 +19,7 @@ from eleicoes.adapters.urna_json import UrnaJsonReader
 from eleicoes.adapters.urna_store import PartialUrnaStore
 from eleicoes.adapters.zip_archive_reader import ZipArchiveReader
 from eleicoes.composition.correspondencia import _host_settings
-from eleicoes.domain.request_pace import RequestPace
+from eleicoes.domain.request_pace import PARALLEL_SECTIONS, RequestPace
 from eleicoes.ports.http import HttpClient
 from eleicoes.use_cases.download_election import DownloadElectionArchives
 from eleicoes.use_cases.download_urnas import DownloadUrnaFiles
@@ -49,6 +49,7 @@ def build_urna_download(http: HttpClient | None = None) -> DownloadUrnaFiles:
         store=PartialUrnaStore(),
         ledger=CsvUrnaLedger(),
         sleeper=sleeper,
+        workers=PARALLEL_SECTIONS,
     )
 
 

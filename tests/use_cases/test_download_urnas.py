@@ -1,4 +1,5 @@
 import json
+import threading
 from collections.abc import Iterator
 from io import StringIO
 from pathlib import Path
@@ -13,6 +14,7 @@ from eleicoes.adapters.urna_json import UrnaJsonReader
 from eleicoes.adapters.urna_store import PartialUrnaStore
 from eleicoes.domain.errors import (
     AnnouncedFilesMissingError,
+    InvalidRequestPaceError,
     TransportError,
     TseBlockedError,
     UnexpectedHttpStatusError,
@@ -107,7 +109,12 @@ def _rio_aux() -> bytes:
     )
 
 
-def _app(http: QueueHttp, sleeper: ManualSleeper | None = None) -> DownloadUrnaFiles:
+def _app(
+    http: QueueHttp,
+    sleeper: ManualSleeper | None = None,
+    *,
+    workers: int = 1,
+) -> DownloadUrnaFiles:
     clock = sleeper.clock if sleeper is not None else ManualClock()
     waiter = sleeper if sleeper is not None else ManualSleeper(clock, http)
     return DownloadUrnaFiles(
@@ -117,6 +124,7 @@ def _app(http: QueueHttp, sleeper: ManualSleeper | None = None) -> DownloadUrnaF
         store=PartialUrnaStore(),
         ledger=CsvUrnaLedger(),
         sleeper=waiter,
+        workers=workers,
     )
 
 
@@ -180,8 +188,9 @@ def test_section_without_stamp_is_not_requested_and_rejected_hashes_are_skipped(
     stored = tmp_path / "arquivo-urna" / "turno-1" / "AC" / "01392" / "0001" / "0003" / BU
     assert stored.read_bytes() == b"abc"
     output = capsys.readouterr().out
-    assert "[   0%            ]\n" in output
-    assert "[ 100% ---------- ]\n" in output
+    assert f"{_SECTION_LINE}\n" in output
+    assert "[   0%            ]" not in output
+    assert "[ 100% ---------- ]" not in output
 
 
 def test_unpadded_codes_keep_leading_zeros_in_the_request(tmp_path: Path) -> None:
@@ -545,6 +554,7 @@ class _ExplodingFileHttp(QueueHttp):
 
 RDV = "o03220ac0139200010003-rdv.dat"
 _SECTION = "AC 01392  zona 0001  seção 0003"
+_SECTION_LINE = f"[ 100,0% ---------- ] {_SECTION}"
 
 
 class _TtyBuffer(StringIO):
@@ -577,7 +587,7 @@ def _finished(output: str, label: str, name: str, size: str | None = None) -> bo
     return any(line.rstrip(" ") == expected for line in _lines(output))
 
 
-def _watching(http: QueueHttp, output: TextIO) -> DownloadUrnaFiles:
+def _watching(http: QueueHttp, output: TextIO, *, workers: int = 1) -> DownloadUrnaFiles:
     clock = ManualClock()
     waiter = ManualSleeper(clock, http)
     return DownloadUrnaFiles(
@@ -588,10 +598,11 @@ def _watching(http: QueueHttp, output: TextIO) -> DownloadUrnaFiles:
         ledger=CsvUrnaLedger(),
         sleeper=waiter,
         output=output,
+        workers=workers,
     )
 
 
-def test_tty_download_rewrites_one_line_and_finishes_with_the_size(tmp_path: Path) -> None:
+def test_tty_download_prints_the_section_bar_and_finishes_with_the_size(tmp_path: Path) -> None:
     payload = b"a" * 1000
     http = _LengthHttp(
         {
@@ -605,14 +616,12 @@ def test_tty_download_rewrites_one_line_and_finishes_with_the_size(tmp_path: Pat
     screen = _TtyBuffer()
     _watching(http, screen).execute(_command(tmp_path))
     output = screen.getvalue()
-    assert "\r" in output
-    assert output.count("\r") >= 2
-    assert "[  50,0% -----..... ]" in output
-    assert f"[  50,0% -----..... ] {BU}" in output
+    assert "\r" not in output
     assert "[baixando]" not in output
+    assert f"[  50,0% -----..... ] {BU}" not in output
+    assert output.count(f"{_SECTION_LINE}\n") == 1
     assert "arquivo-urna/turno-1" not in output
     assert _finished(output, "baixado", BU, "1000 B")
-    assert output.count(f"{_SECTION}\n") == 1
     ledger = (tmp_path / "indice-urnas.csv").read_text(encoding="utf-8")
     assert f"arquivo-urna/turno-1/AC/01392/0001/0003/{BU},baixado,1000" in ledger
 
@@ -635,8 +644,9 @@ def test_non_tty_prints_the_section_once_and_only_the_final_line(
     assert "\r" not in output
     assert "[baixando]" not in output
     assert ".........." not in output
-    assert "," not in output
-    assert output.count(f"{_SECTION}\n") == 1
+    assert output.count(f"{_SECTION_LINE}\n") == 1
+    assert output.index(_SECTION_LINE) < output.index(f"[baixado] {BU}")
+    assert output.index(f"[baixado] {BU}") < output.index(f"[baixado] {RDV}")
     assert output.count(f"[baixado] {BU}  3 B\n") == 1
     assert output.count(f"[baixado] {RDV}  3 B\n") == 1
     ledger = (tmp_path / "indice-urnas.csv").read_text(encoding="utf-8")
@@ -659,13 +669,14 @@ def test_tty_without_content_length_shows_received_size_not_percent(tmp_path: Pa
     _watching(http, screen).execute(_command(tmp_path))
     output = screen.getvalue()
     assert "[baixando]" not in output
-    assert "\r" in output
-    pieces = [piece for piece in output.split("\r") if ".........." in piece]
-    assert pieces
-    assert all("%" not in piece for piece in pieces)
-    assert all("KiB" in piece or " B" in piece for piece in pieces)
+    assert "\r" not in output
+    assert ".........." not in output
+    assert output.count(f"{_SECTION_LINE}\n") == 1
     assert _finished(output, "baixado", BU, "256 KiB")
-    assert output.count(f"{_SECTION}\n") == 1
+    for line in output.splitlines():
+        if line.startswith("[baixado]"):
+            assert "%" not in line
+            assert ".." not in line
 
 
 def test_stream_without_isatty_still_prints_only_the_final_line(tmp_path: Path) -> None:
@@ -693,7 +704,7 @@ def test_stream_without_isatty_still_prints_only_the_final_line(tmp_path: Path) 
     output = "".join(screen.parts)
     assert "\r" not in output
     assert "[baixando]" not in output
-    assert output.count(f"{_SECTION}\n") == 1
+    assert output.count(f"{_SECTION_LINE}\n") == 1
     assert f"[baixado] {BU}  3 B\n" in output
 
 
@@ -716,7 +727,8 @@ def test_ignored_and_absent_lines_have_no_bar(
     output = capsys.readouterr().out
     assert f"[ignorado] {BU}\n" in output
     assert f"[ausente] {RDV}\n" in output
-    assert output.count(f"{_SECTION}\n") == 1
+    assert output.count(f"{_SECTION_LINE}\n") == 1
+    assert output.index(_SECTION_LINE) < output.index(f"[ignorado] {BU}")
     assert "[baixando]" not in output
     for line in output.splitlines():
         if line.startswith("[ignorado]") or line.startswith("[ausente]"):
@@ -726,3 +738,178 @@ def test_ignored_and_absent_lines_have_no_bar(
     ledger = (tmp_path / "indice-urnas.csv").read_text(encoding="utf-8")
     assert f"arquivo-urna/turno-1/AC/01392/0001/0003/{BU},ignorado,7" in ledger
     assert f"arquivo-urna/turno-1/AC/01392/0001/0003/{RDV},ausente," in ledger
+
+
+def test_each_ready_section_prints_one_contiguous_block(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    http = QueueHttp(_two_section_routes())
+    _app(http).execute(_command(tmp_path))
+    output = capsys.readouterr().out
+    assert "\r" not in output
+    assert "[   0%            ]" not in output
+    assert "[ 100% ---------- ]" not in output
+    assert output.splitlines() == [
+        "[  50,0% -----..... ] AC 01392  zona 0001  seção 0003",
+        "[baixado] o03220ac0139200010003-bu.dat  3 B",
+        "[ 100,0% ---------- ] AC 01392  zona 0001  seção 0004",
+        "[baixado] o03220ac0139200010004-bu.dat  3 B",
+    ]
+    assert http.urls == [
+        CONFIG_URL,
+        INDEX_URL,
+        _aux_url("0003"),
+        _file_url("0003", BU),
+        _aux_url("0004"),
+        _file_url("0004", "o03220ac0139200010004-bu.dat"),
+    ]
+
+
+def test_parallel_sections_constant_is_sixteen() -> None:
+    from eleicoes.domain import request_pace
+
+    assert getattr(request_pace, "PARALLEL_SECTIONS", None) == 16
+
+
+def _aux_url(secao: str) -> str:
+    return (
+        "https://resultados.tse.jus.br/oficial/ele2026/arquivo-urna/3220/dados/"
+        f"ac/01392/0001/{secao}/p003220-ac-m01392-z0001-s{secao}-aux.json"
+    )
+
+
+def _file_url(secao: str, name: str) -> str:
+    return (
+        "https://resultados.tse.jus.br/oficial/ele2026/arquivo-urna/3220/dados/"
+        f"ac/01392/0001/{secao}/{HASH}/{name}"
+    )
+
+
+def _two_section_routes() -> dict[str, list[tuple[int, bytes]]]:
+    second = "o03220ac0139200010004-bu.dat"
+    return {
+        CONFIG_URL: [(200, _config())],
+        INDEX_URL: [(200, _index([_ready("0003"), _ready("0004")]))],
+        _aux_url("0003"): [(200, _aux([_hash(HASH, "Totalizado", [BU])]))],
+        _file_url("0003", BU): [(200, b"abc")],
+        _aux_url("0004"): [(200, _aux([_hash(HASH, "Totalizado", [second])]))],
+        _file_url("0004", second): [(200, b"xyz")],
+    }
+
+
+class _HoldingHttp:
+    """Thread-safe scripted HTTP. Holds `/dados/` reads until enough have entered."""
+
+    def __init__(
+        self,
+        routes: dict[str, list[tuple[int, bytes]]],
+        *,
+        hold_until: int,
+    ) -> None:
+        self._routes = {url: list(items) for url, items in routes.items()}
+        self._hold_until = hold_until
+        self._condition = threading.Condition()
+        self._active = 0
+        self._arrived = 0
+        self.max_active = 0
+
+    def get(self, url: str) -> FakeHttpResponse:
+        held = "/dados/" in url
+        if held:
+            self._enter()
+        try:
+            return self._take(url)
+        finally:
+            if held:
+                self._leave()
+
+    def _enter(self) -> None:
+        with self._condition:
+            self._active += 1
+            if self._active > self.max_active:
+                self.max_active = self._active
+            self._arrived += 1
+            while self._arrived < self._hold_until:
+                if not self._condition.wait(timeout=3):
+                    raise AssertionError("section reads did not overlap")
+            self._condition.notify_all()
+
+    def _leave(self) -> None:
+        with self._condition:
+            self._active -= 1
+
+    def _take(self, url: str) -> FakeHttpResponse:
+        with self._condition:
+            pending = self._routes.get(url)
+            if not pending:
+                raise AssertionError(url)
+            status, payload = pending.pop(0)
+        return FakeHttpResponse(status, payload)
+
+
+def _assert_atomic_blocks(output: str) -> None:
+    blocks = _section_blocks(output)
+    assert blocks[0][0].startswith("[  50,0% -----..... ] ")
+    assert blocks[1][0].startswith("[ 100,0% ---------- ] ")
+    for header, body in blocks:
+        secao = header.rsplit(" ", 1)[-1]
+        assert body
+        assert all(secao in line and not line.startswith("[ ") for line in body)
+
+
+def _section_blocks(output: str) -> list[tuple[str, list[str]]]:
+    blocks: list[tuple[str, list[str]]] = []
+    header = ""
+    body: list[str] = []
+    for line in output.splitlines():
+        if line.startswith("[ ") and "seção" in line:
+            if header:
+                blocks.append((header, body))
+            header = line
+            body = []
+            continue
+        body.append(line)
+    if header:
+        blocks.append((header, body))
+    return blocks
+
+
+@pytest.mark.parametrize("workers", [0, True, 17])
+def test_workers_outside_the_supported_range_are_rejected(workers: int) -> None:
+    with pytest.raises(InvalidRequestPaceError):
+        _app(QueueHttp({}), workers=workers)
+
+
+def test_two_workers_overlap_section_reads(tmp_path: Path) -> None:
+    http = _HoldingHttp(_two_section_routes(), hold_until=2)
+    screen = StringIO()
+    _watching(http, screen, workers=2).execute(_command(tmp_path))  # type: ignore[arg-type]
+    assert http.max_active >= 2
+    _assert_atomic_blocks(screen.getvalue())
+    ledger = (tmp_path / "indice-urnas.csv").read_text(encoding="utf-8")
+    assert ledger.count("conjunto,turno") == 1
+    assert ledger.count(",baixado,") == 2
+
+
+def test_one_worker_does_not_overlap_section_reads(tmp_path: Path) -> None:
+    http = _HoldingHttp(_two_section_routes(), hold_until=1)
+    screen = StringIO()
+    _watching(http, screen, workers=1).execute(_command(tmp_path))  # type: ignore[arg-type]
+    assert http.max_active == 1
+    assert screen.getvalue().splitlines() == [
+        "[  50,0% -----..... ] AC 01392  zona 0001  seção 0003",
+        "[baixado] o03220ac0139200010003-bu.dat  3 B",
+        "[ 100,0% ---------- ] AC 01392  zona 0001  seção 0004",
+        "[baixado] o03220ac0139200010004-bu.dat  3 B",
+    ]
+
+
+def test_a_parallel_section_error_is_propagated(tmp_path: Path) -> None:
+    second = "o03220ac0139200010004-bu.dat"
+    routes = _two_section_routes()
+    routes[_file_url("0003", BU)] = [(500, b"erro")]
+    routes[_file_url("0004", second)] = [(500, b"erro")]
+    http = _HoldingHttp(routes, hold_until=1)
+    with pytest.raises(UnexpectedHttpStatusError):
+        _app(http, workers=2).execute(_command(tmp_path))  # type: ignore[arg-type]

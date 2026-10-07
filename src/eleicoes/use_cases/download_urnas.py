@@ -1,16 +1,20 @@
 """Downloads the urna files the divulgação index says are ready."""
 
 import sys
+import threading
+from collections.abc import Callable, Sequence
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Final, TextIO
 
 from eleicoes.domain.errors import (
     AnnouncedFilesMissingError,
+    InvalidRequestPaceError,
     TseBlockedError,
     UnexpectedHttpStatusError,
 )
 from eleicoes.domain.report import TransferStatus
-from eleicoes.domain.request_pace import RequestPace, Sleeper
+from eleicoes.domain.request_pace import PARALLEL_SECTIONS, RequestPace, Sleeper
 from eleicoes.domain.urna_models import (
     BallotSection,
     DivulgacaoConfig,
@@ -53,13 +57,19 @@ class _Tally:
         self.missing = 0
         self.not_found = 0
         self.unpublished: list[int] = []
+        self._lock = threading.Lock()
+
+    def add(self, status: TransferStatus) -> bool:
+        with self._lock:
+            _count(self, status)
+            return status is TransferStatus.MISSING and self.not_found >= _NOT_FOUND_LIMIT
 
     def report(self) -> UrnaRunReport:
         return UrnaRunReport(self.downloaded, self.skipped, self.missing, tuple(self.unpublished))
 
 
 class DownloadUrnaFiles:
-    """Calls the pace and the HTTP port directly. One request at a time."""
+    """Calls the pace and the HTTP port directly. One request at a time per worker."""
 
     def __init__(
         self,
@@ -70,13 +80,17 @@ class DownloadUrnaFiles:
         ledger: UrnaLedger,
         sleeper: Sleeper,
         output: TextIO | None = None,
+        workers: int = 1,
     ) -> None:
+        if isinstance(workers, bool) or workers < 1 or workers > PARALLEL_SECTIONS:
+            raise InvalidRequestPaceError(workers)
         self._http = http
         self._pace = pace
         self._documents = documents
         self._store = store
         self._ledger = ledger
         self._sleeper = sleeper
+        self._workers = workers
         self._output = sys.stdout if output is None else output
         self._progress = UrnaFilePresenter(self._output)
 
@@ -131,17 +145,42 @@ class DownloadUrnaFiles:
         tally: _Tally,
     ) -> bool:
         url = builder.section_index(uf)
-        payload = self._read_announced(command.destination, url, _index_row(turno, uf, url), tally)
+        payload = self._read_announced(
+            command.destination,
+            url,
+            _index_row(turno, uf, url),
+            tally,
+            None,
+        )
         if payload is None:
             return False
         ready = [item for item in self._documents.read_sections(payload, uf) if item.has_auxiliary]
-        shown = -1
-        if ready:
-            shown = _emit_progress(0, len(ready), shown, self._output)
-        for done, section in enumerate(ready, start=1):
-            self._download_section(command, builder, turno, pleito, section, tally)
-            shown = _emit_progress(done, len(ready), shown, self._output)
-        return bool(ready)
+        if not ready:
+            return False
+        self._progress.reset(len(ready))
+        self._run_sections(command, builder, turno, pleito, ready, tally)
+        return True
+
+    def _run_sections(
+        self,
+        command: UrnaDownloadCommand,
+        builder: UrnaUrlBuilder,
+        turno: Turno,
+        pleito: PleitoCode,
+        ready: list[BallotSection],
+        tally: _Tally,
+    ) -> None:
+        if self._workers == 1:
+            for section in ready:
+                self._download_section(command, builder, turno, pleito, section, tally)
+            return
+        _run_parallel(
+            self._workers,
+            [
+                _section_job(self, command, builder, turno, pleito, section, tally)
+                for section in ready
+            ],
+        )
 
     def _download_section(
         self,
@@ -152,7 +191,28 @@ class DownloadUrnaFiles:
         section: BallotSection,
         tally: _Tally,
     ) -> None:
-        if self._ignore_stored_section(command, turno, pleito, section, tally):
+        lines: list[str] = []
+        try:
+            self._collect_section(command, builder, turno, pleito, section, tally, lines)
+        finally:
+            self._emit_section(section.address, lines)
+
+    def _emit_section(self, address: UrnaAddress, lines: Sequence[str]) -> None:
+        if not lines:
+            return
+        self._progress.emit_section(_section_place(address), lines, file_progress_line)
+
+    def _collect_section(
+        self,
+        command: UrnaDownloadCommand,
+        builder: UrnaUrlBuilder,
+        turno: Turno,
+        pleito: PleitoCode,
+        section: BallotSection,
+        tally: _Tally,
+        lines: list[str],
+    ) -> None:
+        if self._ignore_stored_section(command, turno, pleito, section, tally, lines):
             return
         url = builder.auxiliary(section.address)
         payload = self._read_announced(
@@ -160,6 +220,7 @@ class DownloadUrnaFiles:
             url,
             _auxiliary_row(turno, section, _leaf(url)),
             tally,
+            lines,
         )
         if payload is None:
             return
@@ -168,7 +229,15 @@ class DownloadUrnaFiles:
             return
         for filename in selected.filenames:
             file_url = builder.file(section.address, selected.digest, filename)
-            self._transfer_file(command, turno, section.address, file_url, filename, tally)
+            self._transfer_file(
+                command,
+                turno,
+                section.address,
+                file_url,
+                filename,
+                tally,
+                lines,
+            )
 
     def _ignore_stored_section(
         self,
@@ -177,6 +246,7 @@ class DownloadUrnaFiles:
         pleito: PleitoCode,
         section: BallotSection,
         tally: _Tally,
+        lines: list[str],
     ) -> bool:
         names = stored_ballot_names(pleito, section.address)
         targets = [
@@ -184,7 +254,6 @@ class DownloadUrnaFiles:
         ]
         if not all(self._store.is_complete(target) for target in targets):
             return False
-        self._progress.begin_section(section.address)
         for name, target in zip(names, targets, strict=True):
             relative = urna_relative_path(turno, section.address, name)
             self._remember(
@@ -200,6 +269,7 @@ class DownloadUrnaFiles:
                     "ignorado",
                     target.stat().st_size,
                 ),
+                lines,
             )
         return True
 
@@ -211,10 +281,10 @@ class DownloadUrnaFiles:
         file_url: str,
         filename: str,
         tally: _Tally,
+        lines: list[str],
     ) -> None:
         relative = urna_relative_path(turno, address, filename)
         target = command.destination / relative
-        self._progress.begin_section(address)
         if self._store.is_complete(target):
             self._remember(
                 command.destination,
@@ -229,11 +299,22 @@ class DownloadUrnaFiles:
                     "ignorado",
                     target.stat().st_size,
                 ),
+                lines,
             )
             return
         response = self._exchange(file_url)
         try:
-            self._consume(response, command, turno, address, filename, relative, target, tally)
+            self._consume(
+                response,
+                command,
+                turno,
+                address,
+                filename,
+                relative,
+                target,
+                tally,
+                lines,
+            )
         finally:
             response.body.close()
 
@@ -247,6 +328,7 @@ class DownloadUrnaFiles:
         relative: Path,
         target: Path,
         tally: _Tally,
+        lines: list[str],
     ) -> None:
         status = response.status_code
         caminho = relative.as_posix()
@@ -257,24 +339,19 @@ class DownloadUrnaFiles:
                 TransferStatus.MISSING,
                 target,
                 _absent_file_row(turno, address, filename, caminho),
+                lines,
             )
             return
         if status != _HTTP_OK:
             raise UnexpectedHttpStatusError(status, filename)
-        total = response.content_length
-        size = self._store.write(
-            response.body,
-            target,
-            on_chunk=lambda received: self._progress.advance(
-                f"{file_progress_line(received, total)} {filename}",
-            ),
-        )
+        size = self._store.write(response.body, target)
         self._remember(
             command.destination,
             tally,
             TransferStatus.DOWNLOADED,
             target,
             _file_row(turno, address, filename, caminho, "baixado", size),
+            lines,
         )
 
     def _read_required(self, url: str) -> bytes:
@@ -292,6 +369,7 @@ class DownloadUrnaFiles:
         url: str,
         row: UrnaLedgerRow,
         tally: _Tally,
+        lines: list[str] | None,
     ) -> bytes | None:
         response = self._exchange(url)
         try:
@@ -303,6 +381,7 @@ class DownloadUrnaFiles:
                     TransferStatus.MISSING,
                     destination / row.arquivo,
                     row,
+                    lines,
                 )
                 return None
             if status != _HTTP_OK:
@@ -332,11 +411,16 @@ class DownloadUrnaFiles:
         status: TransferStatus,
         target: Path,
         row: UrnaLedgerRow,
+        lines: list[str] | None,
     ) -> None:
-        _count(tally, status)
-        self._progress.outcome(_status_line(_LABEL[status], target.name, row.tamanho_bytes))
+        line = _status_line(_LABEL[status], target.name, row.tamanho_bytes)
+        abort = tally.add(status)
+        if lines is None:
+            self._progress.emit_lines((line,))
+        else:
+            lines.append(line)
         self._ledger.append(destination, row)
-        if status is TransferStatus.MISSING and tally.not_found >= _NOT_FOUND_LIMIT:
+        if abort:
             raise AnnouncedFilesMissingError()
 
 
@@ -415,12 +499,58 @@ def format_byte_size(amount: int) -> str:
     return f"{whole},{fraction} {unit}"
 
 
-def _emit_progress(done: int, total: int, shown: int, output: TextIO) -> int:
-    percent = min(100, done * 100 // total)
-    if percent == shown:
-        return shown
-    print(progress_line(percent), file=output, flush=True)
-    return percent
+def _run_parallel(workers: int, jobs: Sequence[Callable[[], None]]) -> None:
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = [executor.submit(job) for job in jobs]
+        error = _first_error(futures)
+    if error is not None:
+        raise error
+
+
+def _section_job(
+    use_case: DownloadUrnaFiles,
+    command: UrnaDownloadCommand,
+    builder: UrnaUrlBuilder,
+    turno: Turno,
+    pleito: PleitoCode,
+    section: BallotSection,
+    tally: _Tally,
+) -> Callable[[], None]:
+    def run() -> None:
+        use_case._download_section(command, builder, turno, pleito, section, tally)
+
+    return run
+
+
+def _first_error(futures: Sequence[Future[None]]) -> Exception | None:
+    found: Exception | None = None
+    for future in as_completed(list(futures)):
+        caught = _future_error(future)
+        if caught is None or found is not None:
+            continue
+        found = caught
+        _cancel_pending(futures)
+    return found
+
+
+def _future_error(future: Future[None]) -> Exception | None:
+    try:
+        future.result()
+    except Exception as exc:
+        return exc
+    return None
+
+
+def _cancel_pending(futures: Sequence[Future[None]]) -> None:
+    for future in futures:
+        future.cancel()
+
+
+def _section_place(address: UrnaAddress) -> str:
+    return (
+        f"{address.uf.code} {address.municipio.value}  "
+        f"zona {address.zona.value}  seção {address.secao.value}"
+    )
 
 
 def _percent_slot(received: int, total: int) -> str:

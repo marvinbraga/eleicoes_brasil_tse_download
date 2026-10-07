@@ -1,6 +1,7 @@
 """Appends one flushed row to indice-urnas.csv. Does not touch indice.csv."""
 
 import csv
+import threading
 from pathlib import Path
 from typing import Final
 
@@ -23,7 +24,14 @@ _INDEX_NAME: Final = "indice-urnas.csv"
 
 
 class CsvUrnaLedger:
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+
     def append(self, destination: Path, row: UrnaLedgerRow) -> None:
+        with self._lock:
+            self._append(destination, row)
+
+    def _append(self, destination: Path, row: UrnaLedgerRow) -> None:
         try:
             destination.mkdir(parents=True, exist_ok=True)
             path = destination / _INDEX_NAME

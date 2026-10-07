@@ -1,7 +1,9 @@
+import threading
 from collections.abc import Iterator
 
 import pytest
 import requests
+from requests.adapters import HTTPAdapter
 
 from eleicoes.adapters.requests_http import RequestsHttpClient
 from eleicoes.domain.errors import TransportError
@@ -98,3 +100,44 @@ def test_content_length_keeps_only_a_non_negative_integer(
     client = RequestsHttpClient(session=session)  # type: ignore[arg-type]
     response = client.get("https://cdn.example/file.dat")
     assert response.content_length == expected
+
+
+def test_default_client_uses_one_session_per_thread_without_reading_a_body(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    created: list[requests.Session] = []
+
+    class _RecordingSession(requests.Session):
+        def __init__(self) -> None:
+            super().__init__()
+            self.calls: list[dict[str, object]] = []
+            created.append(self)
+
+        def get(self, url: str, **kwargs: object) -> _Response:  # type: ignore[override]
+            del url
+            self.calls.append(kwargs)
+            return _Response(b"abc")
+
+    monkeypatch.setattr("eleicoes.adapters.requests_http.requests.Session", _RecordingSession)
+    client = RequestsHttpClient()
+    assert created == []
+    first = client.get("https://cdn.example/a")
+    client.get("http://cdn.example/b")
+    assert first.status_code == 200
+    assert len(created) == 1
+    assert created[0].calls[0]["stream"] is True
+    assert created[0].calls[0]["timeout"] == 120.0
+    for prefix in ("https://", "http://"):
+        adapter = created[0].get_adapter(prefix)
+        assert isinstance(adapter, HTTPAdapter)
+        assert adapter._pool_connections == 1
+        assert adapter._pool_maxsize == 1
+
+    def other() -> None:
+        client.get("https://cdn.example/c")
+
+    thread = threading.Thread(target=other)
+    thread.start()
+    thread.join()
+    assert len(created) == 2
+    assert created[0] is not created[1]

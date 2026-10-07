@@ -119,6 +119,7 @@ def test_factory_wires_a_fake_http_client(monkeypatch: pytest.MonkeyPatch) -> No
     )
     app = build_urna_download(QueueHttp({}))
     assert app.__class__.__name__ == "DownloadUrnaFiles"
+    assert getattr(app, "_workers", None) == 16
 
 
 def test_factory_without_a_client_builds_the_requests_adapter(
