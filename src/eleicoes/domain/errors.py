@@ -179,3 +179,9 @@ class InvalidBoletimConsultaError(ElectionError):
     def __init__(self, field: object) -> None:
         self.field = field
         super().__init__(f"invalid boletim consultation: {field}")
+
+
+class InvalidStoredReportError(ElectionError):
+    def __init__(self, field: str) -> None:
+        self.field = field
+        super().__init__(f"invalid stored power report: {field}")

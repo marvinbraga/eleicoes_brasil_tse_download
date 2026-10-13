@@ -1,12 +1,13 @@
 """The party-power report writes one HTML file and asks for it to be opened."""
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 from eleicoes.domain.boletim_consulta import PoderPartido
 from eleicoes.domain.grade import LugarVotos
-from eleicoes.use_cases.apresentar_grade import PresentPartyGrades, main
+from eleicoes.use_cases.apresentar_grade import PresentPartyGrades, _production_store, main
 from eleicoes.use_cases.grade import BuildPartyShareGrid
 
 _LEVELS = ("municipio", "uf", "regiao", "pais")
@@ -71,6 +72,8 @@ def test_script_prints_the_path_and_skips_the_browser(
     assert str(destino) in captured.out
     assert "Por município: 1 lugar, 1 partido." in captured.out
     assert "Não foi possível abrir o navegador." in captured.out
+    assert "Relatório gravado no banco." not in captured.out
+    assert "Relatório carregado do banco" not in captured.out
 
 
 def test_defaults_write_under_relatorios_and_open_the_browser(
@@ -79,6 +82,7 @@ def test_defaults_write_under_relatorios_and_open_the_browser(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    store = _install_store(monkeypatch)
     monkeypatch.setattr(
         "eleicoes.use_cases.apresentar_grade._load_grade",
         lambda *_args: _grade(_args[-1]),
@@ -95,6 +99,8 @@ def test_defaults_write_under_relatorios_and_open_the_browser(
     assert destino.is_file()
     assert opened == [destino.resolve().as_uri()]
     assert "Não foi possível abrir o navegador." not in captured.out
+    assert store.saves == 1
+    assert store.closed is True
 
 
 def test_sem_navegador_still_writes_the_report(
@@ -102,6 +108,7 @@ def test_sem_navegador_still_writes_the_report(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    store = _install_store(monkeypatch)
     monkeypatch.setattr(
         "eleicoes.use_cases.apresentar_grade._load_grade",
         lambda *_args: _grade(_args[-1]),
@@ -110,14 +117,76 @@ def test_sem_navegador_still_writes_the_report(
     destino = tmp_path / "relatorios" / "ac-2026-turno-1-deputadoFederal.html"
     assert code == 0
     assert destino.is_file()
+    assert store.saves == 1
+    assert store.closed is True
 
 
-def test_invalid_uf_is_a_portuguese_failure(capsys: pytest.CaptureFixture[str]) -> None:
+def test_legacy_success_omits_the_database_lines(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    destino = tmp_path / "grade.html"
+    presenter = PresentPartyGrades(
+        lambda *_args: _grade(_args[-1]),
+        lambda _grades: "<html></html>",
+        lambda _path: True,
+    )
+    code = main(["--destino", str(destino)], presenter=presenter)
+    captured = capsys.readouterr()
+    assert code == 0
+    assert "Não foi possível abrir o navegador." not in captured.out
+    assert "Relatório gravado no banco." not in captured.out
+    assert destino.is_file()
+
+
+def test_production_store_asks_the_composition_root(monkeypatch: pytest.MonkeyPatch) -> None:
+    sentinel = _IdleStore()
+    monkeypatch.setattr("eleicoes.composition.grade.build_power_report_store", lambda: sentinel)
+    assert _production_store() is sentinel
+
+
+def test_invalid_uf_is_a_portuguese_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    store = _install_store(monkeypatch)
     code = main(["--uf", "XX", "--sem-navegador", "--destino", "relatorios/nao-grava.html"])
     captured = capsys.readouterr()
     assert code == 1
     assert captured.err == "Não foi possível apresentar os relatórios.\n"
     assert not Path("relatorios/nao-grava.html").exists()
+    assert store.saves == 0
+    assert store.closed is True
+
+
+class _IdleStore:
+    def __init__(self) -> None:
+        self.saves = 0
+        self.closed = False
+
+    def load(self, _ano: int, _turno: int, _cargo: str) -> None:
+        return None
+
+    def save(
+        self,
+        _ano: int,
+        _turno: int,
+        _cargo: str,
+        _cells: tuple[object, ...],
+    ) -> datetime:
+        self.saves += 1
+        return datetime(2026, 10, 8, 14, 30, tzinfo=UTC)
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def _install_store(monkeypatch: pytest.MonkeyPatch) -> _IdleStore:
+    store = _IdleStore()
+    monkeypatch.setattr("eleicoes.use_cases.apresentar_grade._production_store", lambda: store)
+    return store
 
 
 def _grade(nivel: str) -> object:

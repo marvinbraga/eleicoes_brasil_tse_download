@@ -8,6 +8,7 @@ from eleicoes.domain.boletim import Boletim, VoteLine
 from eleicoes.domain.errors import InvalidBoletimContentError, InvalidBoletimError
 
 _SPEC: Final = Path(__file__).resolve().parent / "bu.asn1"
+_ABSENT_COUNT: Final = 0
 _OFFICIAL: Final = "oficial"
 _BULLETIN_ENVELOPE: Final = "envelopeBoletimUrna"
 _CONSTITUTIONAL: Final = "cargoConstitucional"
@@ -149,7 +150,7 @@ def _machine(raw: Mapping[str, object]) -> _Machine:
 
 
 def _counts(raw: Mapping[str, object]) -> _Counts:
-    habilitacao = _mapping(raw.get("resumoHabilitacao"), "habilitacao")
+    habilitacao = _habilitacao(raw)
     return _Counts(
         eleitores_computados=_integer(raw.get("qtdEleitoresComputados"), "eleitores_computados"),
         indicador_habilitacao=_integer(habilitacao.get("indicador"), "indicador_habilitacao"),
@@ -157,6 +158,17 @@ def _counts(raw: Mapping[str, object]) -> _Counts:
         qtd_manual=_integer(habilitacao.get("qtdManual"), "qtd_manual"),
         data_hora_emissao=_text(raw.get("dataHoraEmissao"), "data_hora_emissao"),
     )
+
+
+def _habilitacao(raw: Mapping[str, object]) -> Mapping[str, object]:
+    value = raw.get("resumoHabilitacao")
+    if value is None:
+        return {
+            "indicador": _ABSENT_COUNT,
+            "qtdBiometria": _ABSENT_COUNT,
+            "qtdManual": _ABSENT_COUNT,
+        }
+    return _mapping(value, "habilitacao")
 
 
 def _vote_lines(raw: Mapping[str, object]) -> tuple[VoteLine, ...]:

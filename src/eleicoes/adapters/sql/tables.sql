@@ -123,3 +123,59 @@ CREATE UNIQUE INDEX IF NOT EXISTS boletim_voto_uidx ON raw.boletim (
 CREATE INDEX IF NOT EXISTS boletim_uf_cargo_numero_idx ON raw.boletim (uf, cargo, numero);
 
 CREATE INDEX IF NOT EXISTS boletim_secao_idx ON raw.boletim (uf, municipio, zona, secao);
+
+CREATE TABLE IF NOT EXISTS analise.relatorio_presidente_governador (
+    ano integer NOT NULL,
+    turno integer NOT NULL,
+    gerado_em timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (ano, turno)
+);
+
+CREATE TABLE IF NOT EXISTS analise.relatorio_presidente_governador_linha (
+    ano integer NOT NULL,
+    turno integer NOT NULL,
+    uf text NOT NULL,
+    codigo text NOT NULL,
+    nome text NOT NULL,
+    cargo text NOT NULL,
+    partido integer NOT NULL,
+    votos_nominais integer NOT NULL,
+    votos_legenda integer NOT NULL,
+    PRIMARY KEY (ano, turno, uf, codigo, cargo, partido),
+    FOREIGN KEY (ano, turno) REFERENCES analise.relatorio_presidente_governador (ano, turno)
+);
+
+CREATE TABLE IF NOT EXISTS analise.relatorio_presidente_governador_cedula (
+    ano integer NOT NULL,
+    turno integer NOT NULL,
+    uf text NOT NULL,
+    codigo text NOT NULL,
+    cargo text NOT NULL,
+    branco integer NOT NULL,
+    nulo integer NOT NULL,
+    PRIMARY KEY (ano, turno, uf, codigo, cargo),
+    FOREIGN KEY (ano, turno) REFERENCES analise.relatorio_presidente_governador (ano, turno)
+);
+
+CREATE TABLE IF NOT EXISTS analise.relatorio_poder (
+    ano integer NOT NULL,
+    turno integer NOT NULL,
+    cargo text NOT NULL,
+    gerado_em timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (ano, turno, cargo)
+);
+
+CREATE TABLE IF NOT EXISTS analise.relatorio_poder_linha (
+    ano integer NOT NULL,
+    turno integer NOT NULL,
+    cargo text NOT NULL,
+    nivel text NOT NULL,
+    codigo text NOT NULL,
+    nome text NOT NULL,
+    comparecimento integer NOT NULL,
+    partido integer NOT NULL,
+    votos_nominais integer NOT NULL,
+    votos_legenda integer NOT NULL,
+    PRIMARY KEY (ano, turno, cargo, nivel, codigo, partido),
+    FOREIGN KEY (ano, turno, cargo) REFERENCES analise.relatorio_poder (ano, turno, cargo)
+);

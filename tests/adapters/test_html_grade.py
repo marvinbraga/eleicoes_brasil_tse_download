@@ -118,6 +118,32 @@ def test_zero_turnout_stays_white() -> None:
     assert '<td class="validos" data-ord="0">0</td>' in page
 
 
+def test_page_defaults_to_dark_and_offers_a_light_theme() -> None:
+    page = html_da_grade(_grade("pais", (LugarVotos("BR", "Brasil", (_party(None, 13, 1, 2),)),)))
+    assert '<html lang="pt-BR" data-bs-theme="dark">' in page
+    assert 'aria-label="Tema"' in page
+    assert 'data-tema="light"' in page
+    assert 'data-tema="dark"' in page
+    assert ">Claro</button>" in page
+    assert ">Escuro</button>" in page
+    assert "A célula mais intensa é a maior fatia deste recorte." in page
+    assert "position: sticky" in page
+    assert "left: 0" in page
+    assert 'href="#conteudo"' in page
+
+
+def test_marker_and_laser_use_the_presentation_keys() -> None:
+    page = html_da_grade(_grade("pais", (LugarVotos("BR", "Brasil", (_party(None, 13, 1, 2),)),)))
+    assert "<kbd>K</kbd> laser" in page
+    assert "<kbd>M</kbd> marca-texto" in page
+    assert "<kbd>Esc</kbd> solta o laser" in page
+    assert 'id="laserCanvas"' in page or "laserCanvas" in page
+    assert "markerCanvas" in page
+    assert 'event.key === "k" || event.key === "K"' in page
+    assert 'event.key === "m" || event.key === "M"' in page
+    assert 'event.key === "Escape"' in page
+
+
 def test_municipio_is_split_by_state_and_keeps_one_color_scale() -> None:
     grade = _grade(
         "municipio",

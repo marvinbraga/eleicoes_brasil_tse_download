@@ -5,6 +5,7 @@ import sys
 import webbrowser
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Final
 
@@ -13,6 +14,7 @@ from eleicoes.consultas.grade import grade_de_poder
 from eleicoes.domain.errors import ElectionError
 from eleicoes.domain.grade import GradeDePoder
 from eleicoes.domain.report import EXIT_FAILURE, EXIT_SUCCESS
+from eleicoes.ports.relatorio_poder import RelatorioPoderStore
 
 _LEVELS: Final[tuple[str, ...]] = ("municipio", "uf", "regiao", "pais")
 _LABELS: Final[dict[str, str]] = {
@@ -54,9 +56,16 @@ class PresentPartyGrades:
         destino: Path,
     ) -> PresentedReport:
         grades = self._grades(ano, turno, uf, cargo)
+        opened = self.publish(destino, self._render(grades))
+        return PresentedReport(destino, grades, opened)
+
+    def publish(self, destino: Path, html: str) -> bool:
         destino.parent.mkdir(parents=True, exist_ok=True)
-        destino.write_text(self._render(grades), encoding="utf-8")
-        return PresentedReport(destino, grades, self._open(destino))
+        destino.write_text(html, encoding="utf-8")
+        return self._open(destino)
+
+    def publish_grades(self, grades: tuple[GradeDePoder, ...], destino: Path) -> bool:
+        return self.publish(destino, self._render(grades))
 
     def _grades(
         self,
@@ -84,16 +93,16 @@ def main(
     argv: Sequence[str] | None = None,
     *,
     presenter: PresentPartyGrades | None = None,
+    store: RelatorioPoderStore | None = None,
 ) -> int:
     args = _parser().parse_args(argv)
     destino = _destino(args.ano, args.turno, args.uf, args.cargo, args.destino)
-    tool = presenter if presenter is not None else default_presenter(_opener(args.sem_navegador))
     try:
-        report = tool.execute(args.ano, args.turno, args.uf, args.cargo, destino)
+        text = _present(args, destino, presenter, store)
     except ElectionError:
         print("Não foi possível apresentar os relatórios.", file=sys.stderr)
         return EXIT_FAILURE
-    print(_message(report))
+    print(text)
     return EXIT_SUCCESS
 
 
@@ -107,6 +116,11 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--cargo", default="deputadoFederal")
     parser.add_argument("--destino")
     parser.add_argument("--sem-navegador", action="store_true")
+    parser.add_argument(
+        "--atualizar",
+        action="store_true",
+        help="Recalcula as grades e substitui o relatório gravado no banco.",
+    )
     return parser
 
 
@@ -127,12 +141,84 @@ def _skip_browser(_path: Path) -> bool:
     return True
 
 
+def _present(
+    args: argparse.Namespace,
+    destino: Path,
+    presenter: PresentPartyGrades | None,
+    store: RelatorioPoderStore | None,
+) -> str:
+    if presenter is not None and store is None:
+        report = presenter.execute(args.ano, args.turno, args.uf, args.cargo, destino)
+        return _message(report)
+    return _cached(args, destino, presenter, store)
+
+
+def _cached(
+    args: argparse.Namespace,
+    destino: Path,
+    presenter: PresentPartyGrades | None,
+    store: RelatorioPoderStore | None,
+) -> str:
+    from eleicoes.use_cases.apresentar_relatorio_poder import PresentPowerReport
+
+    cache = store if store is not None else _production_store()
+    tool = presenter if presenter is not None else default_presenter(_opener(args.sem_navegador))
+    try:
+        view = PresentPowerReport(tool, cache).execute(
+            args.ano,
+            args.turno,
+            args.uf,
+            args.cargo,
+            destino,
+            atualizar=bool(args.atualizar),
+        )
+    finally:
+        cache.close()
+    return _cached_message(view.path, view.summary, view.opened, view.loaded, view.generated_at)
+
+
+def _production_store() -> RelatorioPoderStore:
+    from eleicoes.composition.grade import build_power_report_store
+
+    return build_power_report_store()
+
+
+def _cached_message(
+    caminho: Path,
+    resumo: str,
+    aberto: bool,
+    loaded: bool,
+    gerado_em: datetime,
+) -> str:
+    lines: list[str] = []
+    if loaded:
+        lines.append(_loaded_line(gerado_em))
+    lines.append(f"Relatórios apresentados: {caminho.resolve()}")
+    lines.append(resumo)
+    if not aberto:
+        lines.append("Não foi possível abrir o navegador.")
+    if not loaded:
+        lines.append("Relatório gravado no banco.")
+    return "\n".join(lines)
+
+
+def _loaded_line(moment: datetime) -> str:
+    stamp = moment.astimezone().strftime("%Y-%m-%d %H:%M")
+    return f"Relatório carregado do banco, gerado em {stamp}."
+
+
 def _message(report: PresentedReport) -> str:
-    lines = [f"Relatórios apresentados: {report.caminho.resolve()}"]
-    lines.extend(_summary(grade) for grade in report.grades)
+    lines = [
+        f"Relatórios apresentados: {report.caminho.resolve()}",
+        grade_summary(report.grades),
+    ]
     if not report.aberto:
         lines.append("Não foi possível abrir o navegador.")
     return "\n".join(lines)
+
+
+def grade_summary(grades: tuple[GradeDePoder, ...]) -> str:
+    return "\n".join(_summary(grade) for grade in grades)
 
 
 def _summary(grade: GradeDePoder) -> str:

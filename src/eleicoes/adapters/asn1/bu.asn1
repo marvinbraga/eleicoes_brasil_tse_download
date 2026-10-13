@@ -152,6 +152,7 @@ Seguranca ::= SEQUENCE {
 -- Entidade responsável por apresentar as informações do <glossario id='boletim-de-urna'>boletim de urna</glossario>.
 -- 2026 places an untagged total and a context [1] breakdown before the results.
 -- The two quantities inside the breakdown were observed as biometric and manual counts.
+-- Exterior omits this summary.
 ResumoHabilitacao ::= SEQUENCE {
     indicador       INTEGER,
     qtdBiometria    INTEGER,
@@ -166,7 +167,7 @@ EntidadeBoletimUrna ::= SEQUENCE {
     dataHoraEmissao             DataHoraJE,
     dadosSecaoSA                DadosSecaoSA,
     qtdEleitoresComputados      INTEGER,
-    resumoHabilitacao           [1] ResumoHabilitacao,
+    resumoHabilitacao           [1] ResumoHabilitacao OPTIONAL,
     resultadosVotacaoPorEleicao SEQUENCE OF ResultadoVotacaoPorEleicao,
     codigoCargaRegistrado       SEQUENCE { codigo GeneralString }
 }

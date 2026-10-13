@@ -75,3 +75,60 @@ class BoletimReader(Protocol):
     def present_ufs(self, ano: int, turno: int, cargo: str) -> tuple[str, ...]: ...
 
     def close(self) -> None: ...
+
+
+class AsyncBoletimReader(Protocol):
+    async def totals(self, ano: int, turno: int, uf: str, cargo: str) -> tuple[TotalCargo, ...]: ...
+
+    async def municipalities(
+        self, ano: int, turno: int, uf: str, cargo: str, numero: int
+    ) -> tuple[VotosMunicipio, ...]: ...
+
+    async def comparison(
+        self,
+        ano: int,
+        turno: int,
+        uf: str,
+        cargo: str,
+        primeiro: int,
+        segundo: int,
+        nivel: str,
+    ) -> tuple[Comparativo, ...]: ...
+
+    async def party_power(
+        self, ano: int, turno: int, ufs: tuple[str, ...], cargo: str, nivel: str
+    ) -> tuple[PoderPartido, ...]: ...
+
+    async def participation(
+        self, ano: int, turno: int, uf: str, cargo: str, nivel: str
+    ) -> tuple[Participacao, ...]: ...
+
+    async def blank_and_null(
+        self, ano: int, turno: int, uf: str, cargo: str, nivel: str
+    ) -> tuple[BrancosNulos, ...]: ...
+
+    async def leading_candidate(
+        self, ano: int, turno: int, uf: str, cargo: str, nivel: str
+    ) -> tuple[PrimeiroColocado, ...]: ...
+
+    async def section_lines(
+        self, ano: int, turno: int, uf: str, municipio: int, zona: int, secao: int
+    ) -> tuple[LinhaVoto, ...]: ...
+
+    async def zones(
+        self, ano: int, turno: int, uf: str, municipio: int, cargo: str, numero: int
+    ) -> tuple[VotosZona, ...]: ...
+
+    async def section_projections(
+        self, ano: int, turno: int, uf: str, cargo: str
+    ) -> tuple[SectionProjection, ...]: ...
+
+    async def nominal_projections(
+        self, ano: int, turno: int, uf: str, cargo: str
+    ) -> tuple[NominalProjection, ...]: ...
+
+    async def blank_projections(
+        self, ano: int, turno: int, uf: str, cargo: str
+    ) -> tuple[BlankNullProjection, ...]: ...
+
+    async def present_ufs(self, ano: int, turno: int, cargo: str) -> tuple[str, ...]: ...
