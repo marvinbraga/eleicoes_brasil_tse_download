@@ -46,6 +46,24 @@ class MarkMissingError(ElectionError):
         super().__init__(f"missing party mark: {partidos}")
 
 
+class MeshMissingError(ElectionError):
+    def __init__(self, nome: str) -> None:
+        self.nome = nome
+        super().__init__(f"missing mesh: {nome}")
+
+
+class MarkInvalidError(ElectionError):
+    def __init__(self, partido: int) -> None:
+        self.partido = partido
+        super().__init__(f"invalid party mark: {partido}")
+
+
+class MeshMismatchError(ElectionError):
+    def __init__(self, nome: str) -> None:
+        self.nome = nome
+        super().__init__(f"mesh mismatch: {nome}")
+
+
 @dataclass(frozen=True, slots=True)
 class Marca:
     cor: str
