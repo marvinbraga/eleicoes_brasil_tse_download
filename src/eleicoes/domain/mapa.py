@@ -92,6 +92,24 @@ class RecortePintado:
     sem_poligono: tuple[str, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class PaginaDoMapa:
+    ano: int
+    turno: int
+    cargo: str
+    recorte: RecortePintado
+    municipios: str
+    ufs: str
+    paises: str
+    municipios_objeto: str
+    ufs_objeto: str
+    paises_objeto: str
+    brasil_id: str
+    ol_js: str
+    ol_css: str
+    topojson_js: str
+
+
 def ponte_de_linhas(linhas: Sequence[Mapping[str, str]]) -> PonteTseIbge:
     municipios: dict[str, str] = {}
     ufs: dict[str, str] = {}
