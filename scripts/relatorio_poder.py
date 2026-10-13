@@ -7,6 +7,12 @@ Uso, na raiz do projeto:
 O navegador abre o HTML. Para só gravar o arquivo:
 
     uv run python scripts/relatorio_poder.py --sem-navegador
+
+O banco guarda as grades. O HTML é montado em cada apresentação.
+Na vez seguinte o comando não agrega os boletins de novo. Para
+recalcular as grades e substituir as linhas guardadas:
+
+    uv run python scripts/relatorio_poder.py --atualizar
 """
 
 import sys

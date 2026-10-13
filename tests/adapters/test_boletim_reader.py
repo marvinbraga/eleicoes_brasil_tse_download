@@ -75,6 +75,26 @@ def test_golden_section_parses_the_official_bulletin(reader: Asn1BoletimReader) 
     assert {line.id_eleicao for line in boletim.votos} == {6257, 6259}
 
 
+def test_absent_resumo_habilitacao_counts_as_zero(
+    reader: Asn1BoletimReader,
+    codec: object,
+) -> None:
+    body = _bulletin_body("oficial")
+    del body["resumoHabilitacao"]
+    payload = _shell(
+        codec,
+        "oficial",
+        "envelopeBoletimUrna",
+        _encode(codec, "EntidadeBoletimUrna", body),
+    )
+    boletim = reader.read("29262/0001/1406/exterior-bu.dat", payload)
+    assert (boletim.indicador_habilitacao, boletim.qtd_biometria, boletim.qtd_manual) == (
+        0,
+        0,
+        0,
+    )
+
+
 def test_free_cargo_keeps_the_two_election_integers(
     reader: Asn1BoletimReader,
     codec: object,

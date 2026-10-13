@@ -6,7 +6,7 @@ services:
     env_file:
       - .env
     ports:
-      - "${POSTGRES_PUBLISH_PORT:-25432}:5432"
+      - "${POSTGRES_PUBLISH_PORT:-15432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
@@ -62,7 +62,7 @@ services:
     env_file:
       - .env
     ports:
-      - "${METABASE_PORT:-23000}:3000"
+      - "${METABASE_PORT:-13000}:3000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -86,7 +86,7 @@ services:
     env_file:
       - .env
     ports:
-      - "${ADMINER_PORT:-28080}:8080"
+      - "${ADMINER_PORT:-18080}:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -103,6 +103,48 @@ services:
         limits:
           cpus: "0.25"
           memory: 256M
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: eleicoes_brasil-importer:dev
+    env_file:
+      - .env
+    command:
+      [
+        "uvicorn",
+        "eleicoes.composition.api:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "5000",
+      ]
+    ports:
+      - "${API_PORT:-15000}:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - eleicoes
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; response = urllib.request.urlopen('http://127.0.0.1:5000/health'); raise SystemExit(0 if response.status == 200 else 1)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
     restart: unless-stopped
 
 networks:
