@@ -70,6 +70,7 @@ _PAGE_SCRIPT: Final = """\
         continue;
       }
       properties.cor = item.cor;
+      properties.peso = item.peso;
       properties.numero = item.numero;
       properties.logo = pintura.logos[item.numero];
       properties.codigo = String(item.codigo);
@@ -89,11 +90,6 @@ _PAGE_SCRIPT: Final = """\
     };
   }
 
-  function parNumerico(valor) {
-    return Array.isArray(valor) && valor.length === 2 &&
-      Number.isFinite(valor[0]) && Number.isFinite(valor[1]);
-  }
-
   function estiloMundo() {
     return new ol.style.Style({
       fill: new ol.style.Fill({color: "#f7f7f7"}),
@@ -106,25 +102,102 @@ _PAGE_SCRIPT: Final = """\
     if (!cor) {
       return estiloMundo();
     }
-    var estilos = [new ol.style.Style({
-      fill: new ol.style.Fill({color: cor}),
+    var tinta = misturar(cor, feature.get("peso"));
+    return new ol.style.Style({
+      fill: new ol.style.Fill({color: tinta.fill}),
       stroke: new ol.style.Stroke({color: "#222222", width: 1}),
       text: new ol.style.Text({
-        text: String(feature.get("numero")),
+        text: rotulo(feature.get("peso")),
         font: "12px sans-serif",
         overflow: true,
-        fill: new ol.style.Fill({color: "#111111"})
+        fill: new ol.style.Fill({color: tinta.ink})
       })
-    })];
-    var logo = feature.get("logo");
-    var centroide = feature.get("centroide");
-    if (logo && parNumerico(centroide)) {
-      estilos.push(new ol.style.Style({
-        geometry: new ol.geom.Point(centroide),
-        image: new ol.style.Icon({src: logo})
-      }));
+    });
+  }
+
+  function misturar(cor, peso) {
+    var fundo = document.body.getAttribute("data-fundo") || "#ffffff";
+    var origem = canais(cor);
+    var base = canais(fundo);
+    var parte = fracao(peso);
+    if (!origem || !base) {
+      return {fill: cor, ink: "#111111"};
     }
-    return estilos;
+    var rgb = [0, 1, 2].map(function (indice) {
+      return Math.round(base[indice] + (origem[indice] - base[indice]) * parte);
+    });
+    var luma = (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255;
+    return {fill: "rgb(" + rgb.join(",") + ")", ink: luma > 0.62 ? "#111111" : "#f4f4f5"};
+  }
+
+  function rotulo(peso) {
+    var partes = String(peso == null ? "" : peso).split("/");
+    if (partes.length !== 2) {
+      return "—";
+    }
+    var numerador = Number(partes[0]);
+    var denominador = Number(partes[1]);
+    if (!eInteiro(numerador) || !eInteiro(denominador) || denominador <= 0 || numerador < 0) {
+      return "—";
+    }
+    var produto = numerador * 10000;
+    var quociente = Math.floor(produto / denominador);
+    var resto = produto % denominador;
+    var arredondado = resto * 2 >= denominador ? quociente + 1 : quociente;
+    var inteiro = Math.floor(arredondado / 100);
+    var centesimos = String(arredondado % 100);
+    if (centesimos.length < 2) {
+      centesimos = "0" + centesimos;
+    }
+    return milhar(inteiro) + "," + centesimos + "%";
+  }
+
+  function eInteiro(valor) {
+    return typeof valor === "number" && isFinite(valor) && Math.floor(valor) === valor;
+  }
+
+  function milhar(valor) {
+    var texto = String(valor);
+    var grupos = [];
+    var indice = texto.length;
+    while (indice > 0) {
+      var inicio = Math.max(0, indice - 3);
+      grupos.push(texto.slice(inicio, indice));
+      indice = inicio;
+    }
+    return grupos.reverse().join(".");
+  }
+
+  function fracao(valor) {
+    if (valor === undefined || valor === null || valor === "") {
+      return 1;
+    }
+    var partes = String(valor).split("/");
+    var numerador = Number(partes[0]);
+    var denominador = partes.length === 2 ? Number(partes[1]) : 1;
+    if (!isFinite(numerador) || !isFinite(denominador) || denominador === 0) {
+      return 1;
+    }
+    return Math.min(1, Math.max(0, numerador / denominador));
+  }
+
+  function canais(cor) {
+    var hex = String(cor).trim();
+    if (hex.charAt(0) !== "#") {
+      return null;
+    }
+    hex = hex.slice(1);
+    if (hex.length === 3) {
+      hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+    }
+    if (hex.length !== 6 || /[^0-9a-fA-F]/.test(hex)) {
+      return null;
+    }
+    return [
+      parseInt(hex.slice(0, 2), 16),
+      parseInt(hex.slice(2, 4), 16),
+      parseInt(hex.slice(4, 6), 16)
+    ];
   }
 
   function camada(geojson, style, minZoom, maxZoom) {
@@ -176,7 +249,7 @@ def html_do_mapa(pagina: PaginaDoMapa) -> str:
         f"<title>{title}</title>\n"
         f"{_style(pagina)}\n"
         "</head>\n"
-        "<body>\n"
+        '<body data-fundo="#ffffff">\n'
         f"<h1>{title}</h1>\n"
         '<div id="mapa"></div>\n'
         f"{_footer(pagina)}\n"
@@ -261,4 +334,9 @@ def _paintings(recorte: RecortePintado) -> tuple[Pintura, ...]:
 
 
 def _item(pintura: Pintura) -> dict[str, str]:
-    return {"codigo": pintura.codigo, "cor": pintura.cor, "numero": pintura.numero}
+    return {
+        "codigo": pintura.codigo,
+        "cor": pintura.cor,
+        "numero": pintura.numero,
+        "peso": pintura.peso,
+    }

@@ -76,6 +76,7 @@ class Pintura:
     cor: str
     numero: str
     logo: str
+    peso: str = "1/1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -246,7 +247,7 @@ def _pintura(codigo: str, place: PlaceReading, cargo: str, marcas: Mapping[int, 
     if leader is None:
         raise MarkMissingError(())
     marca = marcas[leader]
-    return Pintura(codigo, marca.cor, str(leader), marca.logo)
+    return Pintura(codigo, marca.cor, str(leader), marca.logo, _peso(place, cargo))
 
 
 def _leituras(view: CrossReportView) -> tuple[PlaceReading, ...]:
@@ -256,7 +257,21 @@ def _leituras(view: CrossReportView) -> tuple[PlaceReading, ...]:
 
 
 def _lider(place: PlaceReading, cargo: str) -> int | None:
-    reading: CargoReading | None = place.presidente if cargo == "presidente" else place.governador
+    reading = _leitura(place, cargo)
     if reading is None or reading.leader is None:
         return None
     return reading.leader.partido
+
+
+def _peso(place: PlaceReading, cargo: str) -> str:
+    reading = _leitura(place, cargo)
+    if reading is None or reading.leader is None:
+        return "0/1"
+    share = reading.party_share(reading.leader.votos)
+    return f"{share.numerator}/{share.denominator}"
+
+
+def _leitura(place: PlaceReading, cargo: str) -> CargoReading | None:
+    if cargo == "presidente":
+        return place.presidente
+    return place.governador

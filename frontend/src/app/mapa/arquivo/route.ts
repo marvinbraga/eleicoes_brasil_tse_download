@@ -8,12 +8,15 @@ const CSS_CLARO =
   "body { background: #ffffff; } #mapa { background: #ffffff; height: 80vh; }";
 
 const CSS_ESCURO = [
-  "body { background: oklch(0.145 0 0); color: oklch(0.985 0 0); }",
-  "#mapa { background: oklch(0.205 0 0); height: 80vh; }",
-  "h1 { color: oklch(0.985 0 0); }",
-  "footer, footer p, footer li { color: oklch(0.708 0 0); }",
-  ".ol-control button { background-color: oklch(0.269 0 0); color: oklch(0.985 0 0); }",
+  "body { background: #0a0a0a; color: #fafafa; }",
+  "#mapa { background: #171717; height: 80vh; }",
+  "h1 { color: #fafafa; }",
+  "footer, footer p, footer li { color: #a1a1a1; }",
+  ".ol-control button { background-color: #262626; color: #fafafa; }",
 ].join(" ");
+
+const FUNDO_CLARO = 'data-fundo="#ffffff"';
+const FUNDO_ESCURO = 'data-fundo="#171717"';
 
 export function htmlComTema(html: string, tema: string | null): string {
   if (tema !== "dark" || !html.includes(CSS_CLARO)) {
@@ -26,9 +29,13 @@ export function htmlComTema(html: string, tema: string | null): string {
   }
   const mundo = html
     .slice(inicio, fim)
-    .replace('color: "#f7f7f7"', 'color: "oklch(0.205 0 0)"')
-    .replace('color: "#cccccc"', 'color: "oklch(1 0 0 / 18%)"');
-  return html.slice(0, inicio).replace(CSS_CLARO, CSS_ESCURO) + mundo + html.slice(fim);
+    .replace('color: "#f7f7f7"', 'color: "#171717"')
+    .replace('color: "#cccccc"', 'color: "#3a3a3a"');
+  return (
+    html.slice(0, inicio).replace(CSS_CLARO, CSS_ESCURO).replace(FUNDO_CLARO, FUNDO_ESCURO) +
+    mundo +
+    html.slice(fim)
+  );
 }
 
 export async function GET(request: NextRequest) {

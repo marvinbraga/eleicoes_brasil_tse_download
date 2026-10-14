@@ -42,8 +42,6 @@ _REQUIRED = (
     "ol.format.GeoJSON",
     "ol.style.Fill",
     "ol.style.Text",
-    "ol.style.Icon",
-    "ol.geom.Point",
     "declutter: false",
     "overflow: true",
     "function soBrasil",
@@ -52,8 +50,6 @@ _REQUIRED = (
     "camada(colecao(ufs, pintura.ufsObjeto), estilo, 4, 6)",
     "camada(colecao(municipios, pintura.municipiosObjeto), estilo, 6, 28)",
     "properties.logo = pintura.logos[item.numero]",
-    'var centroide = feature.get("centroide");',
-    "new ol.geom.Point(centroide)",
     "IBGE",
     "OpenLayers Contributors",
     "Redistributions in binary form",
@@ -120,7 +116,19 @@ def test_page_renders_the_leader_choropleth() -> None:
     assert 'get("cor")' not in mundo
     assert html.count("QQ==") == 1
     assert pintura["logos"] == {"22": _LOGO}
-    assert pintura["pais"] == {"codigo": "076", "cor": "#112233", "numero": "22"}
+    assert pintura["pais"] == {
+        "codigo": "076",
+        "cor": "#112233",
+        "numero": "22",
+        "peso": "1/1",
+    }
+    assert 'properties.peso = item.peso' in html
+    assert 'data-fundo="#ffffff"' in html
+    assert 'text: rotulo(feature.get("peso"))' in html
+    assert 'feature.get("numero")' not in html
+    assert "function rotulo(peso)" in html
+    assert "resto * 2 >= denominador" in html
+    assert 'return milhar(inteiro) + "," + centesimos + "%"' in html
     assert "logo" not in pintura["pais"]
     assert "242" not in _block(html, "pintura")
     assert "242" in _block(html, "paises")
