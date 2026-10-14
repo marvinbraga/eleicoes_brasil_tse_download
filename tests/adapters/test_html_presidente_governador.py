@@ -9,6 +9,11 @@ from eleicoes.domain.presidente_governador import (
 )
 
 
+def _boot_script(page: str) -> str:
+    start = page.index("<script>")
+    return page[start : page.index("</script>", start)]
+
+
 def test_margin_displays_half_up_percentage_points() -> None:
     wide = _city(
         "AC",
@@ -52,8 +57,13 @@ def test_page_escapes_a_hostile_name_and_states_the_rules() -> None:
     bootstrap = "https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
     assert html.count(bootstrap) == 1
     assert 'data-bs-theme="dark"' in html
-    assert ">Claro</button>" in html
-    assert ">Escuro</button>" in html
+    assert ">Claro</button>" not in html
+    assert ">Escuro</button>" not in html
+    boot = _boot_script(html)
+    assert "tema" in boot
+    assert "data-bs-theme" in boot
+    assert "poder-tema" not in html
+    assert "mountTheme" not in html
     assert "aria-sort" in html
     assert "function reorder" in html or "reorder(table" in html
     margin = (

@@ -4,9 +4,11 @@ import asyncio
 from collections.abc import Mapping
 
 import pytest
+from sqlalchemy.engine import URL
 
 from eleicoes.composition.api import (
     _pool_from_environment,
+    build_async_sessions,
     build_pool,
     create_app,
     postgres_conninfo,
@@ -113,10 +115,83 @@ def test_lifespan_opens_and_closes_the_injected_factory() -> None:
     async def run() -> None:
         async with application.router.lifespan_context(application):
             assert application.state.pool is created[0]
+            assert application.state.session_maker is None
             assert created[0].opened
         assert created[0].closed
 
     asyncio.run(run())
+
+
+def test_lifespan_disposes_an_explicit_session_maker() -> None:
+    disposed: list[bool] = []
+
+    class _Maker:
+        async def dispose(self) -> None:
+            disposed.append(True)
+
+    created: list[_RecordingPool] = []
+
+    def factory() -> _RecordingPool:
+        pool = _RecordingPool("host=127.0.0.1", open=False, min_size=1, max_size=4)
+        created.append(pool)
+        return pool
+
+    application = create_app(pool_factory=factory, session_maker_factory=_Maker)
+
+    async def run() -> None:
+        async with application.router.lifespan_context(application):
+            assert isinstance(application.state.session_maker, _Maker)
+        assert disposed == [True]
+        assert created[0].closed
+
+    asyncio.run(run())
+
+
+def test_default_lifespan_opens_the_orm_engine(monkeypatch: pytest.MonkeyPatch) -> None:
+    created: list[URL] = []
+
+    class _Maker:
+        def __init__(self, url: URL) -> None:
+            created.append(url)
+            self.disposed = False
+
+        async def dispose(self) -> None:
+            self.disposed = True
+
+    monkeypatch.setattr("eleicoes.composition.api.AsyncConnectionPool", _RecordingPool)
+    monkeypatch.setattr("eleicoes.composition.api.AsyncSessionMaker", _Maker)
+    monkeypatch.setattr("eleicoes.composition.api.load_dotenv", lambda: None)
+    for key, value in _env().items():
+        monkeypatch.setenv(key, value)
+    application = create_app()
+
+    async def run() -> None:
+        async with application.router.lifespan_context(application):
+            assert created[0].drivername == "postgresql+psycopg"
+            assert created[0].host == "127.0.0.1"
+        assert application.state.session_maker.disposed is True
+
+    asyncio.run(run())
+
+
+def test_async_sessions_follow_the_published_port(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[URL] = []
+
+    class _Maker:
+        def __init__(self, url: URL) -> None:
+            seen.append(url)
+
+    monkeypatch.setattr("eleicoes.composition.api.AsyncSessionMaker", _Maker)
+    monkeypatch.setattr("eleicoes.composition.correspondencia._resolves", lambda _host: False)
+    env = _env()
+    env["POSTGRES_HOST"] = "postgres"
+    env["POSTGRES_PORT"] = "5432"
+    env["POSTGRES_PUBLISH_PORT"] = "15432"
+    build_async_sessions(env)
+    assert seen[0].drivername == "postgresql+psycopg"
+    assert seen[0].host == "127.0.0.1"
+    assert seen[0].port == 15432
+    assert seen[0].database == "eleicoes"
 
 
 def test_conninfo_quotes_the_database_name() -> None:

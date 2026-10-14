@@ -1,69 +1,58 @@
-"""Guarda os votos municipais do cruzamento. A senha fica na fábrica de conexão."""
+"""Guarda os votos municipais do cruzamento. A senha fica na fábrica de sessão."""
 
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from datetime import datetime
-from pathlib import Path
 from typing import Final, TypeVar
 
 import psycopg
+from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
+from sqlalchemy.sql import Executable, Select
 
-from eleicoes.adapters.postgres_sink import ConnectionFactory, CursorWork, SqlConnection, SqlCursor
+from eleicoes.adapters.orm.models import (
+    Base,
+    PresidentGovernorBallot,
+    PresidentGovernorHeader,
+    PresidentGovernorLine,
+)
+from eleicoes.adapters.orm.schema import (
+    apply_tables,
+    dialect_name,
+    is_postgresql,
+    require_clock,
+    server_clock,
+)
+from eleicoes.adapters.orm.sessions import SyncSessionFactory
 from eleicoes.domain.errors import ElectionError
 from eleicoes.domain.presidente_governador import CargoTally, MunicipalPlace, PartyTally
 from eleicoes.ports.relatorio_presidente_governador import StoredCrossReport
 
-_TABLES_SQL = (Path(__file__).resolve().parent / "sql" / "tables.sql").read_text(encoding="utf-8")
 _LINE_WIDTH: Final = 7
 _CEDULA_WIDTH: Final = 5
 _PRESIDENT: Final = "presidente"
 _GOVERNOR: Final = "governador"
-_HEADER = (
-    "INSERT INTO analise.relatorio_presidente_governador (ano, turno) "
-    "VALUES (%s, %s) "
-    "ON CONFLICT (ano, turno) DO UPDATE "
-    "SET gerado_em = now() "
-    "RETURNING gerado_em"
-)
-_DELETE_LINHA = (
-    "DELETE FROM analise.relatorio_presidente_governador_linha WHERE ano = %s AND turno = %s"
-)
-_DELETE_CEDULA = (
-    "DELETE FROM analise.relatorio_presidente_governador_cedula WHERE ano = %s AND turno = %s"
-)
-_INSERT_LINHA = (
-    "INSERT INTO analise.relatorio_presidente_governador_linha ("
-    "ano, turno, uf, codigo, nome, cargo, partido, votos_nominais, votos_legenda) "
-    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
-)
-_INSERT_CEDULA = (
-    "INSERT INTO analise.relatorio_presidente_governador_cedula ("
-    "ano, turno, uf, codigo, cargo, branco, nulo) "
-    "VALUES (%s, %s, %s, %s, %s, %s, %s)"
-)
-_LOAD_HEADER = (
-    "SELECT gerado_em FROM analise.relatorio_presidente_governador "
-    "WHERE ano = %s AND turno = %s"
-)
-_LOAD_LINHA = (
-    "SELECT uf, codigo, nome, cargo, partido, votos_nominais, votos_legenda "
-    "FROM analise.relatorio_presidente_governador_linha "
-    "WHERE ano = %s AND turno = %s"
-)
-_LOAD_CEDULA = (
-    "SELECT uf, codigo, cargo, branco, nulo "
-    "FROM analise.relatorio_presidente_governador_cedula "
-    "WHERE ano = %s AND turno = %s"
-)
+_MISSING = "cross report was not stored"
+_BROKEN = "cross report row is incomplete"
+_FAILED = "cross report store failed"
+_SQLITE = "sqlite"
 _T = TypeVar("_T")
 
 
 class PostgresPresidentGovernorStore:
-    def __init__(self, connect: ConnectionFactory) -> None:
-        self._connect = connect
-        self._connection: SqlConnection | None = None
+    def __init__(self, sessions: SyncSessionFactory) -> None:
+        self._sessions = sessions
+        self._session: Session | None = None
 
     def ensure_model(self) -> None:
-        self._run(lambda cursor: _execute_script(cursor, _TABLES_SQL))
+        session = self._open()
+        if not is_postgresql(session):
+            Base.metadata.create_all(session.get_bind())
+            return
+        with session.begin():
+            apply_tables(session)
 
     def load(self, ano: int, turno: int) -> StoredCrossReport | None:
         return self._guard(lambda: self._load(ano, turno))
@@ -77,48 +66,203 @@ class PostgresPresidentGovernorStore:
         return self._guard(lambda: self._save(ano, turno, places))
 
     def close(self) -> None:
-        connection = self._connection
-        self._connection = None
-        if connection is not None:
-            connection.close()
+        session = self._session
+        self._session = None
+        if session is not None:
+            session.close()
 
     def _load(self, ano: int, turno: int) -> StoredCrossReport | None:
         self.ensure_model()
-        found: list[StoredCrossReport | None] = [None]
-
-        def work(cursor: SqlCursor) -> None:
-            found[0] = _read(cursor, ano, turno)
-
-        self._run(work)
-        return found[0]
+        with self._open().begin():
+            return read_cross(self._open(), ano, turno)
 
     def _save(self, ano: int, turno: int, places: tuple[MunicipalPlace, ...]) -> datetime:
         self.ensure_model()
-        found: list[datetime] = []
-
-        def work(cursor: SqlCursor) -> None:
-            found.append(_write(cursor, ano, turno, places))
-
-        self._run(work)
-        return found[0]
+        with self._open().begin():
+            return write_cross(self._open(), ano, turno, places)
 
     def _guard(self, work: Callable[[], _T]) -> _T:
         try:
             return work()
         except ElectionError:
             raise
-        except psycopg.Error as exc:
-            raise ElectionError("cross report store failed") from exc
+        except (SQLAlchemyError, psycopg.Error) as exc:
+            raise ElectionError(_FAILED) from exc
 
-    def _run(self, work: CursorWork) -> None:
-        connection = self._open()
-        with connection.transaction(), connection.cursor() as cursor:
-            work(cursor)
+    def _open(self) -> Session:
+        if self._session is None:
+            self._session = self._sessions()
+        return self._session
 
-    def _open(self) -> SqlConnection:
-        if self._connection is None:
-            self._connection = self._connect()
-        return self._connection
+
+def read_cross(session: Session, ano: int, turno: int) -> StoredCrossReport | None:
+    header = _header(session, ano, turno)
+    if header is None:
+        return None
+    lines = tuple(session.execute(_line_query(ano, turno)).scalars().all())
+    ballots = tuple(session.execute(_ballot_query(ano, turno)).scalars().all())
+    places = _places(_line_rows(lines), _ballot_rows(ballots))
+    return StoredCrossReport(places, require_clock(session, header.gerado_em, _BROKEN))
+
+
+def write_cross(
+    session: Session,
+    ano: int,
+    turno: int,
+    places: tuple[MunicipalPlace, ...],
+) -> datetime:
+    moment = _touch(session, ano, turno)
+    session.execute(
+        delete(PresidentGovernorLine).where(
+            PresidentGovernorLine.ano == ano,
+            PresidentGovernorLine.turno == turno,
+        )
+    )
+    session.execute(
+        delete(PresidentGovernorBallot).where(
+            PresidentGovernorBallot.ano == ano,
+            PresidentGovernorBallot.turno == turno,
+        )
+    )
+    for place in places:
+        _insert_place(session, ano, turno, place)
+    return moment
+
+
+def _header(session: Session, ano: int, turno: int) -> PresidentGovernorHeader | None:
+    found = tuple(session.execute(_header_query(ano, turno)).scalars().all())
+    if not found:
+        return None
+    if len(found) != 1:
+        raise ElectionError(_MISSING)
+    return found[0]
+
+
+def _header_query(ano: int, turno: int) -> Select[PresidentGovernorHeader]:
+    return select(PresidentGovernorHeader).where(
+        PresidentGovernorHeader.ano == ano,
+        PresidentGovernorHeader.turno == turno,
+    )
+
+
+def _line_query(ano: int, turno: int) -> Select[PresidentGovernorLine]:
+    return select(PresidentGovernorLine).where(
+        PresidentGovernorLine.ano == ano,
+        PresidentGovernorLine.turno == turno,
+    )
+
+
+def _ballot_query(ano: int, turno: int) -> Select[PresidentGovernorBallot]:
+    return select(PresidentGovernorBallot).where(
+        PresidentGovernorBallot.ano == ano,
+        PresidentGovernorBallot.turno == turno,
+    )
+
+
+def _touch(session: Session, ano: int, turno: int) -> datetime:
+    clock = server_clock(session)
+    index = ["ano", "turno"]
+    if dialect_name(session) == _SQLITE:
+        saved = (
+            sqlite_insert(PresidentGovernorHeader)
+            .values(ano=ano, turno=turno, gerado_em=clock)
+            .on_conflict_do_update(index_elements=index, set_={"gerado_em": clock})
+            .returning(PresidentGovernorHeader.gerado_em)
+        )
+        return _clock(session, saved)
+    saved_pg = (
+        pg_insert(PresidentGovernorHeader)
+        .values(ano=ano, turno=turno, gerado_em=clock)
+        .on_conflict_do_update(index_elements=index, set_={"gerado_em": clock})
+        .returning(PresidentGovernorHeader.gerado_em)
+    )
+    return _clock(session, saved_pg)
+
+
+def _clock(session: Session, statement: Executable) -> datetime:
+    found: object = session.execute(statement).scalar_one()
+    return require_clock(session, found, _MISSING)
+
+
+def _insert_place(session: Session, ano: int, turno: int, place: MunicipalPlace) -> None:
+    _insert_cargo(session, ano, turno, place, _PRESIDENT, place.presidente)
+    if place.governador is not None:
+        _insert_cargo(session, ano, turno, place, _GOVERNOR, place.governador)
+
+
+def _insert_cargo(
+    session: Session,
+    ano: int,
+    turno: int,
+    place: MunicipalPlace,
+    cargo: str,
+    tally: CargoTally,
+) -> None:
+    for party in tally.parties:
+        session.add(_line(ano, turno, place, cargo, party))
+    session.add(_ballot(ano, turno, place, cargo, tally))
+
+
+def _line(
+    ano: int,
+    turno: int,
+    place: MunicipalPlace,
+    cargo: str,
+    party: PartyTally,
+) -> PresidentGovernorLine:
+    return PresidentGovernorLine(
+        ano=ano,
+        turno=turno,
+        uf=place.uf,
+        codigo=place.codigo,
+        nome=place.nome,
+        cargo=cargo,
+        partido=party.partido,
+        votos_nominais=party.votos_nominais,
+        votos_legenda=party.votos_legenda,
+    )
+
+
+def _ballot(
+    ano: int,
+    turno: int,
+    place: MunicipalPlace,
+    cargo: str,
+    tally: CargoTally,
+) -> PresidentGovernorBallot:
+    return PresidentGovernorBallot(
+        ano=ano,
+        turno=turno,
+        uf=place.uf,
+        codigo=place.codigo,
+        cargo=cargo,
+        branco=tally.branco,
+        nulo=tally.nulo,
+    )
+
+
+def _line_rows(lines: tuple[PresidentGovernorLine, ...]) -> tuple[tuple[object, ...], ...]:
+    return tuple(_line_row(line) for line in lines)
+
+
+def _ballot_rows(ballots: tuple[PresidentGovernorBallot, ...]) -> tuple[tuple[object, ...], ...]:
+    return tuple(_ballot_row(ballot) for ballot in ballots)
+
+
+def _line_row(line: PresidentGovernorLine) -> tuple[object, ...]:
+    return (
+        line.uf,
+        line.codigo,
+        line.nome,
+        line.cargo,
+        line.partido,
+        line.votos_nominais,
+        line.votos_legenda,
+    )
+
+
+def _ballot_row(ballot: PresidentGovernorBallot) -> tuple[object, ...]:
+    return (ballot.uf, ballot.codigo, ballot.cargo, ballot.branco, ballot.nulo)
 
 
 class _Bucket:
@@ -138,7 +282,7 @@ class _Bucket:
         if cargo == _GOVERNOR:
             self.governor.append(party)
             return
-        raise ElectionError("cross report row is incomplete")
+        raise ElectionError(_BROKEN)
 
     def add_blank(self, cargo: str, branco: int, nulo: int) -> None:
         if cargo == _PRESIDENT:
@@ -147,86 +291,7 @@ class _Bucket:
         if cargo == _GOVERNOR:
             self.governor_blank = (branco, nulo)
             return
-        raise ElectionError("cross report row is incomplete")
-
-
-def _read(cursor: SqlCursor, ano: int, turno: int) -> StoredCrossReport | None:
-    cursor.execute(_LOAD_HEADER, (ano, turno))
-    header = _rows(cursor)
-    if not header:
-        return None
-    lines = _fetch(cursor, _LOAD_LINHA, ano, turno)
-    cedulas = _fetch(cursor, _LOAD_CEDULA, ano, turno)
-    return StoredCrossReport(_places(lines, cedulas), _one_clock(header))
-
-
-def _fetch(cursor: SqlCursor, query: str, ano: int, turno: int) -> tuple[tuple[object, ...], ...]:
-    cursor.execute(query, (ano, turno))
-    return _rows(cursor)
-
-
-def _write(
-    cursor: SqlCursor,
-    ano: int,
-    turno: int,
-    places: tuple[MunicipalPlace, ...],
-) -> datetime:
-    cursor.execute(_HEADER, (ano, turno))
-    moment = _returned(cursor)
-    cursor.execute(_DELETE_LINHA, (ano, turno))
-    cursor.execute(_DELETE_CEDULA, (ano, turno))
-    for place in places:
-        _insert_place(cursor, ano, turno, place)
-    return moment
-
-
-def _insert_place(cursor: SqlCursor, ano: int, turno: int, place: MunicipalPlace) -> None:
-    _insert_cargo(cursor, ano, turno, place, _PRESIDENT, place.presidente)
-    if place.governador is not None:
-        _insert_cargo(cursor, ano, turno, place, _GOVERNOR, place.governador)
-
-
-def _insert_cargo(
-    cursor: SqlCursor,
-    ano: int,
-    turno: int,
-    place: MunicipalPlace,
-    cargo: str,
-    tally: CargoTally,
-) -> None:
-    for party in tally.parties:
-        cursor.execute(_INSERT_LINHA, _line(ano, turno, place, cargo, party))
-    cursor.execute(_INSERT_CEDULA, _cedula_params(ano, turno, place, cargo, tally))
-
-
-def _line(
-    ano: int,
-    turno: int,
-    place: MunicipalPlace,
-    cargo: str,
-    party: PartyTally,
-) -> tuple[object, ...]:
-    return (
-        ano,
-        turno,
-        place.uf,
-        place.codigo,
-        place.nome,
-        cargo,
-        party.partido,
-        party.votos_nominais,
-        party.votos_legenda,
-    )
-
-
-def _cedula_params(
-    ano: int,
-    turno: int,
-    place: MunicipalPlace,
-    cargo: str,
-    tally: CargoTally,
-) -> tuple[object, ...]:
-    return (ano, turno, place.uf, place.codigo, cargo, tally.branco, tally.nulo)
+        raise ElectionError(_BROKEN)
 
 
 def _places(
@@ -255,7 +320,7 @@ def _add_line(
         grouped[key] = bucket
         order.append(key)
     elif bucket.nome != nome:
-        raise ElectionError("cross report row is incomplete")
+        raise ElectionError(_BROKEN)
     bucket.add_party(cargo, party)
 
 
@@ -263,7 +328,7 @@ def _add_cedula(grouped: dict[tuple[str, str], _Bucket], row: tuple[object, ...]
     uf, codigo, cargo, branco, nulo = _parsed_cedula(row)
     bucket = grouped.get((uf, codigo))
     if bucket is None:
-        raise ElectionError("cross report row is incomplete")
+        raise ElectionError(_BROKEN)
     bucket.add_blank(cargo, branco, nulo)
 
 
@@ -275,7 +340,7 @@ def _finish(bucket: _Bucket) -> MunicipalPlace:
 
 def _required_cargo(parties: list[PartyTally], blank: tuple[int, int] | None) -> CargoTally:
     if not parties or blank is None:
-        raise ElectionError("cross report row is incomplete")
+        raise ElectionError(_BROKEN)
     return CargoTally(tuple(parties), blank[0], blank[1])
 
 
@@ -286,13 +351,13 @@ def _optional_cargo(
     if not parties and blank is None:
         return None
     if not parties or blank is None:
-        raise ElectionError("cross report row is incomplete")
+        raise ElectionError(_BROKEN)
     return CargoTally(tuple(parties), blank[0], blank[1])
 
 
 def _parsed_line(row: tuple[object, ...]) -> tuple[str, str, str, str, PartyTally]:
     if len(row) != _LINE_WIDTH:
-        raise ElectionError("cross report row is incomplete")
+        raise ElectionError(_BROKEN)
     return (_text(row[0]), _text(row[1]), _text(row[2]), _text(row[3]), _party(row))
 
 
@@ -302,50 +367,17 @@ def _party(row: tuple[object, ...]) -> PartyTally:
 
 def _parsed_cedula(row: tuple[object, ...]) -> tuple[str, str, str, int, int]:
     if len(row) != _CEDULA_WIDTH:
-        raise ElectionError("cross report row is incomplete")
+        raise ElectionError(_BROKEN)
     return (_text(row[0]), _text(row[1]), _text(row[2]), _count(row[3]), _count(row[4]))
-
-
-def _returned(cursor: SqlCursor) -> datetime:
-    rows = _rows(cursor)
-    return _one_clock(rows)
-
-
-def _one_clock(rows: tuple[tuple[object, ...], ...]) -> datetime:
-    if len(rows) != 1 or len(rows[0]) != 1:
-        raise ElectionError("cross report was not stored")
-    return _clock(rows[0][0])
-
-
-def _rows(cursor: SqlCursor) -> tuple[tuple[object, ...], ...]:
-    return tuple(tuple(row) for row in cursor.fetchall())
 
 
 def _text(value: object) -> str:
     if not isinstance(value, str):
-        raise ElectionError("cross report row is incomplete")
+        raise ElectionError(_BROKEN)
     return value
 
 
 def _count(value: object) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
-        raise ElectionError("cross report row is incomplete")
+        raise ElectionError(_BROKEN)
     return value
-
-
-def _clock(value: object) -> datetime:
-    if not isinstance(value, datetime):
-        raise ElectionError("cross report row is incomplete")
-    return value
-
-
-def _execute_script(cursor: SqlCursor, script: str) -> None:
-    for statement in _statements(script):
-        cursor.execute(statement)
-
-
-def _statements(script: str) -> Iterator[str]:
-    for chunk in script.split(";"):
-        statement = chunk.strip()
-        if statement:
-            yield statement

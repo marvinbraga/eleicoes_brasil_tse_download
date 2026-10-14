@@ -1,4 +1,4 @@
-"""FastAPI factory. The pool opens in the lifespan and closes on shutdown."""
+"""FastAPI factory. The pool and the async ORM engine open in the lifespan."""
 
 import os
 from collections.abc import AsyncIterator, Callable, Mapping
@@ -23,27 +23,27 @@ from eleicoes.adapters.http.errors import (
 )
 from eleicoes.adapters.http.relatorios import router as relatorios_router
 from eleicoes.adapters.http.votos import router as votos_router
+from eleicoes.adapters.orm.sessions import AsyncSessionMaker, database_endpoint, sqlalchemy_url
 from eleicoes.composition.correspondencia import _host_settings
-from eleicoes.domain.errors import DatabaseConfigError, ElectionError
+from eleicoes.domain.errors import ElectionError
 from eleicoes.ports.async_sql import AsyncPool
 
-_KEYS = (
-    "POSTGRES_HOST",
-    "POSTGRES_PORT",
-    "POSTGRES_USER",
-    "POSTGRES_PASSWORD",
-    "POSTGRES_DB",
-)
 PoolFactory = Callable[[], AsyncPool]
+SessionMakerFactory = Callable[[], AsyncSessionMaker]
 
 
 def create_app(
     ports: ReadPorts | None = None,
     pool_factory: PoolFactory | None = None,
+    session_maker_factory: SessionMakerFactory | None = None,
 ) -> FastAPI:
     application = FastAPI(title="Eleições Brasil", lifespan=_lifespan)
     application.state.ports = ports
     application.state.pool_factory = pool_factory or _pool_from_environment
+    application.state.session_maker_factory = _session_factory(
+        pool_factory,
+        session_maker_factory,
+    )
     application.include_router(votos_router)
     application.include_router(relatorios_router)
     application.add_api_route("/health", health, methods=["GET"], summary="Saúde da API")
@@ -59,10 +59,13 @@ async def _lifespan(application: FastAPI) -> AsyncIterator[None]:
     pool = cast(PoolFactory, application.state.pool_factory)()
     await pool.open(wait=True)
     application.state.pool = pool
+    maker = _open_sessions(application)
     try:
         yield
     finally:
         await pool.close()
+        if maker is not None:
+            await maker.dispose()
 
 
 def build_pool(env: Mapping[str, str]) -> AsyncPool:
@@ -73,25 +76,49 @@ def build_pool(env: Mapping[str, str]) -> AsyncPool:
 
 
 def postgres_conninfo(env: Mapping[str, str]) -> str:
-    missing = tuple(key for key in _KEYS if _blank(env.get(key)))
-    if missing:
-        raise DatabaseConfigError(missing)
-    try:
-        port = int(env["POSTGRES_PORT"])
-    except ValueError as exc:
-        raise DatabaseConfigError(("POSTGRES_PORT",)) from exc
+    endpoint = database_endpoint(env)
     return make_conninfo(
-        host=env["POSTGRES_HOST"],
-        port=port,
-        user=env["POSTGRES_USER"],
-        password=env["POSTGRES_PASSWORD"],
-        dbname=env["POSTGRES_DB"],
+        host=endpoint.host,
+        port=endpoint.port,
+        user=endpoint.user,
+        password=endpoint.password,
+        dbname=endpoint.name,
     )
+
+
+def build_async_sessions(env: Mapping[str, str]) -> AsyncSessionMaker:
+    return AsyncSessionMaker(sqlalchemy_url(_host_settings(env)))
 
 
 def _pool_from_environment() -> AsyncPool:
     load_dotenv()
     return build_pool(os.environ)
+
+
+def _sessions_from_environment() -> AsyncSessionMaker:
+    load_dotenv()
+    return build_async_sessions(os.environ)
+
+
+def _session_factory(
+    pool_factory: PoolFactory | None,
+    session_maker_factory: SessionMakerFactory | None,
+) -> SessionMakerFactory | None:
+    if session_maker_factory is not None:
+        return session_maker_factory
+    if pool_factory is None:
+        return _sessions_from_environment
+    return None
+
+
+def _open_sessions(application: FastAPI) -> AsyncSessionMaker | None:
+    factory = application.state.session_maker_factory
+    if factory is None:
+        application.state.session_maker = None
+        return None
+    maker = cast(SessionMakerFactory, factory)()
+    application.state.session_maker = maker
+    return maker
 
 
 def _handlers(application: FastAPI) -> None:
@@ -105,10 +132,6 @@ def _handlers(application: FastAPI) -> None:
         cast(ExceptionHandler, http_exception),
     )
     application.add_exception_handler(Exception, cast(ExceptionHandler, unexpected))
-
-
-def _blank(value: str | None) -> bool:
-    return value is None or value.strip() == ""
 
 
 app = create_app()

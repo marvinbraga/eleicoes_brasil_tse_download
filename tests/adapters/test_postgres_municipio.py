@@ -1,111 +1,100 @@
-"""Municipality names against a fake cursor. No database."""
-
-from collections.abc import Sequence
+"""Municipality names through the ORM. No database socket."""
 
 import pytest
+from sqlalchemy.dialects import postgresql
+from tests.adapters.orm_fakes import ScriptedSession, memory_sessions
 
-from eleicoes.adapters.postgres_municipio import PostgresMunicipalityNames
+from eleicoes.adapters.orm.models import Base, CorrespondenceSection
+from eleicoes.adapters.postgres_municipio import PostgresMunicipalityNames, name_query
 from eleicoes.domain.errors import InvalidBoletimConsultaError
 
 
-def test_padded_codes_become_ints_and_blank_names_are_skipped() -> None:
-    connection = _Connection(
-        [
-            ("01007", " Xapuri "),
-            ("01007", "Xapuri"),
-            ("00100", " "),
-            ("00100", ""),
-            ("01392", "Rio Branco"),
-            (1120, "Brasiléia"),
-        ]
-    )
-    reader = PostgresMunicipalityNames(lambda: connection)
-    assert reader.names("ac") == {1007: "Xapuri", 1392: "Rio Branco", 1120: "Brasiléia"}
-    sql, params = connection.statements[0]
-    assert sql == "SELECT cd_municipio, nm_municipio FROM raw.csec WHERE sg_uf = %s"
-    assert params == ("AC",)
+def test_name_query_binds_the_uf_code() -> None:
+    compiled = name_query("AC").compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    assert "cd_municipio" in sql
+    assert "nm_municipio" in sql
+    assert "csec" in sql
     assert "AC" not in sql
+    assert "AC" in compiled.params.values()
+
+
+def test_padded_codes_become_ints_and_blank_names_are_skipped() -> None:
+    session = ScriptedSession()
+    session.push(
+        ("01007", " Xapuri "),
+        ("01007", "Xapuri"),
+        ("00100", " "),
+        ("00100", ""),
+        ("01392", "Rio Branco"),
+        (1120, "Brasiléia"),
+    )
+    reader = PostgresMunicipalityNames(lambda: session)
+    assert reader.names("ac") == {1007: "Xapuri", 1392: "Rio Branco", 1120: "Brasiléia"}
+
+
+def test_sqlite_filters_by_the_uf_code() -> None:
+    sessions = memory_sessions()
+    writer = sessions()
+    Base.metadata.create_all(writer.get_bind())
+    writer.add(_section("a", "AC", "01007", " Xapuri "))
+    writer.add(_section("b", "SE", "03105", "Aracaju"))
+    writer.commit()
+    writer.close()
+    reader = PostgresMunicipalityNames(sessions)
+    assert reader.names("ac") == {1007: "Xapuri"}
+    reader.close()
 
 
 def test_two_names_for_one_code_are_rejected() -> None:
-    rows = [("01007", "Xapuri"), ("01007", "Outro")]
-    reader = PostgresMunicipalityNames(lambda: _Connection(rows))
+    session = ScriptedSession()
+    session.push(("01007", "Xapuri"), ("01007", "Outro"))
+    reader = PostgresMunicipalityNames(lambda: session)
     with pytest.raises(InvalidBoletimConsultaError):
         reader.names("AC")
 
 
 def test_bad_rows_are_rejected() -> None:
-    reader = PostgresMunicipalityNames(lambda: _Connection([("01007",)]))
-    with pytest.raises(InvalidBoletimConsultaError):
-        reader.names("AC")
-    reader = PostgresMunicipalityNames(lambda: _Connection([("abc", "Xapuri")]))
-    with pytest.raises(InvalidBoletimConsultaError):
-        reader.names("AC")
-    reader = PostgresMunicipalityNames(lambda: _Connection([(True, "Xapuri")]))
-    with pytest.raises(InvalidBoletimConsultaError):
-        reader.names("AC")
-    reader = PostgresMunicipalityNames(lambda: _Connection([("01007", None)]))
-    with pytest.raises(InvalidBoletimConsultaError):
-        reader.names("AC")
+    samples = (
+        (("01007",),),
+        (("abc", "Xapuri"),),
+        ((True, "Xapuri"),),
+        (("01007", None),),
+    )
+    for rows in samples:
+        session = ScriptedSession()
+        session.push(*rows)
+        reader = PostgresMunicipalityNames(lambda bound=session: bound)
+        with pytest.raises(InvalidBoletimConsultaError):
+            reader.names("AC")
 
 
 def test_connection_is_reused_and_closed_once() -> None:
-    connection = _Connection([])
+    session = ScriptedSession()
+    session.fixed = []
     calls = {"opened": 0}
 
-    def connect() -> _Connection:
+    def connect() -> ScriptedSession:
         calls["opened"] += 1
-        return connection
+        return session
 
     reader = PostgresMunicipalityNames(connect)
     reader.close()
-    reader.names("AC")
-    reader.names("AC")
+    assert reader.names("AC") == {}
+    assert reader.names("AC") == {}
     reader.close()
     reader.close()
     assert calls["opened"] == 1
-    assert connection.closed == 1
+    assert session.closed == 1
+    assert session.begins == 2
 
 
-class _Cursor:
-    def __init__(
-        self,
-        rows: list[tuple[object, ...]],
-        statements: list[tuple[str, tuple[object, ...]]],
-    ) -> None:
-        self._rows = rows
-        self._statements = statements
-
-    def execute(self, query: str, params: Sequence[object] | None = None) -> None:
-        self._statements.append((query, tuple(params or ())))
-
-    def fetchall(self) -> list[tuple[object, ...]]:
-        return list(self._rows)
-
-    def __enter__(self) -> "_Cursor":
-        return self
-
-    def __exit__(self, *args: object) -> None:
-        return None
-
-
-class _Connection:
-    def __init__(self, rows: list[tuple[object, ...]]) -> None:
-        self.statements: list[tuple[str, tuple[object, ...]]] = []
-        self._rows = rows
-        self.closed = 0
-
-    def cursor(self) -> _Cursor:
-        return _Cursor(self._rows, self.statements)
-
-    def transaction(self) -> "_Connection":
-        return self
-
-    def close(self) -> None:
-        self.closed += 1
-
-    def __enter__(self) -> "_Connection":
-        return self
-
-    def __exit__(self, *args: object) -> None:
-        return None
+def _section(member: str, uf: str, code: str, name: str) -> CorrespondenceSection:
+    return CorrespondenceSection(
+        arquivo="csec.csv",
+        membro=member,
+        geracao="2026-10-08",
+        sg_uf=uf,
+        cd_municipio=code,
+        nm_municipio=name,
+    )

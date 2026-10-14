@@ -12,18 +12,11 @@ from eleicoes.adapters.http.dependencies import (
     get_power_store,
 )
 from eleicoes.adapters.http.schemas_relatorios import CrossReportJson, GradeJson
-from eleicoes.domain.presidente_governador import view_from_places
 from eleicoes.ports.boletim_consulta import AsyncBoletimReader
 from eleicoes.ports.grade import AsyncMunicipalityNames
 from eleicoes.ports.relatorio_poder import AsyncRelatorioPoderStore
 from eleicoes.ports.relatorio_presidente_governador import AsyncRelatorioPresidenteGovernadorStore
-from eleicoes.use_cases.grade_async import build_party_share_grid
-from eleicoes.use_cases.presidente_governador_async import collect_places
-from eleicoes.use_cases.render_reports import (
-    RenderPowerReport,
-    RenderPresidentGovernorReport,
-    _cross_scope,
-)
+from eleicoes.use_cases.render_reports import RenderPowerReport, RenderPresidentGovernorReport
 
 router = APIRouter(tags=["Relatórios"])
 Reader = Annotated[AsyncBoletimReader, Depends(get_boletim_reader)]
@@ -33,11 +26,16 @@ CrossStore = Annotated[AsyncRelatorioPresidenteGovernadorStore, Depends(get_cros
 _GRADE = (
     "Exige ano, turno, uf e cargo. nivel admite municipio, uf, regiao ou pais. "
     "A UF ancora o relatório, como na linha de comando, e não recorta um único estado "
-    "quando o nível percorre as UF apuradas."
+    "quando o nível percorre as UF apuradas. "
+    "Se o relatório estiver gravado, devolve essas células; senão, lê os boletins."
 )
-_CROSS = (
+_CROSS_SCOPE = (
     "Exige ano, turno e uf. A UF valida o recorte, como no apresentador; "
     "o cruzamento reúne os municípios apurados."
+)
+_CROSS = (
+    f"{_CROSS_SCOPE} Sem atualizar, devolve o relatório gravado; "
+    "com atualizar=true, relê os boletins."
 )
 _HTML = (
     "Sem atualizar, devolve o HTML gravado; com atualizar=true, relê os boletins. "
@@ -54,9 +52,10 @@ async def grade(
     cargo: str,
     reader: Reader,
     names: Names,
+    store: PowerStore,
     nivel: str = "municipio",
 ) -> GradeJson:
-    built = await build_party_share_grid(reader, names, ano, turno, uf, cargo, nivel=nivel)
+    built = await RenderPowerReport(reader, names, store).grade(ano, turno, uf, cargo, nivel)
     return GradeJson.from_domain(built)
 
 
@@ -71,10 +70,16 @@ async def presidente_governador(
     uf: str,
     reader: Reader,
     names: Names,
+    store: CrossStore,
+    atualizar: bool = False,
 ) -> CrossReportJson:
-    year, turn = _cross_scope(ano, turno, uf)
-    places = await collect_places(reader, names, year, turn)
-    return CrossReportJson.from_domain(view_from_places(year, turn, places))
+    report = await RenderPresidentGovernorReport(reader, names, store).view(
+        ano,
+        turno,
+        uf,
+        atualizar=atualizar,
+    )
+    return CrossReportJson.from_domain(report)
 
 
 @router.get(
@@ -107,7 +112,7 @@ async def poder_html(
 @router.get(
     "/relatorios/presidente-governador",
     summary="Relatório presidente e governador em HTML",
-    description=f"{_CROSS} {_HTML}",
+    description=f"{_CROSS_SCOPE} {_HTML}",
     response_class=HTMLResponse,
     responses=_HTML_OK,  # type: ignore[arg-type]  # FastAPI types this map with Any
 )

@@ -75,17 +75,6 @@ main.container-fluid {
   background: linear-gradient(90deg, #ffffff, rgb(13,111,110));
   box-shadow: inset 0 0 0 1px rgba(13, 111, 110, 0.35);
 }
-.temas {
-  display: inline-flex; flex: 0 0 auto; border: 1px solid var(--linha);
-}
-.temas button {
-  font: inherit; cursor: pointer; color: var(--mudo);
-  background: transparent; border: 0; min-height: 2.4rem; padding: 0.35rem 0.9rem;
-}
-html[data-bs-theme="dark"] .temas [data-tema="dark"],
-html[data-bs-theme="light"] .temas [data-tema="light"] {
-  background: var(--marca); color: #ffffff;
-}
 .indice {
   display: flex; flex-wrap: wrap; gap: 0.45rem 1.15rem; margin: 0 0 1.6rem;
 }
@@ -166,7 +155,7 @@ body.apontando { user-select: none; }
   table.grade td.lugar { transition: none; }
 }
 @media print {
-  .temas, .indice, .pular, .atalhos, #laserCanvas, #markerCanvas { display: none; }
+  .indice, .pular, .atalhos, #laserCanvas, #markerCanvas { display: none; }
   body { background: #ffffff; color: #141414; }
   .grade-scroll { max-height: none; overflow: visible; }
   table.grade td.lugar, table.grade th.lugar { position: static; }
@@ -176,13 +165,10 @@ body.apontando { user-select: none; }
 _THEME_BOOT: Final = """
 <script>
 (function () {
-  try {
-    var saved = localStorage.getItem("poder-tema");
-    if (saved === "light" || saved === "dark") {
-      document.documentElement.setAttribute("data-bs-theme", saved);
-    }
-  } catch (error) {
-    return;
+  var params = new URLSearchParams(location.search);
+  var tema = params.get("tema");
+  if (tema === "light" || tema === "dark") {
+    document.documentElement.setAttribute("data-bs-theme", tema);
   }
 })();
 </script>
@@ -202,7 +188,6 @@ _SCRIPT: Final = """
     });
   });
   mountIndex();
-  mountTheme();
 
   function reorder(table, header, index) {
     var ascending = header.getAttribute("aria-sort") !== "ascending";
@@ -242,26 +227,6 @@ _SCRIPT: Final = """
       link.href = "#" + section.id;
       nav.appendChild(link);
     });
-  }
-
-  function mountTheme() {
-    var root = document.documentElement;
-    var buttons = document.querySelectorAll(".temas button");
-    function apply(theme) {
-      root.setAttribute("data-bs-theme", theme);
-      buttons.forEach(function (button) {
-        var on = button.getAttribute("data-tema") === theme;
-        button.setAttribute("aria-pressed", on ? "true" : "false");
-      });
-      try { localStorage.setItem("poder-tema", theme); }
-      catch (error) { return; }
-    }
-    buttons.forEach(function (button) {
-      button.addEventListener("click", function () {
-        apply(button.getAttribute("data-tema") || "dark");
-      });
-    });
-    apply(root.getAttribute("data-bs-theme") || "dark");
   }
 })();
 </script>
@@ -658,10 +623,6 @@ def _prefix() -> str:
         '<p class="atalhos"><kbd>K</kbd> laser <kbd>M</kbd> marca-texto '
         "<kbd>Esc</kbd> solta o laser "
         '<span id="ferramenta" aria-live="polite"></span></p>\n'
-        "</div>\n"
-        '<div class="temas" role="group" aria-label="Tema">\n'
-        '<button type="button" data-tema="light" aria-pressed="false">Claro</button>\n'
-        '<button type="button" data-tema="dark" aria-pressed="true">Escuro</button>\n'
         "</div>\n</header>\n"
         '<nav class="indice" aria-label="Recortes"></nav>\n'
     )

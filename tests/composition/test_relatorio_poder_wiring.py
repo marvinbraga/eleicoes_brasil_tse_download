@@ -1,6 +1,6 @@
 """The power-report store is wired with the same Postgres settings as the boletim reader."""
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 
 import pytest
 
@@ -12,11 +12,11 @@ def test_builder_binds_the_given_settings_without_a_socket(
 ) -> None:
     seen: list[dict[str, str]] = []
 
-    def connect(settings: Mapping[str, str]) -> _Connection:
+    def connect(settings: Mapping[str, str]) -> _Session:
         seen.append(dict(settings))
-        return _Connection()
+        return _Session()
 
-    monkeypatch.setattr("eleicoes.composition.grade.connect_postgres", connect)
+    monkeypatch.setattr("eleicoes.composition.grade.open_sync_session", connect)
     env = {
         "POSTGRES_HOST": "127.0.0.1",
         "POSTGRES_PORT": "25432",
@@ -37,11 +37,11 @@ def test_builder_without_arguments_reads_the_process_environment(
 ) -> None:
     seen: list[dict[str, str]] = []
 
-    def connect(settings: Mapping[str, str]) -> _Connection:
+    def connect(settings: Mapping[str, str]) -> _Session:
         seen.append(dict(settings))
-        return _Connection()
+        return _Session()
 
-    monkeypatch.setattr("eleicoes.composition.grade.connect_postgres", connect)
+    monkeypatch.setattr("eleicoes.composition.grade.open_sync_session", connect)
     monkeypatch.setattr("eleicoes.composition.grade.load_dotenv", lambda: None)
     monkeypatch.setenv("POSTGRES_HOST", "127.0.0.1")
     monkeypatch.setenv("POSTGRES_PORT", "25432")
@@ -53,31 +53,31 @@ def test_builder_without_arguments_reads_the_process_environment(
     store.close()
 
 
-class _Cursor:
-    def execute(self, _query: str, _params: Sequence[object] | None = None) -> None:
-        return None
-
-    def __enter__(self) -> "_Cursor":
-        return self
-
-    def __exit__(self, *_args: object) -> None:
-        return None
+class _Dialect:
+    name = "postgresql"
 
 
-class _Connection:
+class _Bind:
+    dialect = _Dialect()
+
+
+class _Session:
     def __init__(self) -> None:
         self.closed = False
 
-    def cursor(self) -> _Cursor:
-        return _Cursor()
+    def get_bind(self) -> _Bind:
+        return _Bind()
 
-    def transaction(self) -> "_Connection":
+    def begin(self) -> "_Session":
         return self
+
+    def execute(self, _statement: object) -> None:
+        return None
 
     def close(self) -> None:
         self.closed = True
 
-    def __enter__(self) -> "_Connection":
+    def __enter__(self) -> "_Session":
         return self
 
     def __exit__(self, *_args: object) -> None:

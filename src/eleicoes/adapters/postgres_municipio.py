@@ -3,39 +3,52 @@
 from collections.abc import Mapping, Sequence
 from typing import Final
 
-from eleicoes.adapters.postgres_sink import ConnectionFactory, SqlConnection
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+from sqlalchemy.sql import Select
+
+from eleicoes.adapters.orm.models import CorrespondenceSection
+from eleicoes.adapters.orm.sessions import SyncSessionFactory
 from eleicoes.domain.errors import InvalidBoletimConsultaError
 from eleicoes.domain.values import Uf
 
 _WIDTH: Final = 2
-_NAMES: Final = "SELECT cd_municipio, nm_municipio FROM raw.csec WHERE sg_uf = %s"
 
 
 class PostgresMunicipalityNames:
-    def __init__(self, connect: ConnectionFactory) -> None:
-        self._connect = connect
-        self._connection: SqlConnection | None = None
+    def __init__(self, sessions: SyncSessionFactory) -> None:
+        self._sessions = sessions
+        self._session: Session | None = None
 
     def names(self, uf: str) -> Mapping[int, str]:
-        rows = self._rows(_NAMES, (Uf(uf).code,))
-        return _names(rows)
+        with self._open().begin():
+            return read_names(self._open(), uf)
 
     def close(self) -> None:
-        connection = self._connection
-        self._connection = None
-        if connection is not None:
-            connection.close()
+        session = self._session
+        self._session = None
+        if session is not None:
+            session.close()
 
-    def _rows(self, sql: str, params: Sequence[object]) -> tuple[tuple[object, ...], ...]:
-        connection = self._open()
-        with connection.transaction(), connection.cursor() as cursor:
-            cursor.execute(sql, params)
-            return tuple(tuple(row) for row in cursor.fetchall())
+    def _open(self) -> Session:
+        if self._session is None:
+            self._session = self._sessions()
+        return self._session
 
-    def _open(self) -> SqlConnection:
-        if self._connection is None:
-            self._connection = self._connect()
-        return self._connection
+
+def read_names(session: Session, uf: str) -> Mapping[int, str]:
+    fetched = session.execute(name_query(Uf(uf).code)).all()
+    return _names(tuple(_pair(row) for row in fetched))
+
+
+def name_query(uf: str) -> Select[str | None, str | None]:
+    return select(CorrespondenceSection.cd_municipio, CorrespondenceSection.nm_municipio).where(
+        CorrespondenceSection.sg_uf == uf
+    )
+
+
+def _pair(row: Sequence[object]) -> tuple[object, ...]:
+    return tuple(row)
 
 
 def _names(rows: tuple[tuple[object, ...], ...]) -> dict[int, str]:

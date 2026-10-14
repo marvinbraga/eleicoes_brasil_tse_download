@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 import httpx
 from fastapi import FastAPI
 
+from eleicoes.adapters.html_poder_lido import cells_from_power_html
 from eleicoes.adapters.http.bundle import ReadPorts
 from eleicoes.composition.api import create_app
 from eleicoes.domain.boletim_consulta import (
@@ -21,6 +22,7 @@ from eleicoes.domain.boletim_consulta import (
 )
 from eleicoes.domain.errors import ElectionError
 from eleicoes.domain.presidente_governador import CargoTally, MunicipalPlace, PartyTally
+from eleicoes.domain.stored_grade import StoredCell
 from eleicoes.ports.relatorio_poder import StoredReport
 from eleicoes.ports.relatorio_presidente_governador import StoredCrossReport
 
@@ -139,9 +141,9 @@ def test_cross_report_json_and_cached_html() -> None:
     data = _get(application, "/relatorios/dados/presidente-governador?ano=2026&turno=1&uf=SE")
     assert data.status_code == 200
     place = data.json()["municipalities"][0]["places"][0]
-    assert place["classe"] == "consolidacao"
-    assert place["margin"]
+    assert place["nome"] == "Rio Branco (AC)"
     assert place["presidente"]["leader"]["partido"] == 13
+    assert reader.calls == []
     page = _get(application, "/relatorios/presidente-governador?ano=2026&turno=1&uf=SE")
     assert page.status_code == 200
     assert "text/html" in page.headers["content-type"]
@@ -329,6 +331,31 @@ class _CrossStore:
         return datetime(2026, 10, 8, tzinfo=UTC)
 
 
+_POWER_HTML = """
+<section><h2>Por estado — 2026, turno 1, presidente</h2>
+<table><thead><tr>
+<th>Lugar</th><th>Votos válidos</th><th>22</th><th>13</th>
+</tr></thead><tbody><tr>
+<td class="lugar" data-ord="Sergipe">Sergipe <small>SE</small></td>
+<td class="validos" data-ord="10">10</td>
+<td class="fatia" title="nominais 4, legenda 1, votos 5, votos válidos 10, comparecimento 12">
+50,00%</td>
+<td class="fatia" title="nominais 3, legenda 0, votos 3, votos válidos 10, comparecimento 12">
+30,00%</td>
+</tr></tbody></table></section>
+<section><h2>Por município — 2026, turno 1, presidente</h2>
+<table><thead><tr><th>Lugar</th><th>Votos válidos</th><th>13</th></tr></thead>
+<tbody><tr>
+<td class="lugar" data-ord="SANTA ROSA DO PURUS (AC)">
+SANTA ROSA DO PURUS (AC) <small>1031</small></td>
+<td class="validos">2.742</td>
+<td class="fatia"
+title="nominais 1384, legenda 0, votos 1384, votos válidos 2742, comparecimento 2884">
+50,47%</td>
+</tr></tbody></table></section>
+"""
+
+
 def _cached_place() -> MunicipalPlace:
     president = CargoTally((PartyTally(13, 10, 0),), 1, 2)
     governor = CargoTally((PartyTally(22, 4, 1),), 0, 0)
@@ -378,7 +405,9 @@ def test_validation_messages_follow_the_domain_rules() -> None:
 def test_empty_power_returns_an_empty_grid_and_cross_view() -> None:
     reader = _Reader()
     reader.empty_power = True
-    application = create_app(ports=_ports(reader))
+    cross = _CrossStore()
+    cross.stored = None
+    application = create_app(ports=_ports(reader, cross=cross))
     for nivel in ("municipio", "uf", "regiao", "pais"):
         grade = _get(application, f"/relatorios/dados/grade?{_SCOPE}&nivel={nivel}")
         assert grade.status_code == 200
@@ -387,6 +416,38 @@ def test_empty_power_returns_an_empty_grid_and_cross_view() -> None:
     assert cross.status_code == 200
     assert cross.json()["municipalities"] == []
     assert cross.json()["country"] is None
+
+
+def test_grade_json_reads_stored_cells_without_the_reader() -> None:
+    reader = _Reader()
+    power = _PowerStore()
+    power.stored = StoredReport(
+        (StoredCell("uf", "SE", "Do cache", 20, 13, 5, 1),),
+        datetime(2026, 10, 4, tzinfo=UTC),
+    )
+    application = create_app(ports=_ports(reader, power=power))
+    grade = _get(application, f"/relatorios/dados/grade?{_SCOPE}&nivel=uf")
+    assert grade.status_code == 200
+    row = grade.json()["linhas"][0]
+    assert row["codigo"] == "SE"
+    assert row["nome"] == "Do cache"
+    assert row["celulas"][0]["partido"] == 13
+    assert row["celulas"][0]["votos"] == 6
+    assert reader.calls == []
+    assert power.saves == []
+
+
+def test_power_html_cells_keep_nominal_and_legend_votes() -> None:
+    cells = cells_from_power_html(_POWER_HTML)
+    assert [(cell.nivel, cell.codigo, cell.partido, cell.votos_nominais) for cell in cells] == [
+        ("uf", "SE", 22, 4),
+        ("uf", "SE", 13, 3),
+        ("municipio", "1031", 13, 1384),
+    ]
+    city = cells[2]
+    assert city.nome == "SANTA ROSA DO PURUS (AC)"
+    assert city.votos_legenda == 0
+    assert city.comparecimento == 2884
 
 
 def test_missing_cached_html_is_computed_and_stored() -> None:
@@ -398,6 +459,21 @@ def test_missing_cached_html_is_computed_and_stored() -> None:
     assert page.status_code == 200
     assert "Aracaju" in page.text
     assert power.saves
+
+
+def test_missing_cross_json_is_computed_and_stored() -> None:
+    reader = _Reader()
+    cross = _CrossStore()
+    cross.stored = None
+    application = create_app(ports=_ports(reader, cross=cross))
+    data = _get(application, "/relatorios/dados/presidente-governador?ano=2026&turno=1&uf=SE")
+    assert data.status_code == 200
+    place = data.json()["municipalities"][0]["places"][0]
+    assert place["classe"] == "consolidacao"
+    assert place["margin"]
+    assert place["nome"] == "Aracaju (SE)"
+    assert place["presidente"]["leader"]["partido"] == 13
+    assert cross.saves
 
 
 def test_missing_cross_html_is_computed_and_stored() -> None:

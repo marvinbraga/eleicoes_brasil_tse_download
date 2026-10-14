@@ -13,6 +13,7 @@ dependencies = [
     "asn1tools>=0.169.0",
     "fastapi>=0.115,<1",
     "uvicorn>=0.34,<1",
+    "sqlalchemy[asyncio]>=2,<3",
 ]
 
 [project.scripts]

@@ -1,11 +1,13 @@
-"""One pooled connection per request. Injected ports skip Postgres entirely."""
+"""One pooled connection for boletim and one async ORM session for the report stores."""
 
 from collections.abc import AsyncIterator
 from typing import Annotated, cast
 
 from fastapi import Depends, Request
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from eleicoes.adapters.http.bundle import ReadPorts
+from eleicoes.adapters.orm.sessions import AsyncSessionMaker
 from eleicoes.adapters.postgres_boletim_consulta_async import AsyncPostgresBoletimReader
 from eleicoes.adapters.postgres_municipio_async import AsyncPostgresMunicipalityNames
 from eleicoes.adapters.postgres_relatorio_poder_async import AsyncPostgresPowerReportStore
@@ -31,6 +33,20 @@ async def get_connection(request: Request) -> AsyncIterator[AsyncSqlConnection |
 Connection = Annotated[AsyncSqlConnection | None, Depends(get_connection)]
 
 
+async def get_session(request: Request) -> AsyncIterator[AsyncSession | None]:
+    if _installed(request) is not None:
+        yield None
+        return
+    session = _require_sessions(request)()
+    try:
+        yield session
+    finally:
+        await session.close()
+
+
+SessionDep = Annotated[AsyncSession | None, Depends(get_session)]
+
+
 async def get_boletim_reader(request: Request, connection: Connection) -> AsyncBoletimReader:
     installed = _installed(request)
     if installed is not None:
@@ -40,29 +56,29 @@ async def get_boletim_reader(request: Request, connection: Connection) -> AsyncB
 
 async def get_municipality_names(
     request: Request,
-    connection: Connection,
+    session: SessionDep,
 ) -> AsyncMunicipalityNames:
     installed = _installed(request)
     if installed is not None:
         return installed.names
-    return AsyncPostgresMunicipalityNames(cast(AsyncSqlConnection, connection))
+    return AsyncPostgresMunicipalityNames(_required_session(session))
 
 
-async def get_power_store(request: Request, connection: Connection) -> AsyncRelatorioPoderStore:
+async def get_power_store(request: Request, session: SessionDep) -> AsyncRelatorioPoderStore:
     installed = _installed(request)
     if installed is not None:
         return installed.power_store
-    return AsyncPostgresPowerReportStore(cast(AsyncSqlConnection, connection))
+    return AsyncPostgresPowerReportStore(_required_session(session))
 
 
 async def get_cross_store(
     request: Request,
-    connection: Connection,
+    session: SessionDep,
 ) -> AsyncRelatorioPresidenteGovernadorStore:
     installed = _installed(request)
     if installed is not None:
         return installed.cross_store
-    return AsyncPostgresPresidentGovernorStore(cast(AsyncSqlConnection, connection))
+    return AsyncPostgresPresidentGovernorStore(_required_session(session))
 
 
 def _installed(request: Request) -> ReadPorts | None:
@@ -77,3 +93,16 @@ def _require_pool(request: Request) -> AsyncPool:
     if found is None:
         raise ElectionError("database pool is not configured")
     return cast(AsyncPool, found)
+
+
+def _require_sessions(request: Request) -> AsyncSessionMaker:
+    found = getattr(request.app.state, "session_maker", None)
+    if not isinstance(found, AsyncSessionMaker):
+        raise ElectionError("database session is not configured")
+    return found
+
+
+def _required_session(session: AsyncSession | None) -> AsyncSession:
+    if session is None:
+        raise ElectionError("database session is not configured")
+    return session

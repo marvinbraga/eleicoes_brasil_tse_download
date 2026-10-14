@@ -61,7 +61,8 @@ def _ufs() -> str:
 def _paises() -> str:
     brazil: dict[str, object] = {"type": "Polygon", "id": "076"}
     other: dict[str, object] = {"type": "Polygon", "id": "242"}
-    return _topology("countries", (brazil, other))
+    without_id: dict[str, object] = {"type": "Polygon", "properties": {"name": "Kosovo"}}
+    return _topology("countries", (brazil, other, without_id))
 
 
 def _topology(object_name: str, geometries: tuple[dict[str, object], ...]) -> str:

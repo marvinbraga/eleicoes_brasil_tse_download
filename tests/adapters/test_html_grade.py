@@ -8,6 +8,11 @@ from eleicoes.domain.grade import GradeDePoder, LugarVotos
 from eleicoes.use_cases.grade import BuildPartyShareGrid
 
 
+def _boot_script(page: str) -> str:
+    start = page.index("<script>")
+    return page[start : page.index("</script>", start)]
+
+
 def test_share_uses_two_decimals_over_valid_votes_and_escapes_names() -> None:
     place = LugarVotos(
         "1392",
@@ -118,14 +123,16 @@ def test_zero_turnout_stays_white() -> None:
     assert '<td class="validos" data-ord="0">0</td>' in page
 
 
-def test_page_defaults_to_dark_and_offers_a_light_theme() -> None:
+def test_page_defaults_to_dark_and_reads_tema_from_the_url() -> None:
     page = html_da_grade(_grade("pais", (LugarVotos("BR", "Brasil", (_party(None, 13, 1, 2),)),)))
     assert '<html lang="pt-BR" data-bs-theme="dark">' in page
-    assert 'aria-label="Tema"' in page
-    assert 'data-tema="light"' in page
-    assert 'data-tema="dark"' in page
-    assert ">Claro</button>" in page
-    assert ">Escuro</button>" in page
+    assert ">Claro</button>" not in page
+    assert ">Escuro</button>" not in page
+    boot = _boot_script(page)
+    assert "tema" in boot
+    assert "data-bs-theme" in boot
+    assert "poder-tema" not in page
+    assert "mountTheme" not in page
     assert "A célula mais intensa é a maior fatia deste recorte." in page
     assert "position: sticky" in page
     assert "left: 0" in page

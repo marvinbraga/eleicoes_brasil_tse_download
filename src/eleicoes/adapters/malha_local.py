@@ -113,7 +113,11 @@ def codigos_no_objeto(
     objeto: str,
     campo: str,
 ) -> frozenset[str]:
-    codes = {_geometry_code(item, objeto, campo) for item in _geometries(topology, objeto)}
+    codes: set[str] = set()
+    for item in _geometries(topology, objeto):
+        code = _geometry_code(item, objeto, campo)
+        if code is not None:
+            codes.add(code)
     return frozenset(codes)
 
 
@@ -127,10 +131,13 @@ def _geometries(topology: Mapping[str, object], objeto: str) -> tuple[object, ..
     return tuple(cast(object, item) for item in raw)
 
 
-def _geometry_code(item: object, objeto: str, campo: str) -> str:
+def _geometry_code(item: object, objeto: str, campo: str) -> str | None:
     geometry = _as_map(item, objeto)
     if campo == "id":
-        return _as_text(geometry.get("id"), objeto)
+        value = geometry.get("id")
+        if value is None:
+            return None
+        return _as_text(value, objeto)
     if campo == "codarea":
         properties = _as_map(geometry.get("properties"), objeto)
         return _as_text(properties.get("codarea"), objeto)

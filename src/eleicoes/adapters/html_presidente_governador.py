@@ -92,10 +92,6 @@ def _prefix(view: CrossReportView) -> str:
         '<main id="conteudo" class="container-fluid py-4">\n'
         '<header class="masthead">\n<div>\n'
         f'<h1 class="h3 mb-4">{escape(title)}</h1>\n'
-        "</div>\n"
-        '<div class="temas" role="group" aria-label="Tema">\n'
-        '<button type="button" data-tema="light" aria-pressed="false">Claro</button>\n'
-        '<button type="button" data-tema="dark" aria-pressed="true">Escuro</button>\n'
         "</div>\n</header>\n"
         '<nav class="indice" aria-label="Recortes"></nav>\n'
     )

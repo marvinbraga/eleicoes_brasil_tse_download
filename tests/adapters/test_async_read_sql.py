@@ -1,11 +1,14 @@
-"""Async adapters against a scripted cursor. No database socket."""
+"""Async adapters against a scripted cursor or SQLite. No database socket."""
 
 import asyncio
-from datetime import UTC, datetime
+from datetime import datetime
+from types import SimpleNamespace
 
 import psycopg
 import pytest
+from tests.adapters.orm_fakes import ScriptedSession, SyncSessionBridge, memory_sessions
 
+from eleicoes.adapters.orm.models import Base, CorrespondenceSection
 from eleicoes.adapters.postgres_boletim_consulta import _PARTY_POWER, _TOTALS
 from eleicoes.adapters.postgres_boletim_consulta_async import AsyncPostgresBoletimReader
 from eleicoes.adapters.postgres_municipio_async import AsyncPostgresMunicipalityNames
@@ -16,8 +19,8 @@ from eleicoes.adapters.postgres_relatorio_presidente_governador_async import (
 from eleicoes.domain.errors import ElectionError, InvalidNivelError
 from eleicoes.domain.presidente_governador import CargoTally, MunicipalPlace, PartyTally
 from eleicoes.domain.stored_grade import StoredCell
-
-_MOMENT = datetime(2026, 10, 8, 14, 30, tzinfo=UTC)
+from eleicoes.ports.relatorio_poder import StoredReport
+from eleicoes.ports.relatorio_presidente_governador import StoredCrossReport
 
 
 class _Script:
@@ -147,68 +150,102 @@ def test_driver_errors_become_election_errors() -> None:
 
 
 def test_municipality_names_use_the_uf_code() -> None:
-    script = _Script()
-    script.push((1120, "Aracaju"))
-    names = AsyncPostgresMunicipalityNames(_Connection(script))
-    found = asyncio.run(names.names("se"))
-    assert found == {1120: "Aracaju"}
-    assert script.queries[0][1] == ("SE",)
+    sessions = memory_sessions()
+    writer = sessions()
+    Base.metadata.create_all(writer.get_bind())
+    writer.add(
+        CorrespondenceSection(
+            arquivo="csec.csv",
+            membro="a",
+            geracao="2026-10-08",
+            sg_uf="SE",
+            cd_municipio="03105",
+            nm_municipio="Aracaju",
+        )
+    )
+    writer.commit()
+    writer.close()
+    names = AsyncPostgresMunicipalityNames(SyncSessionBridge(sessions()))
+    assert asyncio.run(names.names("se")) == {3105: "Aracaju"}
 
 
-def test_power_store_loads_and_replaces_cells() -> None:
-    script = _Script()
-    script.push(("uf", "SE", "Sergipe", 20, 13, 5, 1, _MOMENT))
-    store = AsyncPostgresPowerReportStore(_Connection(script))
-    loaded = asyncio.run(store.load(2026, 1, "presidente"))
-    assert loaded is not None
-    assert loaded.cells[0].codigo == "SE"
-    assert loaded.gerado_em == _MOMENT
-    cell = StoredCell("municipio", "1120", "Aracaju", 20, 13, 5, 1)
-    script.push((_MOMENT,))
-    script.push()
-    script.push()
-    moment = asyncio.run(store.save(2026, 1, "presidente", (cell,)))
-    assert moment == _MOMENT
+def test_municipality_names_keep_domain_errors_and_wrap_driver_errors() -> None:
+    broken = ScriptedSession()
+    broken.push(("abc", "Aracaju"))
+    names = AsyncPostgresMunicipalityNames(SyncSessionBridge(broken))
+    with pytest.raises(ElectionError) as domain:
+        asyncio.run(names.names("SE"))
+    assert domain.value.__cause__ is None
+    failed = ScriptedSession()
+    failed.fail = psycopg.Error("down")
+    names = AsyncPostgresMunicipalityNames(SyncSessionBridge(failed))
+    with pytest.raises(ElectionError) as driver:
+        asyncio.run(names.names("SE"))
+    assert isinstance(driver.value.__cause__, psycopg.Error)
+    assert str(driver.value) == "database read failed"
 
 
-def test_power_store_load_miss_and_broken_clock() -> None:
-    script = _Script()
-    script.push()
-    store = AsyncPostgresPowerReportStore(_Connection(script))
+def test_power_store_round_trip_and_driver_errors() -> None:
+    sessions = memory_sessions()
+    ready = sessions()
+    Base.metadata.create_all(ready.get_bind())
+    ready.close()
+    store = AsyncPostgresPowerReportStore(SyncSessionBridge(sessions()))
     assert asyncio.run(store.load(2026, 1, "presidente")) is None
-    script.push()
-    with pytest.raises(ElectionError):
-        asyncio.run(store.save(2026, 1, "presidente", ()))
+    cell = StoredCell("municipio", "1120", "Aracaju", 20, 13, 5, 1)
+    moment = asyncio.run(store.save(2026, 1, "presidente", (cell,)))
+    loaded = asyncio.run(store.load(2026, 1, "presidente"))
+    assert loaded == StoredReport((cell,), moment)
+    failed = ScriptedSession()
+    failed.fail = psycopg.Error("down")
+    broken = AsyncPostgresPowerReportStore(SyncSessionBridge(failed))
+    with pytest.raises(ElectionError) as caught:
+        asyncio.run(broken.load(2026, 1, "presidente"))
+    assert isinstance(caught.value.__cause__, psycopg.Error)
+
+
+def test_power_store_keeps_a_domain_clock_error() -> None:
+    session = ScriptedSession()
+    session.push(SimpleNamespace(gerado_em=datetime(2026, 10, 8, 14, 30)))
+    session.push()
+    store = AsyncPostgresPowerReportStore(SyncSessionBridge(session))
+    with pytest.raises(ElectionError) as caught:
+        asyncio.run(store.load(2026, 1, "presidente"))
+    assert caught.value.__cause__ is None
+    assert "power report store failed" not in str(caught.value)
 
 
 def test_cross_store_round_trip_with_and_without_governor() -> None:
-    script = _Script()
-    script.push()
-    store = AsyncPostgresPresidentGovernorStore(_Connection(script))
+    sessions = memory_sessions()
+    ready = sessions()
+    Base.metadata.create_all(ready.get_bind())
+    ready.close()
+    store = AsyncPostgresPresidentGovernorStore(SyncSessionBridge(sessions()))
     assert asyncio.run(store.load(2026, 1)) is None
-    script.push((_MOMENT,))
-    script.push(("SE", "1120", "Aracaju", "presidente", 13, 5, 1))
-    script.push(("SE", "1120", "presidente", 1, 0))
-    loaded = asyncio.run(store.load(2026, 1))
-    assert loaded is not None
-    assert loaded.places[0].nome == "Aracaju"
-    assert loaded.places[0].governador is None
     president = CargoTally((PartyTally(13, 5, 1),), 1, 0)
     governor = CargoTally((PartyTally(22, 4, 0),), 0, 1)
     place = MunicipalPlace("SE", "1120", "Aracaju", president, governor)
-    script.push((_MOMENT,))
-    for _query in range(6):
-        script.push()
     moment = asyncio.run(store.save(2026, 1, (place,)))
-    assert moment == _MOMENT
-    cargos = [
-        params[5]
-        for _sql, params in script.queries
-        if isinstance(params, tuple) and len(params) == 9
-    ]
-    assert cargos == ["presidente", "governador"]
+    loaded = asyncio.run(store.load(2026, 1))
+    assert loaded == StoredCrossReport((place,), moment)
     solo = MunicipalPlace("SE", "1120", "Aracaju", president, None)
-    script.push((_MOMENT,))
-    for _query in range(4):
-        script.push()
-    assert asyncio.run(store.save(2026, 1, (solo,))) == _MOMENT
+    replaced = asyncio.run(store.save(2026, 1, (solo,)))
+    assert asyncio.run(store.load(2026, 1)) == StoredCrossReport((solo,), replaced)
+    failed = ScriptedSession()
+    failed.fail = psycopg.Error("down")
+    broken = AsyncPostgresPresidentGovernorStore(SyncSessionBridge(failed))
+    with pytest.raises(ElectionError) as caught:
+        asyncio.run(broken.load(2026, 1))
+    assert isinstance(caught.value.__cause__, psycopg.Error)
+
+
+def test_cross_store_keeps_a_domain_clock_error() -> None:
+    session = ScriptedSession()
+    session.push(SimpleNamespace(gerado_em=datetime(2026, 10, 8, 14, 30)))
+    session.push()
+    session.push()
+    store = AsyncPostgresPresidentGovernorStore(SyncSessionBridge(session))
+    with pytest.raises(ElectionError) as caught:
+        asyncio.run(store.load(2026, 1))
+    assert caught.value.__cause__ is None
+    assert "cross report store failed" not in str(caught.value)

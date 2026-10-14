@@ -1,0 +1,45 @@
+{
+  "cycle_id": "c7e1a4d2-2026-10-05-tse-download",
+  "started_at": "2026-10-05T10:43:35-03:00",
+  "stack": "python-oop",
+  "current_task": "T-1",
+  "current_task_index": 0,
+  "current_subtask": "T-1.1",
+  "current_gate": 0,
+  "checklist": {
+    "python": "3.14.6 OK (>=3.11)",
+    "package_manager": "uv",
+    "uv_run": true,
+    "pyproject_quality_tools": "ruff, mypy strict, pytest cov-fail-under 85",
+    "project_rules": "absent",
+    "web_framework": "none"
+  },
+  "cached_standards": {
+    "python_oop": "/home/marvinbraga/.claude/jarvis/dev-team/docs/standards/python-oop.md",
+    "project_rules": null
+  },
+  "tasks": [
+    {
+      "id": "T-1",
+      "title": "Baixar qualquer eleição por ano",
+      "subtasks": [
+        {
+          "id": "T-1.1",
+          "title": "Catalogo, download e CLI para qualquer ano",
+          "gate_progress": {
+            "implementation": {
+              "tdd_red": {"status": "completed"},
+              "tdd_green": {"status": "completed"},
+              "delivery_verified": true,
+              "coverage_actual": 96.55,
+              "coverage_threshold": 85,
+              "local_runtime_verified": true
+            }
+          }
+        }
+      ],
+      "gate_progress": {}
+    }
+  ],
+  "gates_completed": {"T-1.1": [0]}
+}

@@ -286,7 +286,7 @@ def test_municipality_names_follow_the_published_port(monkeypatch: pytest.Monkey
         seen.update(env)
         return _Link()
 
-    monkeypatch.setattr("eleicoes.composition.grade.connect_postgres", connect)
+    monkeypatch.setattr("eleicoes.composition.grade.open_sync_session", connect)
     monkeypatch.setattr("eleicoes.composition.correspondencia._resolves", lambda _host: False)
     names = build_municipality_names(
         {
@@ -355,26 +355,17 @@ def _called(reader: _Reader, name: str) -> bool:
     return any(call[0] == name for call in reader.calls)
 
 
-class _Cursor:
-    def execute(self, _query: str, _params: object = None) -> None:
-        return None
-
-    def fetchall(self) -> list[tuple[object, ...]]:
+class _Rows:
+    def all(self) -> list[object]:
         return []
-
-    def __enter__(self) -> "_Cursor":
-        return self
-
-    def __exit__(self, *_args: object) -> None:
-        return None
 
 
 class _Link:
-    def cursor(self) -> _Cursor:
-        return _Cursor()
-
-    def transaction(self) -> "_Link":
+    def begin(self) -> "_Link":
         return self
+
+    def execute(self, _statement: object) -> _Rows:
+        return _Rows()
 
     def close(self) -> None:
         return None
