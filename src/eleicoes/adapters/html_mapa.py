@@ -72,6 +72,9 @@ _PAGE_SCRIPT: Final = """\
       properties.cor = item.cor;
       properties.peso = item.peso;
       properties.numero = item.numero;
+      if (item.nome) {
+        properties.nome = item.nome;
+      }
       properties.logo = pintura.logos[item.numero];
       properties.codigo = String(item.codigo);
     }
@@ -107,7 +110,7 @@ _PAGE_SCRIPT: Final = """\
       fill: new ol.style.Fill({color: tinta.fill}),
       stroke: new ol.style.Stroke({color: "#222222", width: 1}),
       text: new ol.style.Text({
-        text: rotulo(feature.get("peso")),
+        text: rotulo(feature.get("nome"), feature.get("numero"), feature.get("peso")),
         font: "12px sans-serif",
         overflow: true,
         fill: new ol.style.Fill({color: tinta.ink})
@@ -130,7 +133,7 @@ _PAGE_SCRIPT: Final = """\
     return {fill: "rgb(" + rgb.join(",") + ")", ink: luma > 0.62 ? "#111111" : "#f4f4f5"};
   }
 
-  function rotulo(peso) {
+  function rotulo(nome, numero, peso) {
     var partes = String(peso == null ? "" : peso).split("/");
     if (partes.length !== 2) {
       return "—";
@@ -140,6 +143,20 @@ _PAGE_SCRIPT: Final = """\
     if (!eInteiro(numerador) || !eInteiro(denominador) || denominador <= 0 || numerador < 0) {
       return "—";
     }
+    if (numerador === 0) {
+      return "0";
+    }
+    var linhas = [percentual(numerador, denominador), milhar(denominador)];
+    if (numero !== undefined && numero !== null && String(numero) !== "") {
+      linhas.unshift(String(numero));
+    }
+    if (nome !== undefined && nome !== null && String(nome) !== "") {
+      linhas.unshift(String(nome));
+    }
+    return linhas.join("\\n");
+  }
+
+  function percentual(numerador, denominador) {
     var produto = numerador * 10000;
     var quociente = Math.floor(produto / denominador);
     var resto = produto % denominador;
@@ -339,4 +356,5 @@ def _item(pintura: Pintura) -> dict[str, str]:
         "cor": pintura.cor,
         "numero": pintura.numero,
         "peso": pintura.peso,
+        "nome": pintura.nome,
     }

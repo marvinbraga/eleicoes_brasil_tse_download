@@ -121,12 +121,16 @@ def test_page_renders_the_leader_choropleth() -> None:
         "cor": "#112233",
         "numero": "22",
         "peso": "1/1",
+        "nome": "",
     }
     assert 'properties.peso = item.peso' in html
+    assert "properties.nome = item.nome" in html
     assert 'data-fundo="#ffffff"' in html
-    assert 'text: rotulo(feature.get("peso"))' in html
-    assert 'feature.get("numero")' not in html
-    assert "function rotulo(peso)" in html
+    assert 'text: rotulo(feature.get("nome"), feature.get("numero"), feature.get("peso"))' in html
+    assert "function rotulo(nome, numero, peso)" in html
+    assert "if (numerador === 0)" in html
+    assert "milhar(denominador)" in html
+    assert 'linhas.join("\\n")' in html
     assert "resto * 2 >= denominador" in html
     assert 'return milhar(inteiro) + "," + centesimos + "%"' in html
     assert "logo" not in pintura["pais"]

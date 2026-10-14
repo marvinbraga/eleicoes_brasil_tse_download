@@ -150,7 +150,7 @@ def test_governor_map_uses_the_governor_leader() -> None:
     )
     assert painted.municipios[0].numero == "13"
     assert painted.municipios[0].cor == "#AABBCC"
-    assert painted.municipios[0].peso == "1/1"
+    assert painted.municipios[0].peso == "10/10"
 
 
 def test_paint_weight_is_the_leader_share_of_valid_votes() -> None:
@@ -168,8 +168,29 @@ def test_paint_weight_is_the_leader_share_of_valid_votes() -> None:
     )
     assert painted.municipios[0].cor == "#112233"
     assert painted.municipios[0].peso == "3/4"
+    assert painted.municipios[0].nome == "Bujari"
     assert painted.pais is not None
     assert painted.pais.peso == "3/4"
+    assert painted.pais.nome == "Brasil"
+    assert painted.ufs[0].nome == "Acre"
+
+
+def test_paint_weight_keeps_the_valid_total() -> None:
+    ponte = _ponte()
+    president = CargoTally((PartyTally(22, 2, 0), PartyTally(13, 2, 0)), 0, 0)
+    governor = CargoTally((PartyTally(13, 4, 0),), 0, 0)
+    view = view_from_places(
+        2026,
+        1,
+        (MunicipalPlace("AC", "01007", "Bujari", president, governor),),
+    )
+    marcas = {22: Marca("#112233", "data:a"), 13: Marca("#AABBCC", "data:b")}
+    painted = recorte_pintado(
+        view, "presidente", ponte, marcas, frozenset({"1200138"}), frozenset({"12"}), "076"
+    )
+    assert painted.municipios[0].peso == "2/4"
+    assert painted.pais is not None
+    assert painted.pais.peso == "2/4"
 
 
 def test_missing_mark_names_every_leader() -> None:
