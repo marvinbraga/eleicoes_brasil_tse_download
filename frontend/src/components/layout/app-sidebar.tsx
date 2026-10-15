@@ -21,6 +21,8 @@ const ITENS = [
     rotulo: "Presidente e governador",
   },
   { href: "/relatorios/poder", rotulo: "Poder" },
+  { href: "/relatorios/perfis", rotulo: "Perfis" },
+  { href: "/relatorios/classe-governador", rotulo: "Classe do governador" },
   { href: "/mapa", rotulo: "Mapa" },
 ] as const;
 

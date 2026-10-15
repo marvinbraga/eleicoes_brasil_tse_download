@@ -151,6 +151,26 @@ def test_page_renders_the_leader_choropleth() -> None:
         assert required in html
 
 
+def test_municipal_label_follows_zoom_and_valid_votes() -> None:
+    html = html_do_mapa(_page())
+
+    assert "var ZOOM_MUNICIPIOS = 6;" in html
+    assert "var ZOOM_TODOS = 11;" in html
+    assert "var PISO_INICIAL = 800000;" in html
+    assert "function rotuloVisivel(feature, resolution)" in html
+    assert "function ehMunicipio(feature)" in html
+    assert "codigo.length >= 6" in html
+    assert "function minimoDeVotos(zoom)" in html
+    assert "function votosValidos(peso)" in html
+    assert "function maiorParte(feature)" in html
+    assert "!(zoom >= ZOOM_MUNICIPIOS) || zoom >= ZOOM_TODOS" in html
+    assert "vista.getZoomForResolution(resolution)" in html
+    assert "Math.floor(zoom) - ZOOM_MUNICIPIOS" in html
+    assert "piso = Math.floor(piso / 2);" in html
+    assert 'geometria.getType() !== "MultiPolygon"' in html
+    assert "view: vista" in html
+
+
 def test_hostile_hole_is_escaped() -> None:
     html = html_do_mapa(_page(holes=("<script>",)))
     assert "<li>&lt;script&gt;</li>" in html

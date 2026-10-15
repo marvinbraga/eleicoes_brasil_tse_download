@@ -1,7 +1,8 @@
 # Builder and runtime are both CPython 3.12.15 / Alpine 3.23 so the venv ABI matches.
 FROM ghcr.io/astral-sh/uv:0.12.23-python3.12-alpine3.23 AS builder
 
-RUN apk add --no-cache gcc musl-dev libpq-dev
+# scikit-learn 1.9 has no musllinux wheel, so Alpine compiles it.
+RUN apk add --no-cache gcc g++ gfortran musl-dev linux-headers libpq-dev openblas-dev pkgconf
 
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
@@ -19,7 +20,7 @@ RUN uv sync --frozen --no-dev --no-editable --no-cache
 
 FROM python:3.12.15-alpine3.23
 
-RUN apk add --no-cache libpq \
+RUN apk add --no-cache libpq libstdc++ libgomp openblas \
     && addgroup -S appgroup \
     && adduser -S appuser -G appgroup
 

@@ -6,17 +6,25 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from eleicoes.domain.errors import (
+    CargoSemCelulasError,
     DatabaseConfigError,
     ElectionError,
+    EmptyStoredCellsError,
+    FewClassesError,
+    FewMunicipalitiesError,
+    InconsistentCellError,
     InvalidBoletimConsultaError,
     InvalidCargoError,
     InvalidElectionYearError,
+    InvalidGroupSpanError,
     InvalidNivelError,
     InvalidNumeroError,
     InvalidOrdemError,
     InvalidStoredReportError,
     InvalidTurnoError,
     InvalidUfError,
+    StoredReadError,
+    UnusableGroupCountError,
 )
 
 _HTTP: tuple[tuple[type[ElectionError], int, str], ...] = (
@@ -31,6 +39,16 @@ _HTTP: tuple[tuple[type[ElectionError], int, str], ...] = (
     (InvalidStoredReportError, 422, "Relatório armazenado inválido."),
     (DatabaseConfigError, 500, "Configuração do banco ausente."),
 )
+_OWN_TEXT: tuple[tuple[type[ElectionError], int], ...] = (
+    (InvalidGroupSpanError, 422),
+    (UnusableGroupCountError, 422),
+    (FewMunicipalitiesError, 409),
+    (EmptyStoredCellsError, 409),
+    (FewClassesError, 409),
+    (CargoSemCelulasError, 409),
+    (InconsistentCellError, 409),
+    (StoredReadError, 500),
+)
 _GENERIC = "Não foi possível consultar os dados."
 
 
@@ -38,6 +56,9 @@ def http_error(exc: ElectionError) -> tuple[int, str]:
     for kind, status, message in _HTTP:
         if isinstance(exc, kind):
             return status, message
+    for kind, status in _OWN_TEXT:
+        if isinstance(exc, kind):
+            return status, str(exc)
     return 500, _GENERIC
 
 

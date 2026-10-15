@@ -16,17 +16,25 @@ from eleicoes.composition.api import create_app
 from eleicoes.domain.boletim_consulta import IndicioBoletim
 from eleicoes.domain.correspondencia.indicio import Gravidade
 from eleicoes.domain.errors import (
+    CargoSemCelulasError,
     DatabaseConfigError,
     ElectionError,
+    EmptyStoredCellsError,
+    FewClassesError,
+    FewMunicipalitiesError,
+    InconsistentCellError,
     InvalidBoletimConsultaError,
     InvalidCargoError,
     InvalidElectionYearError,
+    InvalidGroupSpanError,
     InvalidNivelError,
     InvalidNumeroError,
     InvalidOrdemError,
     InvalidStoredReportError,
     InvalidTurnoError,
     InvalidUfError,
+    StoredReadError,
+    UnusableGroupCountError,
 )
 from eleicoes.ports.boletim_consulta import AsyncBoletimReader
 from eleicoes.ports.grade import AsyncMunicipalityNames
@@ -48,6 +56,18 @@ def test_each_domain_error_has_a_portuguese_status() -> None:
         (InvalidBoletimConsultaError("campo"), 422, "Consulta de boletim inválida."),
         (InvalidStoredReportError("gerado_em"), 422, "Relatório armazenado inválido."),
         (DatabaseConfigError(("POSTGRES_HOST",)), 500, "Configuração do banco ausente."),
+        (InvalidGroupSpanError(), 422, "A faixa de grupos é inválida."),
+        (UnusableGroupCountError(), 422, "O número de grupos não cabe nos municípios."),
+        (FewMunicipalitiesError(), 409, "Menos de 3 municípios com votos válidos."),
+        (EmptyStoredCellsError(), 409, "Não há células gravadas para este cargo."),
+        (FewClassesError(), 409, "Não há classes suficientes para separar."),
+        (
+            CargoSemCelulasError("O cargo deputado federal não tem células gravadas."),
+            409,
+            "O cargo deputado federal não tem células gravadas.",
+        ),
+        (InconsistentCellError(), 409, "Célula municipal inconsistente."),
+        (StoredReadError(), 500, "Não foi possível ler o relatório gravado."),
         (ElectionError("database read failed"), 500, _GENERIC),
     )
     for exc, status, detail in cases:

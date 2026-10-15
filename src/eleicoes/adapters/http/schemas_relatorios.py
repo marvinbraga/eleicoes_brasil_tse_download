@@ -4,8 +4,15 @@ from typing import Self
 
 from pydantic import BaseModel
 
+from eleicoes.adapters.html_classe_governador import NOTES as CLASS_NOTES
+from eleicoes.adapters.html_classe_governador import texto_regra
+from eleicoes.adapters.html_perfis import NOTES as PROFILE_NOTES
+from eleicoes.domain.classe_governador import ClassOutcome, ClassReport, RuleCut
 from eleicoes.domain.grade import CelulaGrade, GradeDePoder, LinhaGrade
+from eleicoes.domain.percentual import format_decimal, format_percent, format_ratio
+from eleicoes.domain.perfis import ProfileCity, ProfileGroup, ProfileReport
 from eleicoes.domain.presidente_governador import (
+    CLASS_LABELS,
     CargoReading,
     ClassSlice,
     Composition,
@@ -182,3 +189,107 @@ class CrossReportJson(BaseModel):
 
 def _uf_places(code: str, rows: tuple[PlaceReading, ...]) -> UfPlacesJson:
     return UfPlacesJson(uf=code, places=[PlaceReadingJson.from_domain(row) for row in rows])
+
+
+class GrupoPerfilJson(BaseModel):
+    numero: int
+    municipios: int
+    comparecimento: int
+    centro: list[str]
+
+    @classmethod
+    def from_domain(cls, group: ProfileGroup) -> Self:
+        return cls(
+            numero=group.numero,
+            municipios=group.municipios,
+            comparecimento=group.comparecimento,
+            centro=[format_ratio(value) for value in group.center],
+        )
+
+
+class MunicipioPerfilJson(BaseModel):
+    codigo: str
+    nome: str
+    grupo: int
+
+    @classmethod
+    def from_domain(cls, city: ProfileCity) -> Self:
+        return cls(codigo=city.codigo, nome=city.nome, grupo=city.grupo)
+
+
+class ProfileJson(BaseModel):
+    ano: int
+    turno: int
+    cargo: str
+    partidos: list[int]
+    com_cedula: bool
+    buscou: bool
+    silhueta: str | None
+    grupos: list[GrupoPerfilJson]
+    municipios: list[MunicipioPerfilJson]
+    notas: list[str]
+
+    @classmethod
+    def from_domain(cls, report: ProfileReport) -> Self:
+        return cls(
+            ano=report.ano,
+            turno=report.turno,
+            cargo=report.cargo,
+            partidos=list(report.parties),
+            com_cedula=report.with_ballot,
+            buscou=report.searched,
+            silhueta=_silhueta(report),
+            grupos=[GrupoPerfilJson.from_domain(group) for group in report.groups],
+            municipios=[MunicipioPerfilJson.from_domain(city) for city in report.cities],
+            notas=list(PROFILE_NOTES),
+        )
+
+
+class LinhaClasseJson(BaseModel):
+    classe: str
+    rotulo: str
+    apoio: int
+    regras: list[str]
+
+    @classmethod
+    def from_domain(cls, row: ClassOutcome) -> Self:
+        return cls(
+            classe=row.classe,
+            rotulo=CLASS_LABELS[row.classe],
+            apoio=row.support,
+            regras=_regras(row.rules),
+        )
+
+
+class ClassJson(BaseModel):
+    ano: int
+    turno: int
+    acerto: str
+    base: str
+    linhas: list[LinhaClasseJson]
+    retidas: list[str]
+    notas: list[str]
+
+    @classmethod
+    def from_domain(cls, report: ClassReport) -> Self:
+        return cls(
+            ano=report.ano,
+            turno=report.turno,
+            acerto=format_percent(report.hit_rate),
+            base=format_percent(report.baseline),
+            linhas=[LinhaClasseJson.from_domain(row) for row in report.rows],
+            retidas=[CLASS_LABELS[label] for label in report.held_out],
+            notas=list(CLASS_NOTES),
+        )
+
+
+def _silhueta(report: ProfileReport) -> str | None:
+    if report.searched and report.silhouette is not None:
+        return format_decimal(report.silhouette)
+    return None
+
+
+def _regras(rules: tuple[tuple[RuleCut, ...], ...]) -> list[str]:
+    if not rules:
+        return [texto_regra(())]
+    return [texto_regra(cuts) for cuts in rules]

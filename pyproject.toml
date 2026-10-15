@@ -14,6 +14,7 @@ dependencies = [
     "fastapi>=0.115,<1",
     "uvicorn>=0.34,<1",
     "sqlalchemy[asyncio]>=2,<3",
+    "scikit-learn>=1.5,<2",
 ]
 
 [project.scripts]
@@ -57,6 +58,9 @@ max-complexity = 10
 [tool.ruff.lint.isort]
 known-first-party = ["eleicoes"]
 
+[tool.ruff.lint.per-file-ignores]
+"src/eleicoes/adapters/sklearn_ajuste.py" = ["E402"]
+
 [tool.mypy]
 strict = true
 warn_unreachable = true
@@ -69,6 +73,10 @@ namespace_packages = false
 
 [[tool.mypy.overrides]]
 module = ["asn1tools", "asn1tools.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["sklearn", "sklearn.*", "numpy", "numpy.*", "threadpoolctl"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

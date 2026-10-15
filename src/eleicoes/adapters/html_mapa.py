@@ -100,22 +100,90 @@ _PAGE_SCRIPT: Final = """\
     });
   }
 
-  function estilo(feature) {
+  var ZOOM_MUNICIPIOS = 6;
+  var ZOOM_TODOS = 11;
+  var PISO_INICIAL = 800000;
+
+  function estilo(feature, resolution) {
     var cor = feature.get("cor");
     if (!cor) {
       return estiloMundo();
     }
     var tinta = misturar(cor, feature.get("peso"));
-    return new ol.style.Style({
+    var estilos = [new ol.style.Style({
       fill: new ol.style.Fill({color: tinta.fill}),
-      stroke: new ol.style.Stroke({color: "#222222", width: 1}),
-      text: new ol.style.Text({
-        text: rotulo(feature.get("nome"), feature.get("numero"), feature.get("peso")),
-        font: "12px sans-serif",
-        overflow: true,
-        fill: new ol.style.Fill({color: tinta.ink})
-      })
-    });
+      stroke: new ol.style.Stroke({color: "#222222", width: 1})
+    })];
+    if (rotuloVisivel(feature, resolution)) {
+      estilos.push(new ol.style.Style({
+        geometry: maiorParte(feature),
+        text: new ol.style.Text({
+          text: rotulo(feature.get("nome"), feature.get("numero"), feature.get("peso")),
+          font: "12px sans-serif",
+          overflow: true,
+          fill: new ol.style.Fill({color: tinta.ink})
+        })
+      }));
+    }
+    return estilos;
+  }
+
+  function rotuloVisivel(feature, resolution) {
+    if (!ehMunicipio(feature)) {
+      return true;
+    }
+    if (typeof resolution !== "number" || !isFinite(resolution) || resolution <= 0) {
+      return true;
+    }
+    var zoom = vista.getZoomForResolution(resolution);
+    if (!(zoom >= ZOOM_MUNICIPIOS) || zoom >= ZOOM_TODOS) {
+      return true;
+    }
+    return votosValidos(feature.get("peso")) >= minimoDeVotos(zoom);
+  }
+
+  function ehMunicipio(feature) {
+    var codigo = String(feature.get("codigo") == null ? "" : feature.get("codigo"));
+    return codigo.length >= 6;
+  }
+
+  function minimoDeVotos(zoom) {
+    var passo = Math.floor(zoom) - ZOOM_MUNICIPIOS;
+    var piso = PISO_INICIAL;
+    for (var i = 0; i < passo; i++) {
+      piso = Math.floor(piso / 2);
+    }
+    return piso;
+  }
+
+  function votosValidos(peso) {
+    var partes = String(peso == null ? "" : peso).split("/");
+    if (partes.length !== 2) {
+      return 0;
+    }
+    var denominador = Number(partes[1]);
+    if (!eInteiro(denominador) || denominador <= 0) {
+      return 0;
+    }
+    return denominador;
+  }
+
+  function maiorParte(feature) {
+    var geometria = feature.getGeometry();
+    if (!geometria || geometria.getType() !== "MultiPolygon") {
+      return geometria;
+    }
+    var partes = geometria.getPolygons();
+    var escolhida = geometria;
+    var maior = -1;
+    for (var i = 0; i < partes.length; i++) {
+      var area = partes[i].getArea();
+      if (area > maior) {
+        maior = area;
+        escolhida = partes[i];
+      }
+    }
+    return escolhida;
   }
 
   function misturar(cor, peso) {
@@ -242,6 +310,8 @@ _PAGE_SCRIPT: Final = """\
   aplicar(municipios, pintura.municipiosObjeto, pintura.municipios);
   var brasil = soBrasil(colecao(paises, pintura.paisesObjeto), pintura.brasilId);
 
+  var vista = new ol.View({projection: "EPSG:4326", center: [-54, -14], zoom: 3});
+
   new ol.Map({
     target: "mapa",
     layers: [
@@ -250,7 +320,7 @@ _PAGE_SCRIPT: Final = """\
       camada(colecao(ufs, pintura.ufsObjeto), estilo, 4, 6),
       camada(colecao(municipios, pintura.municipiosObjeto), estilo, 6, 28)
     ],
-    view: new ol.View({projection: "EPSG:4326", center: [-54, -14], zoom: 3})
+    view: vista
   });
 })();
 """

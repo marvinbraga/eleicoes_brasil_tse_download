@@ -19,6 +19,16 @@ const DESTINOS = [
     descricao: "Relatório da API por cargo e UF.",
   },
   {
+    href: "/relatorios/perfis",
+    titulo: "Perfis municipais",
+    descricao: "Grupos de municípios a partir das células já gravadas.",
+  },
+  {
+    href: "/relatorios/classe-governador",
+    titulo: "Classe do governador",
+    descricao: "A classe do governador lida pela mistura de presidente.",
+  },
+  {
     href: "/mapa",
     titulo: "Mapa",
     descricao: "Arquivo de mapa já gerado.",

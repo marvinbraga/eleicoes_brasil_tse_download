@@ -49,6 +49,8 @@ def test_health_and_openapi_advertise_the_read_routes() -> None:
         "/votos/zonas",
         "/votos/indicios",
         "/relatorios/dados/grade",
+        "/relatorios/dados/perfis",
+        "/relatorios/dados/classe-governador",
         "/relatorios/dados/presidente-governador",
         "/relatorios/poder",
         "/relatorios/presidente-governador",

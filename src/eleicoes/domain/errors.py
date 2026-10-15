@@ -185,3 +185,43 @@ class InvalidStoredReportError(ElectionError):
     def __init__(self, field: str) -> None:
         self.field = field
         super().__init__(f"invalid stored power report: {field}")
+
+
+class InvalidGroupSpanError(ElectionError):
+    def __init__(self) -> None:
+        super().__init__("A faixa de grupos é inválida.")
+
+
+class FewMunicipalitiesError(ElectionError):
+    def __init__(self) -> None:
+        super().__init__("Menos de 3 municípios com votos válidos.")
+
+
+class EmptyStoredCellsError(ElectionError):
+    def __init__(self) -> None:
+        super().__init__("Não há células gravadas para este cargo.")
+
+
+class FewClassesError(ElectionError):
+    def __init__(self) -> None:
+        super().__init__("Não há classes suficientes para separar.")
+
+
+class InconsistentCellError(ElectionError):
+    def __init__(self) -> None:
+        super().__init__("Célula municipal inconsistente.")
+
+
+class StoredReadError(ElectionError):
+    def __init__(self) -> None:
+        super().__init__("Não foi possível ler o relatório gravado.")
+
+
+class CargoSemCelulasError(ElectionError):
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+
+
+class UnusableGroupCountError(ElectionError):
+    def __init__(self) -> None:
+        super().__init__("O número de grupos não cabe nos municípios.")

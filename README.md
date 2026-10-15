@@ -282,6 +282,30 @@ A página tem duas leituras. A composição conta os municípios de cada classe 
 
 Brancos e nulos aparecem na linha do lugar e ficam de fora do percentual, da margem e da classe. Esses três usam só os votos válidos. O número digitado sem candidato a presidente conta como nulo.
 
+## Agrupar os municípios
+
+O perfil lê as células já gravadas. Não recalcula boletim. Presidente e governador usam a fatia de cada partido sobre os votos válidos, mais branco e nulo sobre o comparecimento. Senador usa só a fatia dos partidos.
+
+```bash
+uv run python scripts/relatorio_perfis.py --ano 2026 --turno 1 --cargo presidente --sem-navegador
+```
+
+O arquivo sai em `relatorios/perfis-{cargo}-{ano}-turno-{turno}.html`. `--cargo` aceita `presidente`, `governador` e `senador`. `--grupos` vale `2-6` por padrão: a silhueta escolhe o número de grupos, e um empate fica com o menor. `--grupos 4` fixa quatro grupos. Deputado federal, deputado estadual e deputado distrital param com `O cargo deputado federal não tem células gravadas.` (e a frase equivalente do cargo), sem consultar o banco.
+
+No navegador, a mesma consulta abre em `http://localhost:14000/relatorios/perfis`. A página só chama a API depois de Consultar. Não há recálculo de boletim.
+
+## Ler a classe do governador
+
+A árvore usa só a mistura de presidente e estima a classe já definida no cruzamento. Um quarto dos municípios fica de fora do ajuste e mede o acerto. A comparação é a classe mais comum.
+
+```bash
+uv run python scripts/relatorio_classe_governador.py --ano 2026 --turno 1 --sem-navegador
+```
+
+O arquivo sai em `relatorios/classe-governador-{ano}-turno-{turno}.html`.
+
+No navegador, a mesma consulta abre em `http://localhost:14000/relatorios/classe-governador`, também só depois de Consultar.
+
 ## Abrir o mapa de presidente ou de governador
 
 O mapa pinta o partido líder em cada recorte. O zoom mínimo é o país, o seguinte é a UF e o máximo é o município. A região não entra: a malha desse recorte ainda não foi medida.
@@ -347,3 +371,5 @@ A ausência de `imgbu.dat` deixa o relatório de poder inteiro. A ausência de `
 8. Abra o relatório com `uv run python scripts/relatorio_poder.py --ano 2026 --turno 1 --cargo presidente`.
 9. Depois de uma importação nova, rode o mesmo relatório com `--atualizar`.
 10. Cruze presidente e governador com `uv run python scripts/relatorio_presidente_governador.py --ano 2026 --turno 1`. Depois de uma importação nova, rode o mesmo comando com `--atualizar`.
+11. Agrupe os municípios com `uv run python scripts/relatorio_perfis.py --ano 2026 --turno 1 --cargo presidente --sem-navegador`.
+12. Leia a classe do governador com `uv run python scripts/relatorio_classe_governador.py --ano 2026 --turno 1 --sem-navegador`.
