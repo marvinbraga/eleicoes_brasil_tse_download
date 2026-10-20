@@ -1,45 +1,147 @@
 {
-  "cycle_id": "c7e1a4d2-2026-10-05-tse-download",
-  "started_at": "2026-10-05T10:43:35-03:00",
+  "cycle_id": "ml-reports-2026-10-20",
+  "started_at": "2026-10-20T00:00:00-03:00",
   "stack": "python-oop",
-  "current_task": "T-1",
-  "current_task_index": 0,
-  "current_subtask": "T-1.1",
-  "current_gate": 0,
+  "plan": "docs/superpowers/plans/2026-10-20-ajustes-relatorios-ml.md",
+  "previous_cycle": "c7e1a4d2-2026-10-05-tse-download (recoverable from git history)",
   "checklist": {
     "python": "3.14.6 OK (>=3.11)",
     "package_manager": "uv",
-    "uv_run": true,
-    "pyproject_quality_tools": "ruff, mypy strict, pytest cov-fail-under 85",
+    "pyproject_quality_tools": "ruff C90 max-complexity 10, mypy strict, pytest cov-fail-under 85",
     "project_rules": "absent",
-    "web_framework": "none"
+    "web_framework": "fastapi in adapters/http only; work is domain/adapters (confirmed by prior cycle pattern)"
   },
   "cached_standards": {
     "python_oop": "/home/marvinbraga/.claude/jarvis/dev-team/docs/standards/python-oop.md",
     "project_rules": null
   },
+  "commit_policy": "only on explicit user request",
   "tasks": [
     {
       "id": "T-1",
-      "title": "Baixar qualquer eleição por ano",
-      "subtasks": [
-        {
-          "id": "T-1.1",
-          "title": "Catalogo, download e CLI para qualquer ano",
-          "gate_progress": {
-            "implementation": {
-              "tdd_red": {"status": "completed"},
-              "tdd_green": {"status": "completed"},
-              "delivery_verified": true,
-              "coverage_actual": 96.55,
-              "coverage_threshold": 85,
-              "local_runtime_verified": true
-            }
-          }
-        }
-      ],
-      "gate_progress": {}
+      "title": "Perfis sem padronizacao e silhouette amostrado",
+      "agent": "backend-engineer-python-oop"
+    },
+    {
+      "id": "T-2",
+      "title": "UF chega ao dataset da classe",
+      "agent": "backend-engineer-python-oop"
+    },
+    {
+      "id": "T-3",
+      "title": "Validacao deixa-uma-UF-fora e metricas",
+      "agent": "backend-engineer-python-oop"
+    },
+    {
+      "id": "T-4",
+      "title": "JSON, HTML e notas",
+      "agent": "backend-engineer-python-oop"
+    },
+    {
+      "id": "T-5",
+      "title": "Frontend da classe do governador",
+      "agent": "frontend-engineer"
     }
   ],
-  "gates_completed": {"T-1.1": [0]}
+  "current_task": "T-5",
+  "current_gate": 9,
+  "gates_completed": {
+    "T-1": [
+      0,
+      8,
+      9
+    ],
+    "T-2": [
+      0,
+      8,
+      9
+    ],
+    "T-3": [
+      0,
+      8,
+      "0-remediation",
+      9
+    ],
+    "T-4": [
+      0,
+      8,
+      "0-remediation",
+      9
+    ],
+    "T-5": [
+      0,
+      8,
+      "0-remediation",
+      9
+    ]
+  },
+  "review": {
+    "T-1": {
+      "status": "ISSUES_FOUND",
+      "critical": 0,
+      "high": 0,
+      "medium": 1,
+      "low": 9,
+      "medium_issue": "default k on 2026/1 presidente moves 5->2 (intended by D3); needs user decision",
+      "gate9": "user accepted k=2 (D20, notes in T-4) and k<=10 cap (D19, implemented)"
+    },
+    "T-2": {
+      "status": "ISSUES_FOUND",
+      "critical": 0,
+      "high": 0,
+      "medium": 4,
+      "low": 12,
+      "remediation": "dispatched: test strength (leader argmax/tie, kept-UF count, per-code UF, HTTP 1-UF 409), without_uf viability, _states normalization, single leader guard, uf_statement order",
+      "carry_forward": "T-4 must test nonzero sem_uf reaches JSON+HTML (data-quality warning)",
+      "remediation_result": "all 9 items fixed; 723 passed; cov 94.04%; mypy/ruff clean",
+      "gate9": "deferred: no user-visible change; validated together with T-3"
+    },
+    "T-3": {
+      "status": "ISSUES_FOUND",
+      "critical": 0,
+      "high": "adapter tests pass with in-sample mutant",
+      "medium": 6,
+      "low": "~15",
+      "real_data_verified": "hit 50.48 vs majority 62.61 vs leader 51.75; sklearn cross_val_predict identical 0/5571; old 75/25 split 67.62 (~17pt UF leakage)",
+      "plan_updates": "CLI _message + README into T-4; Municipios da prova rename into T-5",
+      "user_decisions_pending": [
+        "below-baseline presentation",
+        "per-request cost/cache"
+      ],
+      "remediation_result": "738 passed; cov 94.11; in-sample mutant killed; cross_val_predict; real numbers unchanged",
+      "gate9": "user: D21 publish with below-baseline warning; D22 lru_cache per key"
+    },
+    "T-4": {
+      "status": "ISSUES_FOUND",
+      "critical": 0,
+      "high": 0,
+      "medium": 6,
+      "low": "~12",
+      "remediation": "cache key normalization; clear cache on atualizar=true; _k isdecimal; test gaps; shared fixtures; singular sem_uf; README restart note",
+      "remediation_result": "771 passed; cov 94.15; all 9 items; tests/conftest.py created"
+    },
+    "T-5": {
+      "gate0": "tsc clean; eslint on 4 changed files clean; pnpm lint fails on pre-existing filtros-relatorio.tsx (set-state-in-effect), untouched",
+      "gate8": "ISSUES_FOUND: 0 crit/high, ~5 medium (copy truth, a11y, client boundary, dup parser)",
+      "remediation_result": "all fixed; tsc ok; eslint changed files ok"
+    }
+  },
+  "final_verification": {
+    "pytest": "771 passed, cov 94.15%",
+    "mypy": "ok 143 files",
+    "ruff": "ok",
+    "tsc": "ok",
+    "pnpm_lint": "1 pre-existing error filtros-relatorio.tsx:66 (outside cycle)"
+  },
+  "gate9_final": "user chose rebuild+verify: API rebuilt, endpoints and Next pages verified with real 2026/1 data",
+  "extras": [
+    "numpy declared",
+    "pre-existing lint error fixed (filtros-relatorio.tsx)"
+  ],
+  "commits": [
+    "4a058ae chore(deps): declare numpy",
+    "58cb603 feat(reports): validate governor class by state",
+    "aee357a docs: describe state validation and report cache"
+  ],
+  "status": "completed"
 }
