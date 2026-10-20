@@ -214,3 +214,61 @@ def test_unknown_cargo_is_rejected() -> None:
     except InvalidCargoError:
         return
     raise AssertionError("expected InvalidCargoError")
+
+
+def test_paint_carries_the_runner_up_and_blank_and_null_votes() -> None:
+    ponte = _ponte()
+    president = CargoTally((PartyTally(22, 5, 0), PartyTally(13, 3, 0)), 2, 1)
+    governor = CargoTally((PartyTally(13, 4, 0),), 0, 0)
+    view = view_from_places(
+        2026,
+        1,
+        (MunicipalPlace("AC", "01007", "Bujari", president, governor),),
+    )
+    marcas = {22: Marca("#112233", "data:a"), 13: Marca("#AABBCC", "data:b")}
+    painted = recorte_pintado(
+        view, "presidente", ponte, marcas, frozenset({"1200138"}), frozenset({"12"}), "076"
+    )
+    for item in (painted.municipios[0], painted.ufs[0], painted.pais):
+        assert item is not None
+        assert item.segundo == "13"
+        assert item.votos_segundo == 3
+        assert item.branco == 2
+        assert item.nulo == 1
+
+
+def test_governor_paint_carries_the_governor_runner_up() -> None:
+    ponte = _ponte()
+    president = CargoTally((PartyTally(22, 5, 0),), 0, 0)
+    governor = CargoTally((PartyTally(13, 6, 0), PartyTally(45, 2, 0)), 4, 3)
+    view = view_from_places(
+        2026,
+        1,
+        (MunicipalPlace("AC", "01007", "Bujari", president, governor),),
+    )
+    marcas = {22: Marca("#112233", "data:a"), 13: Marca("#AABBCC", "data:b")}
+    painted = recorte_pintado(
+        view, "governador", ponte, marcas, frozenset({"1200138"}), frozenset({"12"}), "076"
+    )
+    assert painted.municipios[0].segundo == "45"
+    assert painted.municipios[0].votos_segundo == 2
+    assert painted.municipios[0].branco == 4
+    assert painted.municipios[0].nulo == 3
+
+
+def test_paint_without_runner_up_leaves_it_empty() -> None:
+    ponte = _ponte()
+    view = view_from_places(2026, 1, (_place("AC", "01007", "Bujari", 22, 22),))
+    painted = recorte_pintado(
+        view,
+        "presidente",
+        ponte,
+        {22: Marca("#112233", "data:a")},
+        frozenset({"1200138"}),
+        frozenset({"12"}),
+        "076",
+    )
+    assert painted.municipios[0].segundo == ""
+    assert painted.municipios[0].votos_segundo == 0
+    assert painted.municipios[0].branco == 0
+    assert painted.municipios[0].nulo == 0

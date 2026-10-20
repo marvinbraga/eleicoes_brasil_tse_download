@@ -78,6 +78,10 @@ class Pintura:
     logo: str
     peso: str = "1/1"
     nome: str = ""
+    segundo: str = ""
+    votos_segundo: int = 0
+    branco: int = 0
+    nulo: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -244,10 +248,12 @@ def _pais(
 
 
 def _pintura(codigo: str, place: PlaceReading, cargo: str, marcas: Mapping[int, Marca]) -> Pintura:
-    leader = _lider(place, cargo)
-    if leader is None:
+    reading = _leitura(place, cargo)
+    if reading is None or reading.leader is None:
         raise MarkMissingError(())
+    leader = reading.leader.partido
     marca = marcas[leader]
+    segundo, votos_segundo = _segundo(reading)
     return Pintura(
         codigo,
         marca.cor,
@@ -255,7 +261,18 @@ def _pintura(codigo: str, place: PlaceReading, cargo: str, marcas: Mapping[int, 
         marca.logo,
         _peso(place, cargo),
         place.nome,
+        segundo,
+        votos_segundo,
+        reading.branco,
+        reading.nulo,
     )
+
+
+def _segundo(reading: CargoReading) -> tuple[str, int]:
+    runner = reading.runner_up
+    if runner is None:
+        return "", 0
+    return str(runner.partido), runner.votos
 
 
 def _leituras(view: CrossReportView) -> tuple[PlaceReading, ...]:
