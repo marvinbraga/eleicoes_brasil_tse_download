@@ -290,7 +290,7 @@ def test_cross_map_paints_by_class_and_explains_it() -> None:
         "13",
         "5/9",
     )
-    assert 'var CRUZAMENTO = pintura.cargo === "cruzamento";' in html
+    assert 'var CRUZAMENTO = visaoAtual === "cruzamento";' in html
     assert 'cor: "#d95f02"' in html
     assert 'cor: "#3a5fcd"' in html
     assert 'cor: "#7570b3"' not in html
@@ -309,6 +309,44 @@ def test_leader_map_keeps_the_leader_title() -> None:
 
     assert "<title>Mapa de presidente — 2026, turno 1</title>" in html
     assert json.loads(_block(html, "pintura"))["cargo"] == "presidente"
+
+
+def test_page_carries_the_other_views_for_the_switcher() -> None:
+    page = _page(cargo="cruzamento")
+    governor = replace(
+        page.recorte,
+        municipios=(replace(_paint("1200138"), numero="45", logo="data:image/png;base64,RQ=="),),
+    )
+    marcas = {"45": Marca("#abcdef", "data:image/png;base64,RQ==", "PSDB")}
+    governor = replace(governor, marcas=marcas)
+    html = html_do_mapa(
+        replace(page, recortes={"presidente": page.recorte, "governador": governor})
+    )
+    pintura = json.loads(_block(html, "pintura"))
+
+    assert pintura["cargo"] == "cruzamento"
+    assert list(pintura["visoes"]) == ["governador"]
+    assert pintura["visoes"]["governador"]["municipios"][0]["numero"] == "45"
+    assert set(pintura["visoes"]["governador"]) == {"pais", "ufs", "municipios", "exterior"}
+    assert pintura["logos"]["45"] == "data:image/png;base64,RQ=="
+    assert pintura["siglas"] == {"45": "PSDB"}
+    assert pintura["titulos"] == {
+        "presidente": "Mapa de presidente — 2026, turno 1",
+        "governador": "Mapa de governador — 2026, turno 1",
+        "cruzamento": "Mapa de presidente × governador — 2026, turno 1",
+    }
+    assert '<div id="visoes" class="ol-unselectable" role="group"' in html
+    assert "#visoes {" in html
+    assert "function trocarVisao(nome)" in html
+    assert "function repintar(camadaAlvo, itens)" in html
+    assert 'window.location.replace("#visao=" + nome);' in html
+    assert 'window.addEventListener("hashchange", function () {' in html
+    assert "new ol.control.Control({element: painelVisoes})" in html
+    assert 'return nome === "governador" ? "governador" : "presidente";' in html
+
+
+def test_page_without_extra_views_has_no_other_views() -> None:
+    assert json.loads(_block(html_do_mapa(_page()), "pintura"))["visoes"] == {}
 
 
 def test_page_without_marks_has_no_acronyms() -> None:

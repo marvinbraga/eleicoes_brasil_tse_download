@@ -377,6 +377,52 @@ def test_abroad_coordinates_reach_the_painted_cut(tmp_path: Path) -> None:
     assert "Lisboa" not in pages[0].recorte.sem_poligono
 
 
+def test_president_page_carries_both_painted_cuts(tmp_path: Path) -> None:
+    pages, code = _render_pages(tmp_path, "presidente", _Assets())
+    assert code == 0
+    [page] = pages
+    assert set(page.recortes) == {"presidente", "governador"}
+    assert page.recortes["presidente"] is page.recorte
+    assert page.recortes["governador"].municipios[0].numero == "13"
+
+
+def test_governor_page_reuses_its_cut_and_adds_the_president(tmp_path: Path) -> None:
+    pages, code = _render_pages(tmp_path, "governador", _Assets())
+    assert code == 0
+    [page] = pages
+    assert page.recortes["governador"] is page.recorte
+    assert page.recortes["presidente"].municipios[0].numero == "22"
+
+
+def test_cross_page_carries_both_painted_cuts(tmp_path: Path) -> None:
+    pages, code = _render_pages(tmp_path, "cruzamento", _Assets())
+    assert code == 0
+    [page] = pages
+    assert set(page.recortes) == {"presidente", "governador"}
+    assert page.recortes["presidente"].municipios[0].numero == "22"
+    assert page.recortes["governador"].municipios[0].numero == "13"
+
+
+def test_extra_view_without_a_governor_mark_is_left_out(tmp_path: Path) -> None:
+    only_president = {22: Marca("#112233", "data:image/png;base64,QQ==")}
+    pages, code = _render_pages(tmp_path, "presidente", _Assets(marcas=only_president))
+    assert code == 0
+    [page] = pages
+    assert set(page.recortes) == {"presidente"}
+    assert page.recorte.municipios[0].numero == "22"
+
+
+def test_requested_governor_without_its_mark_still_fails(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    only_president = {22: Marca("#112233", "data:image/png;base64,QQ==")}
+    pages, code = _render_pages(tmp_path, "governador", _Assets(marcas=only_president))
+    assert code == 1
+    assert pages == []
+    assert capsys.readouterr().err == "Falta a cor ou a logomarca do partido 13.\n"
+
+
 def test_injected_reader_collects_without_production(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -461,6 +507,27 @@ def test_readme_explains_the_map_command() -> None:
     )
     assert president in text
     assert governor in text
+
+
+def _render_pages(
+    tmp_path: Path,
+    cargo: str,
+    assets: "_Assets",
+) -> tuple[list[PaginaDoMapa], int]:
+    pages: list[PaginaDoMapa] = []
+
+    def render(page: PaginaDoMapa) -> str:
+        pages.append(page)
+        return ""
+
+    code = main(
+        ["--cargo", cargo, "--destino", str(tmp_path / "mapa.html"), "--sem-navegador"],
+        store=_Memory(),
+        assets=assets,
+        collect=lambda _ano, _turno: (_bujari(),),
+        render=render,
+    )
+    return pages, code
 
 
 def _command(destino: Path) -> list[str]:

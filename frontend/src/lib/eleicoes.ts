@@ -85,6 +85,9 @@ export type GruposPerfil = (typeof GRUPOS_PERFIL)[number]["value"];
 export type Nivel = (typeof NIVEIS)[number]["value"];
 export type CargoMapa = (typeof CARGOS_MAPA)[number]["value"];
 
+// Cada arquivo do mapa traz todas as visões; o quadro carrega este e escolhe a visão pelo hash.
+export const CARGO_DO_ARQUIVO_DO_MAPA: CargoMapa = "presidente";
+
 export type ValorConsulta = string | string[] | undefined;
 
 export type ConsultaRelatorio = {

@@ -128,6 +128,7 @@ class PaginaDoMapa:
     ol_js: str
     ol_css: str
     topojson_js: str
+    recortes: Mapping[str, RecortePintado] = field(default_factory=dict)
 
 
 def ponte_de_linhas(linhas: Sequence[Mapping[str, str]]) -> PonteTseIbge:

@@ -1,6 +1,7 @@
 """HTML do mapa coroplético. O JavaScript é colado; as chaves não passam por format."""
 
 import json
+from collections.abc import Callable
 from html import escape
 from typing import Final
 
@@ -8,6 +9,8 @@ from eleicoes.domain.mapa import PaginaDoMapa, Pintura, PontoPintado, RecortePin
 
 _IBGE: Final = "Malha municipal e de estados: IBGE. Licença compatível com CC BY 4.0."
 _CARGO_NO_TITULO: Final = {"cruzamento": "presidente × governador"}
+_VIEWS: Final = ("presidente", "governador", "cruzamento")
+_BASE_VIEW: Final = {"cruzamento": "presidente"}
 _REGIONS: Final = (
     "O recorte das regiões não entra neste mapa. A malha desse recorte ainda não foi medida."
 )
@@ -59,7 +62,13 @@ _PAGE_CSS: Final = (
     " #detalhe .classe { display: flex; align-items: center; gap: .4em; font-weight: bold; }"
     " #detalhe .amostra { width: 12px; height: 12px; border-radius: 2px; flex: none; }"
     " #detalhe small { display: block; max-width: 22em; white-space: normal; opacity: .8; }"
-    " #legenda { position: absolute; top: .5em; right: .5em; max-height: calc(100% - 1em);"
+    " #visoes { position: absolute; top: .5em; left: 50%; transform: translateX(-50%);"
+    " display: flex; background: rgba(255,255,255,.92); border: 1px solid #cccccc;"
+    " border-radius: 6px; padding: 2px; gap: 2px; }"
+    " #visoes button { font: 12px sans-serif; color: #111111; background: none; border: 0;"
+    " border-radius: 4px; padding: .3em .7em; cursor: pointer; white-space: nowrap; }"
+    " #visoes button[aria-pressed='true'] { background: #111111; color: #ffffff; }"
+    " #legenda { position: absolute; top: 2.8em; right: .5em; max-height: calc(100% - 3.3em);"
     " max-width: min(20em, calc(100% - 4em)); box-sizing: border-box;"
     " overflow: auto; background: rgba(255,255,255,.92); border: 1px solid #cccccc;"
     " border-radius: 6px; padding: .4em .6em; font: 12px/1.4 sans-serif; color: #111111; }"
@@ -77,11 +86,24 @@ _PAGE_CSS: Final = (
 )
 _PAGE_SCRIPT: Final = """\
 (function () {
-  var pintura = JSON.parse(document.getElementById("pintura").textContent);
+  var base = JSON.parse(document.getElementById("pintura").textContent);
   var municipios = JSON.parse(document.getElementById("municipios").textContent);
   var ufs = JSON.parse(document.getElementById("ufs").textContent);
   var paises = JSON.parse(document.getElementById("paises").textContent);
-  var CRUZAMENTO = pintura.cargo === "cruzamento";
+  var VISOES = ["presidente", "governador", "cruzamento"];
+  var NOMES_DAS_VISOES = {
+    presidente: "Presidente",
+    governador: "Governador",
+    cruzamento: "Presidente × governador"
+  };
+  var BASES = {};
+  BASES[baseDaVisao(base.cargo)] = base;
+  Object.keys(base.visoes || {}).forEach(function (nome) {
+    BASES[nome] = Object.assign({}, base, base.visoes[nome]);
+  });
+  var visaoAtual = visaoDoEndereco() || base.cargo;
+  var pintura = dadosDaVisao(visaoAtual);
+  var CRUZAMENTO = visaoAtual === "cruzamento";
   var ORDEM_DAS_CLASSES = ["consolidacao", "terreno_de_virada", "em_aberto", "sem_governador"];
   var CLASSES = {
     consolidacao: {
@@ -704,6 +726,9 @@ _PAGE_SCRIPT: Final = """\
   }
 
   function montarLegenda() {
+    painelLegenda.querySelector("ul").textContent = "";
+    painelLegenda.querySelector(".nota").textContent = NOTA_DA_LEGENDA;
+    botaoLegenda.textContent = "Partidos";
     if (CRUZAMENTO) {
       montarLegendaCruzada();
       return;
@@ -784,6 +809,114 @@ _PAGE_SCRIPT: Final = """\
     return novo;
   }
 
+  function baseDaVisao(nome) {
+    return nome === "governador" ? "governador" : "presidente";
+  }
+
+  function dadosDaVisao(nome) {
+    var dados = BASES[baseDaVisao(nome)];
+    return dados ? Object.assign({}, dados, {cargo: nome}) : null;
+  }
+
+  function visaoDoEndereco() {
+    var achado = /(?:^|[#&])visao=([a-z]+)/.exec(window.location.hash);
+    if (!achado || VISOES.indexOf(achado[1]) < 0 || !BASES[baseDaVisao(achado[1])]) {
+      return null;
+    }
+    return achado[1];
+  }
+
+  var CAMPOS_DA_PINTURA = [
+    "cor", "peso", "numero", "logo", "codigo", "segundo", "votosSegundo", "branco", "nulo",
+    "classe", "governador", "pesoGovernador"
+  ];
+
+  function codigoDaFeicao(feature) {
+    var codigo = feature.get("codarea");
+    return String(codigo === undefined || codigo === null ? feature.getId() : codigo);
+  }
+
+  function repintar(camadaAlvo, itens) {
+    var porCodigo = {};
+    for (var i = 0; i < itens.length; i++) {
+      porCodigo[String(itens[i].codigo)] = itens[i];
+    }
+    camadaAlvo.getSource().getFeatures().forEach(function (feature) {
+      var item = porCodigo[codigoDaFeicao(feature)];
+      var valores = {};
+      CAMPOS_DA_PINTURA.forEach(function (campo) {
+        valores[campo] = item ? item[campo] : undefined;
+      });
+      if (item) {
+        valores.codigo = String(item.codigo);
+        valores.logo = pintura.logos[item.numero];
+        if (item.nome) {
+          valores.nome = item.nome;
+        }
+      }
+      feature.setProperties(valores, true);
+      feature.changed();
+    });
+  }
+
+  function lerPontos() {
+    return new ol.format.GeoJSON({
+      dataProjection: "EPSG:4326",
+      featureProjection: "EPSG:4326"
+    }).readFeatures(colecaoDePontos(pintura.exterior || []));
+  }
+
+  function trocarVisao(nome) {
+    if (nome === visaoAtual || !dadosDaVisao(nome)) {
+      return;
+    }
+    destacar(null, null, null);
+    visaoAtual = nome;
+    pintura = dadosDaVisao(nome);
+    CRUZAMENTO = nome === "cruzamento";
+    repintar(camadaBrasil, pintura.pais ? [pintura.pais] : []);
+    repintar(camadaUfs, pintura.ufs);
+    repintar(camadaMunicipios, pintura.municipios);
+    camadaPontos.getSource().clear();
+    camadaPontos.getSource().addFeatures(lerPontos());
+    montarLegenda();
+    marcarVisao();
+    if (visaoDoEndereco() !== nome) {
+      window.location.replace("#visao=" + nome);
+    }
+  }
+
+  function montarSeletor() {
+    VISOES.forEach(function (nome) {
+      if (!dadosDaVisao(nome)) {
+        return;
+      }
+      var botao = elemento("button", NOMES_DAS_VISOES[nome]);
+      botao.type = "button";
+      botao.setAttribute("data-visao", nome);
+      botao.addEventListener("click", function () {
+        trocarVisao(nome);
+      });
+      painelVisoes.appendChild(botao);
+    });
+  }
+
+  function marcarVisao() {
+    var botoes = painelVisoes.querySelectorAll("button");
+    for (var i = 0; i < botoes.length; i++) {
+      var ativo = botoes[i].getAttribute("data-visao") === visaoAtual;
+      botoes[i].setAttribute("aria-pressed", ativo ? "true" : "false");
+    }
+    var titulo = (base.titulos || {})[visaoAtual];
+    if (titulo) {
+      document.title = titulo;
+      var cabecalho = document.querySelector("h1");
+      if (cabecalho) {
+        cabecalho.textContent = titulo;
+      }
+    }
+  }
+
   var vista = new ol.View({projection: "EPSG:4326", center: [-54, -14], zoom: 3});
   var painelZoom = document.getElementById("zoom");
   var painelDetalhe = document.getElementById("detalhe");
@@ -791,30 +924,46 @@ _PAGE_SCRIPT: Final = """\
   var painelLegenda = document.getElementById("legenda");
   var botaoLegenda = painelLegenda.querySelector("button");
   var itensDaLegenda = document.getElementById("legenda-itens");
+  var NOTA_DA_LEGENDA = painelLegenda.querySelector(".nota").textContent;
+  var painelVisoes = document.getElementById("visoes");
   montarLegenda();
+  montarSeletor();
   alternarLegenda(painelLegenda.parentElement.clientWidth >= 640);
   botaoLegenda.addEventListener("click", function () {
     alternarLegenda(botaoLegenda.getAttribute("aria-expanded") !== "true");
   });
 
+  var camadaBrasil = camada(brasil, estilo, null, 4);
+  var camadaUfs = camada(colecao(ufs, pintura.ufsObjeto), estilo, 4, 6);
+  var camadaMunicipios = camada(colecao(municipios, pintura.municipiosObjeto), estilo, 6, 28, true);
+  var camadaPontos = camada(colecaoDePontos(pintura.exterior || []), estiloPonto, null, null, true);
+
   var mapa = new ol.Map({
     target: "mapa",
     layers: [
       camada(mundo, estiloMundo, null, null),
-      camada(brasil, estilo, null, 4),
-      camada(colecao(ufs, pintura.ufsObjeto), estilo, 4, 6),
-      camada(colecao(municipios, pintura.municipiosObjeto), estilo, 6, 28, true),
-      camada(colecaoDePontos(pintura.exterior || []), estiloPonto, null, null, true)
+      camadaBrasil,
+      camadaUfs,
+      camadaMunicipios,
+      camadaPontos
     ],
     controls: ol.control.defaults.defaults().extend([
       new ol.control.Control({element: painelZoom}),
-      new ol.control.Control({element: painelLegenda})
+      new ol.control.Control({element: painelLegenda}),
+      new ol.control.Control({element: painelVisoes})
     ]),
     overlays: [cartao],
     view: vista
   });
   vista.on("change:resolution", mostrarZoom);
   mostrarZoom();
+  marcarVisao();
+  window.addEventListener("hashchange", function () {
+    var nome = visaoDoEndereco();
+    if (nome) {
+      trocarVisao(nome);
+    }
+  });
   mapa.on("pointermove", function (evento) {
     if (evento.dragging) {
       return;
@@ -845,6 +994,7 @@ def html_do_mapa(pagina: PaginaDoMapa) -> str:
         f"<h1>{title}</h1>\n"
         '<div id="mapa"><div id="zoom" aria-live="polite"></div>'
         '<div id="detalhe" role="tooltip" hidden></div>'
+        '<div id="visoes" class="ol-unselectable" role="group" aria-label="Visão do mapa"></div>'
         '<div id="legenda" class="ol-unselectable"><button type="button" aria-expanded="true"'
         ' aria-controls="legenda-itens">Partidos</button><div id="legenda-itens">'
         '<ul></ul><p class="nota">Tom mais forte: fatia maior dos votos válidos do líder.</p>'
@@ -857,8 +1007,12 @@ def html_do_mapa(pagina: PaginaDoMapa) -> str:
 
 
 def _title(pagina: PaginaDoMapa) -> str:
-    cargo = _CARGO_NO_TITULO.get(pagina.cargo, pagina.cargo)
-    return f"Mapa de {cargo} — {pagina.ano}, turno {pagina.turno}"
+    return _title_for(pagina, pagina.cargo)
+
+
+def _title_for(pagina: PaginaDoMapa, cargo: str) -> str:
+    name = _CARGO_NO_TITULO.get(cargo, cargo)
+    return f"Mapa de {name} — {pagina.ano}, turno {pagina.turno}"
 
 
 def _style(pagina: PaginaDoMapa) -> str:
@@ -905,21 +1059,45 @@ def _escape_close(text: str) -> str:
 
 
 def _payload(pagina: PaginaDoMapa) -> dict[str, object]:
-    recorte = pagina.recorte
-    country = None if recorte.pais is None else _item(recorte.pais)
+    recortes = (pagina.recorte, *pagina.recortes.values())
     return {
-        "logos": _logos(recorte),
-        "siglas": _siglas(recorte),
+        "logos": _merged(_logos, recortes),
+        "siglas": _merged(_siglas, recortes),
         "cargo": pagina.cargo,
-        "pais": country,
-        "ufs": [_item(item) for item in recorte.ufs],
-        "municipios": [_item(item) for item in recorte.municipios],
-        "exterior": [_ponto(ponto) for ponto in recorte.exterior],
+        **_view(pagina.recorte),
+        "visoes": _other_views(pagina),
+        "titulos": {cargo: _title_for(pagina, cargo) for cargo in _VIEWS},
         "brasilId": pagina.brasil_id,
         "ufsObjeto": pagina.ufs_objeto,
         "municipiosObjeto": pagina.municipios_objeto,
         "paisesObjeto": pagina.paises_objeto,
     }
+
+
+def _view(recorte: RecortePintado) -> dict[str, object]:
+    country = None if recorte.pais is None else _item(recorte.pais)
+    return {
+        "pais": country,
+        "ufs": [_item(item) for item in recorte.ufs],
+        "municipios": [_item(item) for item in recorte.municipios],
+        "exterior": [_ponto(ponto) for ponto in recorte.exterior],
+    }
+
+
+def _other_views(pagina: PaginaDoMapa) -> dict[str, dict[str, object]]:
+    base = _BASE_VIEW.get(pagina.cargo, pagina.cargo)
+    return {cargo: _view(cut) for cargo, cut in pagina.recortes.items() if cargo != base}
+
+
+def _merged(
+    read: Callable[[RecortePintado], dict[str, str]],
+    recortes: tuple[RecortePintado, ...],
+) -> dict[str, str]:
+    found: dict[str, str] = {}
+    for recorte in recortes:
+        for numero, valor in read(recorte).items():
+            found.setdefault(numero, valor)
+    return found
 
 
 def _logos(recorte: RecortePintado) -> dict[str, str]:

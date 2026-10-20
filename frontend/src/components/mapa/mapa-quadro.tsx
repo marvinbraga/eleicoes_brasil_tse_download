@@ -4,44 +4,52 @@ import { useEffect, useRef, useState } from "react";
 import { useTheme } from "next-themes";
 import { usePathname, useRouter } from "next/navigation";
 
-import { FiltroSelect } from "@/components/filtros/filtro-select";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMounted } from "@/hooks/use-mounted";
-import { CARGOS_MAPA, type CargoMapa } from "@/lib/eleicoes";
+import {
+  CARGO_DO_ARQUIVO_DO_MAPA,
+  CARGOS_MAPA,
+  type CargoMapa,
+} from "@/lib/eleicoes";
 
-type MapaFiltroProps = {
-  cargo: CargoMapa;
-};
+const VISAO_NO_ENDERECO = /(?:^|[#&])visao=([a-z]+)/;
 
-export function MapaFiltro({ cargo }: MapaFiltroProps) {
-  const router = useRouter();
-  const pathname = usePathname();
-
-  return (
-    <div role="group" aria-label="Filtro do mapa">
-      <FiltroSelect
-        id="cargo-mapa"
-        label="Cargo"
-        value={cargo}
-        options={CARGOS_MAPA}
-        onChange={(valor) => {
-          const params = new URLSearchParams();
-          params.set("cargo", valor);
-          router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-        }}
-      />
-    </div>
-  );
+function visaoDoQuadro(janela: Window): CargoMapa | null {
+  const achado = VISAO_NO_ENDERECO.exec(janela.location.hash);
+  const visao = achado?.[1];
+  return CARGOS_MAPA.some((item) => item.value === visao) ? (visao as CargoMapa) : null;
 }
 
 export function MapaQuadro({ cargo }: { cargo: CargoMapa }) {
   const { resolvedTheme } = useTheme();
   const montado = useMounted();
+  const router = useRouter();
+  const pathname = usePathname();
   const dialogo = useRef<HTMLDialogElement>(null);
   const botao = useRef<HTMLButtonElement>(null);
+  const quadro = useRef<HTMLIFrameElement>(null);
   const jaAbriu = useRef(false);
   const [ampliado, setAmpliado] = useState(false);
+  const [carregado, setCarregado] = useState(0);
+
+  useEffect(() => {
+    const janela = quadro.current?.contentWindow;
+    if (!janela || carregado === 0) {
+      return;
+    }
+    const sincronizar = () => {
+      const visao = visaoDoQuadro(janela);
+      if (!visao || visao === cargo) {
+        return;
+      }
+      const params = new URLSearchParams();
+      params.set("cargo", visao);
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    };
+    janela.addEventListener("hashchange", sincronizar);
+    return () => janela.removeEventListener("hashchange", sincronizar);
+  }, [cargo, carregado, pathname, router]);
 
   useEffect(() => {
     const quadro = dialogo.current;
@@ -106,9 +114,11 @@ export function MapaQuadro({ cargo }: { cargo: CargoMapa }) {
         {ampliado ? "Fechar" : "Ampliar"}
       </Button>
       <iframe
+        ref={quadro}
         key={tema}
         title="Mapa eleitoral"
-        src={`/mapa/arquivo?cargo=${cargo}&tema=${tema}`}
+        src={`/mapa/arquivo?cargo=${CARGO_DO_ARQUIVO_DO_MAPA}&tema=${tema}#visao=${cargo}`}
+        onLoad={() => setCarregado((vezes) => vezes + 1)}
         className="min-h-0 w-full flex-1 rounded-lg border border-border bg-background"
       />
     </dialog>

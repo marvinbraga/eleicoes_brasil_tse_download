@@ -4,6 +4,7 @@ from eleicoes.domain.mapa import (
     InvalidPonteError,
     Marca,
     MarkMissingError,
+    PaginaDoMapa,
     Pintura,
     RecortePintado,
     ponte_de_linhas,
@@ -546,3 +547,11 @@ def test_governor_leader_without_a_mark_is_left_out() -> None:
 def test_pintura_built_positionally_has_no_class_nor_governor() -> None:
     pintura = Pintura("1200138", "#112233", "22", "data:a")
     assert (pintura.classe, pintura.governador, pintura.peso_governador) == ("", "", "")
+
+
+def test_page_built_positionally_has_no_extra_cuts() -> None:
+    recorte = RecortePintado(None, (), (), ())
+    pagina = PaginaDoMapa(
+        2026, 1, "presidente", recorte, "{}", "{}", "{}", "m", "u", "p", "076", "", "", ""
+    )
+    assert pagina.recortes == {}

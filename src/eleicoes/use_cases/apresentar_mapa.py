@@ -8,6 +8,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Final
 
 from dotenv import load_dotenv
 
@@ -19,9 +20,14 @@ from eleicoes.domain.mapa import (
     MeshMismatchError,
     MeshMissingError,
     PaginaDoMapa,
+    RecortePintado,
     recorte_pintado,
 )
-from eleicoes.domain.presidente_governador import MunicipalPlace, view_from_places
+from eleicoes.domain.presidente_governador import (
+    CrossReportView,
+    MunicipalPlace,
+    view_from_places,
+)
 from eleicoes.domain.report import EXIT_FAILURE, EXIT_SUCCESS
 from eleicoes.domain.values import ElectionYear, Turno
 from eleicoes.ports.boletim_consulta import BoletimReader
@@ -38,6 +44,7 @@ Render = Callable[[PaginaDoMapa], str]
 OpenReport = Callable[[Path], bool]
 _MESH_DIR = Path("downloads/malha")
 _EXTERIOR_CSV = Path("dados/exterior.csv")
+_VIEWS: Final = ("presidente", "governador")
 
 
 @dataclass(frozen=True, slots=True)
@@ -256,16 +263,8 @@ def _page(
     mesh: MalhaCarregada,
 ) -> PaginaDoMapa:
     manifesto = mesh.manifesto
-    painted = recorte_pintado(
-        view_from_places(ano, turno, places),
-        cargo,
-        mesh.ponte,
-        mesh.marcas,
-        mesh.codigos_municipio,
-        mesh.codigos_uf,
-        manifesto.brasil_id,
-        exterior=mesh.exterior,
-    )
+    view = view_from_places(ano, turno, places)
+    painted = _paint(view, cargo, mesh)
     return PaginaDoMapa(
         ano,
         turno,
@@ -281,7 +280,39 @@ def _page(
         mesh.ol_js,
         mesh.ol_css,
         mesh.topojson_js,
+        _views(view, cargo, painted, mesh),
     )
+
+
+def _paint(view: CrossReportView, cargo: str, mesh: MalhaCarregada) -> RecortePintado:
+    return recorte_pintado(
+        view,
+        cargo,
+        mesh.ponte,
+        mesh.marcas,
+        mesh.codigos_municipio,
+        mesh.codigos_uf,
+        mesh.manifesto.brasil_id,
+        exterior=mesh.exterior,
+    )
+
+
+def _views(
+    view: CrossReportView,
+    cargo: str,
+    painted: RecortePintado,
+    mesh: MalhaCarregada,
+) -> dict[str, RecortePintado]:
+    recortes: dict[str, RecortePintado] = {}
+    for other in _VIEWS:
+        if other == cargo:
+            recortes[other] = painted
+            continue
+        try:
+            recortes[other] = _paint(view, other, mesh)
+        except MarkMissingError:
+            continue
+    return recortes
 
 
 def _write(destino: Path, html: str, open_report: OpenReport) -> bool:

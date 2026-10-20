@@ -18,6 +18,9 @@ const CSS_ESCURO = [
   "box-shadow: 0 2px 10px rgba(0,0,0,.6); }",
   "body #legenda { background: rgba(23,23,23,.92); border-color: #3a3a3a; color: #fafafa; }",
   "body #legenda .amostra { border-color: rgba(255,255,255,.4); }",
+  "body #visoes { background: rgba(23,23,23,.92); border-color: #3a3a3a; }",
+  "body #visoes button { color: #fafafa; }",
+  "body #visoes button[aria-pressed='true'] { background: #fafafa; color: #111111; }",
 ].join(" ");
 
 const FUNDO_CLARO = 'data-fundo="#ffffff"';
