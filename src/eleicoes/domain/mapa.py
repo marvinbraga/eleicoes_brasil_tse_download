@@ -1,7 +1,7 @@
 """Join of a cross-report leader to mesh codes. No file and no geometry."""
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Final
 
 from eleicoes.domain.errors import ElectionError
@@ -68,6 +68,7 @@ class MeshMismatchError(ElectionError):
 class Marca:
     cor: str
     logo: str
+    sigla: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,6 +105,7 @@ class RecortePintado:
     municipios: tuple[Pintura, ...]
     sem_poligono: tuple[str, ...]
     exterior: tuple[PontoPintado, ...] = ()
+    marcas: Mapping[str, Marca] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -169,13 +171,26 @@ def recorte_pintado(
     municipios, buracos = _municipios(view, cargo, ponte, marcas, codigos_municipio)
     pontos, buracos_exterior = _exterior(view, cargo, marcas, exterior or {})
     ufs, buracos_uf = _ufs(view, cargo, ponte, marcas, codigos_uf)
+    pais = _pais(view, cargo, marcas, brasil_id)
+    pintadas = (
+        *(() if pais is None else (pais,)),
+        *ufs,
+        *municipios,
+        *(ponto.pintura for ponto in pontos),
+    )
     return RecortePintado(
-        _pais(view, cargo, marcas, brasil_id),
+        pais,
         ufs,
         municipios,
         tuple(sorted(buracos + buracos_exterior + buracos_uf)),
         pontos,
+        _marcas_usadas(pintadas, marcas),
     )
+
+
+def _marcas_usadas(pintadas: tuple[Pintura, ...], marcas: Mapping[int, Marca]) -> dict[str, Marca]:
+    numeros = {numero for item in pintadas for numero in (item.numero, item.segundo) if numero}
+    return {numero: marcas[int(numero)] for numero in sorted(numeros) if int(numero) in marcas}
 
 
 def _marcas_faltando(

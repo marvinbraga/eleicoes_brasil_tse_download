@@ -45,6 +45,7 @@ _EXTERIOR_COLUMNS: Final = ["codigo", "nome", "lon", "lat"]
 _TSE_DIGITS: Final = 5
 _MAX_LON: Final = 180.0
 _MAX_LAT: Final = 90.0
+_MAX_ACRONYM: Final = 20
 
 
 class LocalMeshAssets:
@@ -109,7 +110,7 @@ class LocalMeshAssets:
         for key, value in _json_object(raw, _MARKS_NAME).items():
             party = _party(key)
             color, filename = _mark_fields(value, party)
-            found[party] = Marca(color, self._logo(party, filename))
+            found[party] = Marca(color, self._logo(party, filename), _acronym(value))
         return found
 
     def _logo(self, party: int, filename: str) -> str:
@@ -238,6 +239,19 @@ def _mark_fields(value: object, party: int) -> tuple[str, str]:
     if _COLOR.fullmatch(color) is None or not _safe_basename(filename):
         raise MarkInvalidError(party)
     return color, filename
+
+
+def _acronym(value: object) -> str:
+    mapped = _as_map(value, _MARKS_NAME)
+    if "sigla" not in mapped:
+        return ""
+    raw = mapped["sigla"]
+    if not isinstance(raw, str):
+        raise MeshMismatchError(_MARKS_NAME)
+    acronym = raw.strip()
+    if not 0 < len(acronym) <= _MAX_ACRONYM:
+        raise MeshMismatchError(_MARKS_NAME)
+    return acronym
 
 
 def _mark_text(value: object, party: int) -> str:

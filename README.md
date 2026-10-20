@@ -318,7 +318,9 @@ Antes da primeira página, grave a malha medida:
 uv run python scripts/baixar_malha.py
 ```
 
-Coloque as cores e as logomarcas em `downloads/malha/marcas.json` e `downloads/malha/logomarcas/`. A chave é o número do partido. O valor tem `cor` (`#` e seis dígitos) e `arquivo` (o nome do PNG ou do SVG). Sem a cor ou a logomarca de um líder, o comando para e não escreve o HTML.
+Coloque as cores e as logomarcas em `downloads/malha/marcas.json` e `downloads/malha/logomarcas/`. A chave é o número do partido. O valor tem `cor` (`#` e seis dígitos), `arquivo` (o nome do PNG ou do SVG) e, se quiser, `sigla` (até 20 caracteres), que aparece na legenda e no cartão do mapa. Sem a cor ou a logomarca de um líder, o comando para e não escreve o HTML.
+
+O TSE não publica as logomarcas. O TRE-BA mantém um PDF com os partidos registrados no TSE e o símbolo de cada um, na página [Partidos registrados no TSE e suas variações](https://www.tre-ba.jus.br/partidos/partidos-registrados-no-tse/arquivos/tre-ba-partidos-politicos-registrados-no-tse-e-suas-variacoes). As siglas e os números oficiais estão em [Partidos registrados no TSE](https://www.tse.jus.br/partidos/partidos-registrados-no-tse/registrados-no-tse).
 
 ```bash
 uv run python scripts/relatorio_mapa.py --ano 2026 --turno 1 --cargo presidente

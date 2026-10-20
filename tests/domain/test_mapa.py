@@ -352,3 +352,106 @@ def test_paint_without_exterior_keeps_abroad_places_as_holes() -> None:
 
 def test_recorte_built_positionally_has_no_points() -> None:
     assert RecortePintado(None, (), (), ()).exterior == ()
+
+
+def test_recorte_built_positionally_has_no_marks() -> None:
+    assert RecortePintado(None, (), (), ()).marcas == {}
+
+
+def test_marks_hold_leaders_and_runner_ups_of_every_painted_item() -> None:
+    painted = _exterior_paint("presidente", {"29386": (-9.14, 38.72)})
+    assert painted.marcas == {
+        "22": Marca("#112233", "data:a"),
+        "13": Marca("#AABBCC", "data:b"),
+    }
+
+
+def test_abroad_point_runner_up_contributes_its_mark() -> None:
+    view = view_from_places(
+        2026,
+        1,
+        (
+            _place("AC", "01007", "Bujari", 22, 22),
+            MunicipalPlace(
+                "ZZ",
+                "29386",
+                "Lisboa",
+                CargoTally((PartyTally(22, 7, 0), PartyTally(45, 2, 0)), 0, 0),
+                None,
+            ),
+        ),
+    )
+    marcas = {22: Marca("#112233", "data:a"), 45: Marca("#0000FF", "data:c", "PSDB")}
+    painted = recorte_pintado(
+        view,
+        "presidente",
+        _ponte(),
+        marcas,
+        frozenset({"1200138"}),
+        frozenset({"12"}),
+        "076",
+        exterior={"29386": (-9.14, 38.72)},
+    )
+    assert painted.marcas == {"22": marcas[22], "45": marcas[45]}
+
+
+def test_runner_up_without_a_mark_is_left_out() -> None:
+    president = CargoTally((PartyTally(22, 5, 0), PartyTally(13, 3, 0)), 0, 0)
+    view = view_from_places(2026, 1, (MunicipalPlace("AC", "01007", "Bujari", president, None),))
+    painted = recorte_pintado(
+        view,
+        "presidente",
+        _ponte(),
+        {22: Marca("#112233", "data:a")},
+        frozenset({"1200138"}),
+        frozenset({"12"}),
+        "076",
+    )
+    assert painted.marcas == {"22": Marca("#112233", "data:a")}
+
+
+def test_hole_places_do_not_contribute_marks() -> None:
+    bujari = CargoTally((PartyTally(22, 10, 0), PartyTally(13, 5, 0)), 0, 0)
+    hole = CargoTally((PartyTally(45, 1, 0),), 0, 0)
+    view = view_from_places(
+        2026,
+        1,
+        (
+            MunicipalPlace("AC", "01007", "Bujari", bujari, None),
+            MunicipalPlace("SP", "71072", "São Paulo", hole, None),
+            MunicipalPlace("ZZ", "29386", "Lisboa", hole, None),
+        ),
+    )
+    marcas = {
+        22: Marca("#112233", "data:a"),
+        45: Marca("#0000FF", "data:c"),
+        13: Marca("#AABBCC", "data:b"),
+    }
+    painted = recorte_pintado(
+        view, "presidente", _ponte(), marcas, frozenset({"1200138"}), frozenset({"12"}), "076"
+    )
+    assert {"São Paulo", "São Paulo (SP)", "Lisboa", "Exterior (ZZ)"} <= set(painted.sem_poligono)
+    assert painted.marcas == {"22": marcas[22], "13": marcas[13]}
+
+
+def test_governor_marks_use_the_governor_readings() -> None:
+    president = CargoTally((PartyTally(22, 5, 0), PartyTally(10, 3, 0)), 0, 0)
+    governor = CargoTally((PartyTally(13, 6, 0), PartyTally(45, 2, 0)), 0, 0)
+    view = view_from_places(
+        2026, 1, (MunicipalPlace("AC", "01007", "Bujari", president, governor),)
+    )
+    marcas = {
+        22: Marca("#112233", "data:a"),
+        10: Marca("#101010", "data:d"),
+        13: Marca("#AABBCC", "data:b"),
+        45: Marca("#0000FF", "data:c"),
+    }
+    painted = recorte_pintado(
+        view, "governador", _ponte(), marcas, frozenset({"1200138"}), frozenset({"12"}), "076"
+    )
+    assert painted.marcas == {"13": marcas[13], "45": marcas[45]}
+
+
+def test_mark_acronym_defaults_to_empty() -> None:
+    assert Marca("#112233", "data:a").sigla == ""
+    assert Marca("#112233", "data:a", "PL").sigla == "PL"

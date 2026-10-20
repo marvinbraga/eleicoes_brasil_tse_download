@@ -54,6 +54,20 @@ _PAGE_CSS: Final = (
     " #detalhe strong { display: block; font-size: 14px; margin-bottom: .25em; }"
     " #detalhe .partido { display: flex; align-items: center; gap: .4em; }"
     " #detalhe img { height: 20px; width: auto; }"
+    " #legenda { position: absolute; top: .5em; right: .5em; max-height: calc(100% - 1em);"
+    " overflow: auto; background: rgba(255,255,255,.92); border: 1px solid #cccccc;"
+    " border-radius: 6px; padding: .4em .6em; font: 12px/1.4 sans-serif; color: #111111; }"
+    " #legenda button { font: bold 12px sans-serif; background: none; border: 0; padding: 0;"
+    " color: inherit; cursor: pointer; }"
+    " #legenda button::after { content: ' ▾'; }"
+    " #legenda button[aria-expanded='false']::after { content: ' ▸'; }"
+    " #legenda ul { list-style: none; margin: .4em 0 0; padding: 0; }"
+    " #legenda li { display: flex; align-items: center; gap: .45em; margin: .3em 0; }"
+    " #legenda .amostra { width: 12px; height: 12px; border-radius: 2px; flex: none;"
+    " border: 1px solid rgba(0,0,0,.35); }"
+    " #legenda .logo { width: 40px; height: 20px; flex: none; object-fit: contain; }"
+    " #legenda small { display: block; opacity: .75; }"
+    " #legenda .nota { margin: .4em 0 0; max-width: 16em; opacity: .75; }"
 )
 _PAGE_SCRIPT: Final = """\
 (function () {
@@ -538,9 +552,86 @@ _PAGE_SCRIPT: Final = """\
       linha.appendChild(imagem);
     }
     linha.appendChild(document.createTextNode(
-      posicao + " · " + numero + " · " + percentual(votos, validos) + " (" + milhar(votos) + ")"
+      posicao + " · " + nomeDoPartido(numero) + " · " + percentual(votos, validos) +
+        " (" + milhar(votos) + ")"
     ));
     return linha;
+  }
+
+  function nomeDoPartido(numero) {
+    var sigla = (pintura.siglas || {})[numero];
+    return sigla ? sigla + " " + numero : String(numero);
+  }
+
+  function montarLegenda() {
+    var contagem = {};
+    function contar(itens, campo) {
+      for (var i = 0; i < itens.length; i++) {
+        var numero = String(itens[i].numero);
+        var linha = contagem[numero] || {numero: numero, cor: itens[i].cor,
+          pais: 0, ufs: 0, municipios: 0, exterior: 0};
+        linha[campo] += 1;
+        contagem[numero] = linha;
+      }
+    }
+    contar(pintura.pais ? [pintura.pais] : [], "pais");
+    contar(pintura.ufs, "ufs");
+    contar(pintura.municipios, "municipios");
+    contar(pintura.exterior || [], "exterior");
+    var linhas = Object.keys(contagem).map(function (numero) {
+      return contagem[numero];
+    });
+    linhas.sort(function (a, b) {
+      return b.municipios - a.municipios || b.ufs - a.ufs || b.exterior - a.exterior ||
+        Number(a.numero) - Number(b.numero);
+    });
+    var lista = painelLegenda.querySelector("ul");
+    for (var i = 0; i < linhas.length; i++) {
+      lista.appendChild(itemDaLegenda(linhas[i]));
+    }
+  }
+
+  function itemDaLegenda(linha) {
+    var item = document.createElement("li");
+    var amostra = elemento("span", "");
+    amostra.className = "amostra";
+    amostra.style.background = linha.cor;
+    item.appendChild(amostra);
+    var logo = pintura.logos[linha.numero];
+    var imagem = document.createElement(logo ? "img" : "span");
+    imagem.className = "logo";
+    if (logo) {
+      imagem.src = logo;
+      imagem.alt = "";
+    }
+    item.appendChild(imagem);
+    var texto = elemento("span", nomeDoPartido(linha.numero));
+    texto.appendChild(elemento("small", resumoDaLideranca(linha)));
+    item.appendChild(texto);
+    return item;
+  }
+
+  function resumoDaLideranca(linha) {
+    var partes = [];
+    if (linha.pais) {
+      partes.push("Brasil");
+    }
+    if (linha.ufs) {
+      partes.push(linha.ufs + (linha.ufs === 1 ? " UF" : " UFs"));
+    }
+    if (linha.municipios) {
+      var rotuloMunicipio = linha.municipios === 1 ? " município" : " municípios";
+      partes.push(milhar(linha.municipios) + rotuloMunicipio);
+    }
+    if (linha.exterior) {
+      partes.push(linha.exterior + " no exterior");
+    }
+    return "lidera: " + partes.join(" · ");
+  }
+
+  function alternarLegenda(aberta) {
+    botaoLegenda.setAttribute("aria-expanded", aberta ? "true" : "false");
+    itensDaLegenda.hidden = !aberta;
   }
 
   function elemento(tag, texto) {
@@ -553,6 +644,14 @@ _PAGE_SCRIPT: Final = """\
   var painelZoom = document.getElementById("zoom");
   var painelDetalhe = document.getElementById("detalhe");
   var cartao = new ol.Overlay({element: painelDetalhe, stopEvent: false});
+  var painelLegenda = document.getElementById("legenda");
+  var botaoLegenda = painelLegenda.querySelector("button");
+  var itensDaLegenda = document.getElementById("legenda-itens");
+  montarLegenda();
+  alternarLegenda(painelLegenda.parentElement.clientWidth >= 640);
+  botaoLegenda.addEventListener("click", function () {
+    alternarLegenda(botaoLegenda.getAttribute("aria-expanded") !== "true");
+  });
 
   var mapa = new ol.Map({
     target: "mapa",
@@ -564,7 +663,8 @@ _PAGE_SCRIPT: Final = """\
       camada(colecaoDePontos(pintura.exterior || []), estiloPonto, null, null, true)
     ],
     controls: ol.control.defaults.defaults().extend([
-      new ol.control.Control({element: painelZoom})
+      new ol.control.Control({element: painelZoom}),
+      new ol.control.Control({element: painelLegenda})
     ]),
     overlays: [cartao],
     view: vista
@@ -600,7 +700,11 @@ def html_do_mapa(pagina: PaginaDoMapa) -> str:
         '<body data-fundo="#ffffff">\n'
         f"<h1>{title}</h1>\n"
         '<div id="mapa"><div id="zoom" aria-live="polite"></div>'
-        '<div id="detalhe" role="tooltip" hidden></div></div>\n'
+        '<div id="detalhe" role="tooltip" hidden></div>'
+        '<div id="legenda" class="ol-unselectable"><button type="button" aria-expanded="true"'
+        ' aria-controls="legenda-itens">Partidos</button><div id="legenda-itens">'
+        '<ul></ul><p class="nota">Tom mais forte: fatia maior dos votos válidos do líder.</p>'
+        "</div></div></div>\n"
         f"{_footer(pagina)}\n"
         f"{_scripts(pagina)}\n"
         "</body>\n"
@@ -660,6 +764,7 @@ def _payload(pagina: PaginaDoMapa) -> dict[str, object]:
     country = None if recorte.pais is None else _item(recorte.pais)
     return {
         "logos": _logos(recorte),
+        "siglas": _siglas(recorte),
         "pais": country,
         "ufs": [_item(item) for item in recorte.ufs],
         "municipios": [_item(item) for item in recorte.municipios],
@@ -675,7 +780,13 @@ def _logos(recorte: RecortePintado) -> dict[str, str]:
     logos: dict[str, str] = {}
     for painting in _paintings(recorte):
         logos.setdefault(painting.numero, painting.logo)
+    for numero, marca in recorte.marcas.items():
+        logos.setdefault(numero, marca.logo)
     return logos
+
+
+def _siglas(recorte: RecortePintado) -> dict[str, str]:
+    return {numero: marca.sigla for numero, marca in recorte.marcas.items() if marca.sigla}
 
 
 def _paintings(recorte: RecortePintado) -> tuple[Pintura, ...]:

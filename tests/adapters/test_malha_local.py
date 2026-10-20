@@ -12,8 +12,9 @@ _ONE_PIXEL_PNG = base64.b64decode(
 )
 
 
-def _write_fixture(tmp_path: Path, png: bytes | None = None) -> None:
+def _write_fixture(tmp_path: Path, png: bytes | None = None, marcas: str | None = None) -> None:
     logo = _ONE_PIXEL_PNG if png is None else png
+    marks = '{"22": {"cor": "#112233", "arquivo": "22.png"}}' if marcas is None else marcas
     (tmp_path / "vendor").mkdir()
     (tmp_path / "logomarcas").mkdir()
     (tmp_path / "manifesto.json").write_text(_manifesto(), encoding="utf-8")
@@ -24,10 +25,7 @@ def _write_fixture(tmp_path: Path, png: bytes | None = None) -> None:
     (tmp_path / "vendor" / "ol.css").write_text(".ol {}", encoding="utf-8")
     (tmp_path / "vendor" / "topojson-client.min.js").write_text("var topojson=1;", encoding="utf-8")
     (tmp_path / "municipio_tse_ibge.csv").write_bytes(_bridge_csv())
-    (tmp_path / "marcas.json").write_text(
-        '{"22": {"cor": "#112233", "arquivo": "22.png"}}',
-        encoding="utf-8",
-    )
+    (tmp_path / "marcas.json").write_text(marks, encoding="utf-8")
     (tmp_path / "logomarcas" / "22.png").write_bytes(logo)
 
 
@@ -188,3 +186,31 @@ def test_wrong_exterior_header_is_a_mismatch(tmp_path: Path) -> None:
     exterior.write_text("code,name,x,y\n29386,Lisboa,-9.1,38.7\n", encoding="utf-8")
     with pytest.raises(MeshMismatchError):
         LocalMeshAssets(tmp_path, exterior).load()
+
+
+def test_mark_reads_the_party_acronym(tmp_path: Path) -> None:
+    _write_fixture(
+        tmp_path, marcas='{"22": {"cor": "#112233", "arquivo": "22.png", "sigla": " PL "}}'
+    )
+    assert LocalMeshAssets(tmp_path).load().marcas[22].sigla == "PL"
+
+
+def test_mark_without_acronym_has_an_empty_one(tmp_path: Path) -> None:
+    _write_fixture(tmp_path)
+    assert LocalMeshAssets(tmp_path).load().marcas[22].sigla == ""
+
+
+@pytest.mark.parametrize("sigla", ['""', '"   "', json.dumps("X" * 21), "22", "null", '["PL"]'])
+def test_bad_mark_acronym_is_a_mismatch(tmp_path: Path, sigla: str) -> None:
+    marks = f'{{"22": {{"cor": "#112233", "arquivo": "22.png", "sigla": {sigla}}}}}'
+    _write_fixture(tmp_path, marcas=marks)
+    with pytest.raises(MeshMismatchError) as error:
+        LocalMeshAssets(tmp_path).load()
+    assert error.value.nome == "marcas.json"
+
+
+def test_twenty_character_acronym_is_accepted(tmp_path: Path) -> None:
+    sigla = "X" * 20
+    marks = f'{{"22": {{"cor": "#112233", "arquivo": "22.png", "sigla": "{sigla}"}}}}'
+    _write_fixture(tmp_path, marcas=marks)
+    assert LocalMeshAssets(tmp_path).load().marcas[22].sigla == sigla

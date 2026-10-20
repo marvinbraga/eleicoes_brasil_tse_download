@@ -4,7 +4,7 @@ import json
 from dataclasses import replace
 
 from eleicoes.adapters.html_mapa import html_do_mapa
-from eleicoes.domain.mapa import PaginaDoMapa, Pintura, PontoPintado, RecortePintado
+from eleicoes.domain.mapa import Marca, PaginaDoMapa, Pintura, PontoPintado, RecortePintado
 
 _LOGO = "data:image/png;base64,QQ=="
 _MUNICIPIOS = (
@@ -240,6 +240,39 @@ def test_abroad_places_become_points_on_top() -> None:
     assert "estiloPonto" not in mundo
 
 
+def test_legend_lists_parties_with_marks_and_acronyms() -> None:
+    page = _page()
+    marcas = {
+        "22": Marca("#112233", _LOGO, "PL"),
+        "13": Marca("#e15759", "data:image/png;base64,Qw==", "PT"),
+        "55": Marca("#aabbcc", "data:image/png;base64,RA==", ""),
+    }
+    html = html_do_mapa(replace(page, recorte=replace(page.recorte, marcas=marcas)))
+    pintura = json.loads(_block(html, "pintura"))
+
+    assert pintura["siglas"] == {"22": "PL", "13": "PT"}
+    assert pintura["logos"] == {
+        "22": _LOGO,
+        "13": "data:image/png;base64,Qw==",
+        "55": "data:image/png;base64,RA==",
+    }
+    assert '<div id="legenda" class="ol-unselectable">' in html
+    assert 'aria-controls="legenda-itens">Partidos</button>' in html
+    assert "Tom mais forte: fatia maior dos votos válidos do líder." in html
+    assert "#legenda {" in html
+    assert "function montarLegenda()" in html
+    assert "function resumoDaLideranca(linha)" in html
+    assert "new ol.control.Control({element: painelLegenda})" in html
+    assert "alternarLegenda(painelLegenda.parentElement.clientWidth >= 640);" in html
+    assert 'return sigla ? sigla + " " + numero : String(numero);' in html
+    assert 'posicao + " · " + nomeDoPartido(numero)' in html
+    assert "amostra.style.background = linha.cor;" in html
+
+
+def test_page_without_marks_has_no_acronyms() -> None:
+    assert json.loads(_block(html_do_mapa(_page()), "pintura"))["siglas"] == {}
+
+
 def test_page_without_abroad_points_has_empty_list() -> None:
     assert json.loads(_block(html_do_mapa(_page()), "pintura"))["exterior"] == []
 
@@ -250,7 +283,7 @@ def test_hover_highlights_and_details_the_place() -> None:
     html = html_do_mapa(replace(page, recorte=replace(page.recorte, municipios=(city,))))
     pintura = json.loads(_block(html, "pintura"))
 
-    assert '<div id="detalhe" role="tooltip" hidden></div></div>' in html
+    assert '<div id="detalhe" role="tooltip" hidden></div>' in html
     assert "#detalhe {" in html
     assert "pointer-events: none" in html
     assert pintura["municipios"][0]["segundo"] == "13"
