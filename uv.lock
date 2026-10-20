@@ -509,6 +509,8 @@ source = { editable = "." }
 dependencies = [
     { name = "asn1tools" },
     { name = "fastapi" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "psycopg", extra = ["c", "pool"] },
     { name = "python-dotenv" },
     { name = "requests" },
@@ -530,6 +532,7 @@ dev = [
 requires-dist = [
     { name = "asn1tools", specifier = ">=0.169.0" },
     { name = "fastapi", specifier = ">=0.115,<1" },
+    { name = "numpy", specifier = ">=2,<3" },
     { name = "psycopg", extras = ["c", "pool"], specifier = ">=3.2,<4" },
     { name = "python-dotenv", specifier = ">=1.2.4" },
     { name = "requests", specifier = ">=2.28.1,<3" },
