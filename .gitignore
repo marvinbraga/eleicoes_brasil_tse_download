@@ -16,7 +16,7 @@ downloads/
 /logs/
 eggs/
 .eggs/
-lib/
+/lib/
 lib64/
 parts/
 sdist/
@@ -52,7 +52,7 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 cover/
-relatorios/
+/relatorios/
 
 # Translations
 *.mo
