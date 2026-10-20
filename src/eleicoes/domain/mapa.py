@@ -19,7 +19,8 @@ _COLUMNS: Final = (
     "CD_MUNICIPIO_IBGE",
     "NM_MUNICIPIO_IBGE",
 )
-_CARGOS: Final = frozenset({"presidente", "governador"})
+_CARGOS: Final = frozenset({"presidente", "governador", "cruzamento"})
+_GOVERNADOR: Final = "governador"
 _EXTERIOR: Final = "ZZ"
 
 
@@ -83,6 +84,9 @@ class Pintura:
     votos_segundo: int = 0
     branco: int = 0
     nulo: int = 0
+    classe: str = ""
+    governador: str = ""
+    peso_governador: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -189,7 +193,12 @@ def recorte_pintado(
 
 
 def _marcas_usadas(pintadas: tuple[Pintura, ...], marcas: Mapping[int, Marca]) -> dict[str, Marca]:
-    numeros = {numero for item in pintadas for numero in (item.numero, item.segundo) if numero}
+    numeros = {
+        numero
+        for item in pintadas
+        for numero in (item.numero, item.segundo, item.governador)
+        if numero
+    }
     return {numero: marcas[int(numero)] for numero in sorted(numeros) if int(numero) in marcas}
 
 
@@ -304,6 +313,7 @@ def _pintura(codigo: str, place: PlaceReading, cargo: str, marcas: Mapping[int, 
     leader = reading.leader.partido
     marca = marcas[leader]
     segundo, votos_segundo = _segundo(reading)
+    governador, peso_governador = _governador(place)
     return Pintura(
         codigo,
         marca.cor,
@@ -315,7 +325,18 @@ def _pintura(codigo: str, place: PlaceReading, cargo: str, marcas: Mapping[int, 
         votos_segundo,
         reading.branco,
         reading.nulo,
+        place.classe,
+        governador,
+        peso_governador,
     )
+
+
+def _governador(place: PlaceReading) -> tuple[str, str]:
+    reading = place.governador
+    if reading is None or reading.leader is None:
+        return "", ""
+    leader = reading.leader
+    return str(leader.partido), f"{leader.votos}/{reading.valid}"
 
 
 def _segundo(reading: CargoReading) -> tuple[str, int]:
@@ -346,6 +367,6 @@ def _peso(place: PlaceReading, cargo: str) -> str:
 
 
 def _leitura(place: PlaceReading, cargo: str) -> CargoReading | None:
-    if cargo == "presidente":
-        return place.presidente
-    return place.governador
+    if cargo == _GOVERNADOR:
+        return place.governador
+    return place.presidente

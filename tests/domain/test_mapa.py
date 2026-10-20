@@ -4,6 +4,7 @@ from eleicoes.domain.mapa import (
     InvalidPonteError,
     Marca,
     MarkMissingError,
+    Pintura,
     RecortePintado,
     ponte_de_linhas,
     recorte_pintado,
@@ -455,3 +456,93 @@ def test_governor_marks_use_the_governor_readings() -> None:
 def test_mark_acronym_defaults_to_empty() -> None:
     assert Marca("#112233", "data:a").sigla == ""
     assert Marca("#112233", "data:a", "PL").sigla == "PL"
+
+
+def _cross_paint(cargo: str) -> RecortePintado:
+    president = CargoTally((PartyTally(22, 6, 0), PartyTally(13, 4, 0)), 2, 1)
+    governor = CargoTally((PartyTally(45, 3, 0), PartyTally(22, 2, 0)), 0, 0)
+    view = view_from_places(
+        2026,
+        1,
+        (
+            MunicipalPlace("AC", "01007", "Bujari", president, governor),
+            MunicipalPlace("ZZ", "29386", "Lisboa", president, None),
+        ),
+    )
+    marcas = {
+        22: Marca("#112233", "data:a"),
+        13: Marca("#AABBCC", "data:b"),
+        45: Marca("#0000FF", "data:c"),
+    }
+    return recorte_pintado(
+        view,
+        cargo,
+        _ponte(),
+        marcas,
+        frozenset({"1200138"}),
+        frozenset({"12"}),
+        "076",
+        exterior={"29386": (-9.14, 38.72)},
+    )
+
+
+def test_cross_map_paints_like_the_president_map() -> None:
+    cross = _cross_paint("cruzamento")
+    president = _cross_paint("presidente")
+    assert cross == president
+    [bujari] = cross.municipios
+    assert (bujari.numero, bujari.peso, bujari.segundo, bujari.votos_segundo) == (
+        "22",
+        "6/10",
+        "13",
+        4,
+    )
+    assert (bujari.branco, bujari.nulo) == (2, 1)
+    assert [ponto.pintura.codigo for ponto in cross.exterior] == ["29386"]
+
+
+def test_paint_carries_the_place_class() -> None:
+    painted = _cross_paint("cruzamento")
+    assert painted.municipios[0].classe == "em_aberto"
+    assert painted.exterior[0].pintura.classe == "sem_governador"
+
+
+def test_paint_carries_the_governor_leader_and_weight() -> None:
+    for cargo in ("presidente", "governador", "cruzamento"):
+        painted = _cross_paint(cargo)
+        assert painted.municipios[0].governador == "45"
+        assert painted.municipios[0].peso_governador == "3/5"
+
+
+def test_place_without_governor_leaves_the_governor_fields_empty() -> None:
+    ponto = _cross_paint("cruzamento").exterior[0].pintura
+    assert ponto.governador == ""
+    assert ponto.peso_governador == ""
+
+
+def test_marks_include_the_governor_leader_for_every_cargo() -> None:
+    for cargo in ("presidente", "cruzamento"):
+        assert "45" in _cross_paint(cargo).marcas
+
+
+def test_governor_leader_without_a_mark_is_left_out() -> None:
+    governor = CargoTally((PartyTally(77, 3, 0),), 0, 0)
+    view = view_from_places(
+        2026, 1, (MunicipalPlace("AC", "01007", "Bujari", _tally(22), governor),)
+    )
+    painted = recorte_pintado(
+        view,
+        "cruzamento",
+        _ponte(),
+        {22: Marca("#112233", "data:a")},
+        frozenset({"1200138"}),
+        frozenset({"12"}),
+        "076",
+    )
+    assert painted.municipios[0].governador == "77"
+    assert painted.marcas == {"22": Marca("#112233", "data:a")}
+
+
+def test_pintura_built_positionally_has_no_class_nor_governor() -> None:
+    pintura = Pintura("1200138", "#112233", "22", "data:a")
+    assert (pintura.classe, pintura.governador, pintura.peso_governador) == ("", "", "")

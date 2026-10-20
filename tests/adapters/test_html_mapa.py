@@ -126,13 +126,15 @@ def test_page_renders_the_leader_choropleth() -> None:
         "votosSegundo": 0,
         "branco": 0,
         "nulo": 0,
+        "classe": "",
+        "governador": "",
+        "pesoGovernador": "",
     }
     assert "properties.peso = item.peso" in html
     assert "properties.nome = item.nome" in html
     assert 'data-fundo="#ffffff"' in html
-    assert (
-        'var texto = rotulo(feature.get("nome"), feature.get("numero"), feature.get("peso"));'
-    ) in html
+    assert 'rotulo(feature.get("nome"), feature.get("numero"), feature.get("peso"));' in html
+    assert "var texto = CRUZAMENTO ? rotuloCruzado(feature) :" in html
     assert "function rotulo(nome, numero, peso)" in html
     assert "if (numerador === 0)" in html
     assert "milhar(denominador)" in html
@@ -224,6 +226,9 @@ def test_abroad_places_become_points_on_top() -> None:
             "votosSegundo": 0,
             "branco": 0,
             "nulo": 0,
+            "classe": "",
+            "governador": "",
+            "pesoGovernador": "",
             "lon": -9.1393,
             "lat": 38.7223,
         }
@@ -269,6 +274,41 @@ def test_legend_lists_parties_with_marks_and_acronyms() -> None:
     assert "amostra.style.background = linha.cor;" in html
 
 
+def test_cross_map_paints_by_class_and_explains_it() -> None:
+    page = _page(cargo="cruzamento")
+    city = replace(
+        _paint("1200138"), classe="terreno_de_virada", governador="13", peso_governador="5/9"
+    )
+    html = html_do_mapa(replace(page, recorte=replace(page.recorte, municipios=(city,))))
+    pintura = json.loads(_block(html, "pintura"))
+
+    assert "<title>Mapa de presidente × governador — 2026, turno 1</title>" in html
+    assert pintura["cargo"] == "cruzamento"
+    item = pintura["municipios"][0]
+    assert (item["classe"], item["governador"], item["pesoGovernador"]) == (
+        "terreno_de_virada",
+        "13",
+        "5/9",
+    )
+    assert 'var CRUZAMENTO = pintura.cargo === "cruzamento";' in html
+    assert 'cor: "#d95f02"' in html
+    assert 'return CRUZAMENTO && classe ? classe.cor : feature.get("cor");' in html
+    assert "function rotuloCruzado(feature)" in html
+    assert "function detalharClasse(feature)" in html
+    assert "function detalharGovernador(feature)" in html
+    assert "function montarLegendaCruzada()" in html
+    assert "properties.pesoGovernador = item.pesoGovernador;" in html
+    mundo = html.split("function estiloMundo()", 1)[1].split("function estilo(", 1)[0]
+    assert "CLASSES" not in mundo
+
+
+def test_leader_map_keeps_the_leader_title() -> None:
+    html = html_do_mapa(_page())
+
+    assert "<title>Mapa de presidente — 2026, turno 1</title>" in html
+    assert json.loads(_block(html, "pintura"))["cargo"] == "presidente"
+
+
 def test_page_without_marks_has_no_acronyms() -> None:
     assert json.loads(_block(html_do_mapa(_page()), "pintura"))["siglas"] == {}
 
@@ -292,7 +332,7 @@ def test_hover_highlights_and_details_the_place() -> None:
     assert pintura["municipios"][0]["nulo"] == 1
     assert "properties.votosSegundo = item.votosSegundo;" in html
     assert "var emDestaque = feature === destacado;" in html
-    assert 'misturar(cor, emDestaque ? "1/1" : feature.get("peso"))' in html
+    assert 'misturar(corDoLugar(feature), emDestaque ? "1/1" : feature.get("peso"))' in html
     assert 'font: emDestaque ? "bold 14px sans-serif" : "12px sans-serif"' in html
     assert 'zIndex: emDestaque ? Z_DESTAQUE : votosValidos(feature.get("peso"))' in html
     assert "new ol.Overlay({element: painelDetalhe, stopEvent: false})" in html

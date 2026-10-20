@@ -7,6 +7,7 @@ from typing import Final
 from eleicoes.domain.mapa import PaginaDoMapa, Pintura, PontoPintado, RecortePintado
 
 _IBGE: Final = "Malha municipal e de estados: IBGE. Licença compatível com CC BY 4.0."
+_CARGO_NO_TITULO: Final = {"cruzamento": "presidente × governador"}
 _REGIONS: Final = (
     "O recorte das regiões não entra neste mapa. A malha desse recorte ainda não foi medida."
 )
@@ -54,7 +55,12 @@ _PAGE_CSS: Final = (
     " #detalhe strong { display: block; font-size: 14px; margin-bottom: .25em; }"
     " #detalhe .partido { display: flex; align-items: center; gap: .4em; }"
     " #detalhe img { height: 20px; width: auto; }"
+    " #detalhe .secao { margin-top: .4em; font-weight: bold; }"
+    " #detalhe .classe { display: flex; align-items: center; gap: .4em; font-weight: bold; }"
+    " #detalhe .amostra { width: 12px; height: 12px; border-radius: 2px; flex: none; }"
+    " #detalhe small { display: block; max-width: 22em; white-space: normal; opacity: .8; }"
     " #legenda { position: absolute; top: .5em; right: .5em; max-height: calc(100% - 1em);"
+    " max-width: min(20em, calc(100% - 4em)); box-sizing: border-box;"
     " overflow: auto; background: rgba(255,255,255,.92); border: 1px solid #cccccc;"
     " border-radius: 6px; padding: .4em .6em; font: 12px/1.4 sans-serif; color: #111111; }"
     " #legenda button { font: bold 12px sans-serif; background: none; border: 0; padding: 0;"
@@ -75,6 +81,30 @@ _PAGE_SCRIPT: Final = """\
   var municipios = JSON.parse(document.getElementById("municipios").textContent);
   var ufs = JSON.parse(document.getElementById("ufs").textContent);
   var paises = JSON.parse(document.getElementById("paises").textContent);
+  var CRUZAMENTO = pintura.cargo === "cruzamento";
+  var ORDEM_DAS_CLASSES = ["consolidacao", "terreno_de_virada", "em_aberto", "sem_governador"];
+  var CLASSES = {
+    consolidacao: {
+      rotulo: "Consolidação",
+      cor: "#1b9e77",
+      definicao: "O governador é do mesmo partido que lidera a presidência aqui."
+    },
+    terreno_de_virada: {
+      rotulo: "Terreno de virada",
+      cor: "#d95f02",
+      definicao: "O governador é do partido que ficou em segundo na presidência aqui."
+    },
+    em_aberto: {
+      rotulo: "Em aberto",
+      cor: "#7570b3",
+      definicao: "O governador é de um partido fora dos dois primeiros da presidência aqui."
+    },
+    sem_governador: {
+      rotulo: "Sem governador",
+      cor: "#8c8c8c",
+      definicao: "Há votação para presidente e não há para governador."
+    }
+  };
 
   function aplicar(topology, objectName, itens) {
     var porCodigo = {};
@@ -106,6 +136,9 @@ _PAGE_SCRIPT: Final = """\
       properties.votosSegundo = item.votosSegundo;
       properties.branco = item.branco;
       properties.nulo = item.nulo;
+      properties.classe = item.classe;
+      properties.governador = item.governador;
+      properties.pesoGovernador = item.pesoGovernador;
     }
   }
 
@@ -145,7 +178,7 @@ _PAGE_SCRIPT: Final = """\
       return estiloMundo();
     }
     var emDestaque = feature === destacado;
-    var tinta = misturar(cor, emDestaque ? "1/1" : feature.get("peso"));
+    var tinta = misturar(corDoLugar(feature), emDestaque ? "1/1" : feature.get("peso"));
     var estilos = [new ol.style.Style({
       zIndex: emDestaque ? Z_DESTAQUE : 0,
       fill: new ol.style.Fill({color: tinta.fill}),
@@ -172,8 +205,26 @@ _PAGE_SCRIPT: Final = """\
     return estilos;
   }
 
+  function corDoLugar(feature) {
+    var classe = CLASSES[feature.get("classe")];
+    return CRUZAMENTO && classe ? classe.cor : feature.get("cor");
+  }
+
+  function rotuloCruzado(feature) {
+    var linhas = [];
+    if (feature.get("nome")) {
+      linhas.push(String(feature.get("nome")));
+    }
+    var classe = CLASSES[feature.get("classe")];
+    linhas.push(classe ? classe.rotulo : "—");
+    var governador = feature.get("governador");
+    linhas.push("Pres. " + feature.get("numero") + (governador ? " · Gov. " + governador : ""));
+    return linhas.join("\\n");
+  }
+
   function textoDoRotulo(feature, resolution, completo) {
-    var texto = rotulo(feature.get("nome"), feature.get("numero"), feature.get("peso"));
+    var texto = CRUZAMENTO ? rotuloCruzado(feature) :
+      rotulo(feature.get("nome"), feature.get("numero"), feature.get("peso"));
     var nome = feature.get("nome");
     if (completo || !ehMunicipio(feature) || nome == null || String(nome) === "") {
       return texto;
@@ -248,7 +299,7 @@ _PAGE_SCRIPT: Final = """\
 
   function estiloPonto(feature, resolution) {
     var emDestaque = feature === destacado;
-    var tinta = misturar(feature.get("cor"), emDestaque ? "1/1" : feature.get("peso"));
+    var tinta = misturar(corDoLugar(feature), emDestaque ? "1/1" : feature.get("peso"));
     var votos = votosValidos(feature.get("peso"));
     var raio = raioDoPonto(votos) + (emDestaque ? 2 : 0);
     var estilos = [new ol.style.Style({
@@ -307,7 +358,10 @@ _PAGE_SCRIPT: Final = """\
             segundo: item.segundo,
             votosSegundo: item.votosSegundo,
             branco: item.branco,
-            nulo: item.nulo
+            nulo: item.nulo,
+            classe: item.classe,
+            governador: item.governador,
+            pesoGovernador: item.pesoGovernador
           }
         };
       })
@@ -520,8 +574,14 @@ _PAGE_SCRIPT: Final = """\
     var partes = String(feature.get("peso") == null ? "" : feature.get("peso")).split("/");
     var lider = Number(partes[0]);
     var validos = partes.length === 2 ? Number(partes[1]) : NaN;
+    if (CRUZAMENTO) {
+      detalharClasse(feature);
+    }
     if (!eInteiro(lider) || !eInteiro(validos) || validos <= 0) {
       return;
+    }
+    if (CRUZAMENTO) {
+      painelDetalhe.appendChild(elemento("div", "Presidente")).className = "secao";
     }
     painelDetalhe.appendChild(linhaDePartido("1º", feature.get("numero"), lider, validos));
     var segundo = feature.get("segundo");
@@ -539,6 +599,38 @@ _PAGE_SCRIPT: Final = """\
         elemento("div", "Brancos: " + milhar(branco) + " · Nulos: " + milhar(nulo))
       );
     }
+    if (CRUZAMENTO) {
+      detalharGovernador(feature);
+    }
+  }
+
+  function detalharClasse(feature) {
+    var classe = CLASSES[feature.get("classe")];
+    if (!classe) {
+      return;
+    }
+    var linha = elemento("div", "");
+    linha.className = "classe";
+    var amostra = elemento("span", "");
+    amostra.className = "amostra";
+    amostra.style.background = classe.cor;
+    linha.appendChild(amostra);
+    linha.appendChild(document.createTextNode(classe.rotulo));
+    painelDetalhe.appendChild(linha);
+    painelDetalhe.appendChild(elemento("small", classe.definicao));
+  }
+
+  function detalharGovernador(feature) {
+    painelDetalhe.appendChild(elemento("div", "Governador")).className = "secao";
+    var governador = feature.get("governador");
+    var partes = String(feature.get("pesoGovernador") || "").split("/");
+    var votos = Number(partes[0]);
+    var validos = partes.length === 2 ? Number(partes[1]) : NaN;
+    if (!governador || !eInteiro(votos) || !eInteiro(validos) || validos <= 0) {
+      painelDetalhe.appendChild(elemento("div", "Sem votação para governador"));
+      return;
+    }
+    painelDetalhe.appendChild(linhaDePartido("1º", governador, votos, validos));
   }
 
   function linhaDePartido(posicao, numero, votos, validos) {
@@ -563,7 +655,59 @@ _PAGE_SCRIPT: Final = """\
     return sigla ? sigla + " " + numero : String(numero);
   }
 
+  function montarLegendaCruzada() {
+    var contagem = {};
+    var total = 0;
+    function somar(itens, campo) {
+      for (var i = 0; i < itens.length; i++) {
+        var votos = votosValidos(itens[i].peso);
+        var linha = contagem[itens[i].classe] || {municipios: 0, exterior: 0, votos: 0};
+        linha[campo] += 1;
+        linha.votos += votos;
+        contagem[itens[i].classe] = linha;
+        total += votos;
+      }
+    }
+    somar(pintura.municipios, "municipios");
+    somar(pintura.exterior || [], "exterior");
+    var lista = painelLegenda.querySelector("ul");
+    ORDEM_DAS_CLASSES.forEach(function (chave) {
+      var classe = CLASSES[chave];
+      var linha = contagem[chave] || {municipios: 0, exterior: 0, votos: 0};
+      var item = document.createElement("li");
+      var amostra = elemento("span", "");
+      amostra.className = "amostra";
+      amostra.style.background = classe.cor;
+      item.appendChild(amostra);
+      var texto = elemento("span", classe.rotulo);
+      var partes = [];
+      if (linha.municipios || !linha.exterior) {
+        partes.push(milhar(linha.municipios) +
+          (linha.municipios === 1 ? " município" : " municípios"));
+      }
+      if (linha.exterior) {
+        partes.push(milhar(linha.exterior) +
+          (linha.exterior === 1 ? " cidade no exterior" : " cidades no exterior"));
+      }
+      var resumo = partes.join(" · ");
+      if (total > 0) {
+        resumo += " · " + percentual(linha.votos, total) + " dos votos";
+      }
+      texto.appendChild(elemento("small", resumo));
+      texto.appendChild(elemento("small", classe.definicao));
+      item.appendChild(texto);
+      lista.appendChild(item);
+    });
+    painelLegenda.querySelector(".nota").textContent =
+      "Tom mais forte: fatia maior do líder de presidente. Os votos são os válidos de presidente.";
+    botaoLegenda.textContent = "Classes";
+  }
+
   function montarLegenda() {
+    if (CRUZAMENTO) {
+      montarLegendaCruzada();
+      return;
+    }
     var contagem = {};
     function contar(itens, campo) {
       for (var i = 0; i < itens.length; i++) {
@@ -713,7 +857,8 @@ def html_do_mapa(pagina: PaginaDoMapa) -> str:
 
 
 def _title(pagina: PaginaDoMapa) -> str:
-    return f"Mapa de {pagina.cargo} — {pagina.ano}, turno {pagina.turno}"
+    cargo = _CARGO_NO_TITULO.get(pagina.cargo, pagina.cargo)
+    return f"Mapa de {cargo} — {pagina.ano}, turno {pagina.turno}"
 
 
 def _style(pagina: PaginaDoMapa) -> str:
@@ -765,6 +910,7 @@ def _payload(pagina: PaginaDoMapa) -> dict[str, object]:
     return {
         "logos": _logos(recorte),
         "siglas": _siglas(recorte),
+        "cargo": pagina.cargo,
         "pais": country,
         "ufs": [_item(item) for item in recorte.ufs],
         "municipios": [_item(item) for item in recorte.municipios],
@@ -806,6 +952,9 @@ def _item(pintura: Pintura) -> dict[str, str | int]:
         "votosSegundo": pintura.votos_segundo,
         "branco": pintura.branco,
         "nulo": pintura.nulo,
+        "classe": pintura.classe,
+        "governador": pintura.governador,
+        "pesoGovernador": pintura.peso_governador,
     }
 
 

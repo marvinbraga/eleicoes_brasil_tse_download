@@ -271,6 +271,22 @@ def test_default_path_uses_cargo_year_and_turn(
     assert '"numero": "13"' in destino.read_text(encoding="utf-8")
 
 
+def test_cross_map_default_path_uses_the_cargo_name(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    code = main(
+        ["--ano", "2026", "--turno", "1", "--cargo", "cruzamento", "--sem-navegador"],
+        store=_Memory(),
+        assets=_Assets(),
+        collect=lambda _ano, _turno: (_bujari(),),
+    )
+    destino = tmp_path / "relatorios" / "mapa-cruzamento-2026-turno-1.html"
+    assert code == 0
+    assert destino.is_file()
+
+
 def test_default_opener_uses_the_file_uri(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     seen: list[str] = []
     monkeypatch.setattr(

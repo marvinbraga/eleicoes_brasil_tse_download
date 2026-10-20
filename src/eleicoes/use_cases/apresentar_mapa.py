@@ -131,7 +131,10 @@ def main(
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Pinta o partido líder de presidente ou de governador.",
+        description=(
+            "Pinta o partido líder de presidente ou de governador,"
+            " ou a classe presidente × governador (cruzamento)."
+        ),
     )
     parser.add_argument("--ano", type=int, default=2026)
     parser.add_argument("--turno", type=int, default=1)
