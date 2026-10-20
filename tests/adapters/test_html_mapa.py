@@ -292,6 +292,8 @@ def test_cross_map_paints_by_class_and_explains_it() -> None:
     )
     assert 'var CRUZAMENTO = pintura.cargo === "cruzamento";' in html
     assert 'cor: "#d95f02"' in html
+    assert 'cor: "#3a5fcd"' in html
+    assert 'cor: "#7570b3"' not in html
     assert 'return CRUZAMENTO && classe ? classe.cor : feature.get("cor");' in html
     assert "function rotuloCruzado(feature)" in html
     assert "function detalharClasse(feature)" in html

@@ -96,7 +96,7 @@ _PAGE_SCRIPT: Final = """\
     },
     em_aberto: {
       rotulo: "Em aberto",
-      cor: "#7570b3",
+      cor: "#3a5fcd",
       definicao: "O governador é de um partido fora dos dois primeiros da presidência aqui."
     },
     sem_governador: {
