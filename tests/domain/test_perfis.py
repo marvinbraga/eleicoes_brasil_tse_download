@@ -157,6 +157,22 @@ def test_invalid_group_span(text: str) -> None:
         parse_group_span(text)
 
 
+@pytest.mark.parametrize("text", ["²", "2-²", "٣", "2-٦"])
+def test_group_span_accepts_only_ascii_digits(text: str) -> None:
+    with pytest.raises(InvalidGroupSpanError, match="A faixa de grupos é inválida."):
+        parse_group_span(text)
+
+
+@pytest.mark.parametrize("text", ["2-11", "11"])
+def test_group_span_rejects_k_above_ten(text: str) -> None:
+    with pytest.raises(InvalidGroupSpanError, match="A faixa de grupos é inválida."):
+        parse_group_span(text)
+
+
+def test_group_span_accepts_k_up_to_ten() -> None:
+    assert parse_group_span("2-10") == GroupSpan(2, 10, True)
+
+
 def test_equal_silhouette_keeps_the_smaller_k() -> None:
     assert winning_k(((4, 0.5), (2, 0.5), (3, 0.4))) == 2
     assert winning_k(((2, 0.2), (5, 0.9))) == 5

@@ -1,7 +1,8 @@
 """One pooled connection for boletim and one async ORM session for the report stores."""
 
 from collections.abc import AsyncIterator, Callable
-from typing import Annotated, TypeAlias, cast
+from functools import lru_cache
+from typing import Annotated, Final, TypeAlias, cast
 
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,7 +17,7 @@ from eleicoes.adapters.postgres_relatorio_presidente_governador_async import (
 )
 from eleicoes.domain.classe_governador import ClassReport
 from eleicoes.domain.errors import ElectionError
-from eleicoes.domain.perfis import ProfileReport
+from eleicoes.domain.perfis import ProfileReport, parse_group_span, require_profile_cargo
 from eleicoes.ports.async_sql import AsyncPool, AsyncSqlConnection
 from eleicoes.ports.boletim_consulta import AsyncBoletimReader
 from eleicoes.ports.grade import AsyncMunicipalityNames
@@ -110,6 +111,9 @@ def _required_session(session: AsyncSession | None) -> AsyncSession:
     return session
 
 
+# Built reports stay in memory per key. clear_report_caches drops them after the API
+# regenerates the base reports; a regeneration from the CLI needs an API restart.
+_STORED_REPORTS: Final = 32
 ProfileJob: TypeAlias = Callable[[int, int, str, str], ProfileReport]
 ClassJob: TypeAlias = Callable[[int, int], ClassReport]
 
@@ -122,7 +126,24 @@ def get_class_job() -> ClassJob:
     return _stored_class
 
 
+def clear_report_caches() -> None:
+    _built_profile.cache_clear()
+    _stored_class.cache_clear()
+
+
 def _stored_profile(ano: int, turno: int, cargo: str, grupos: str) -> ProfileReport:
+    return _built_profile(ano, turno, require_profile_cargo(cargo), _canonical_span(grupos))
+
+
+def _canonical_span(grupos: str) -> str:
+    span = parse_group_span(grupos)
+    if span.searched:
+        return f"{span.lower}-{span.upper}"
+    return f"{span.lower}"
+
+
+@lru_cache(maxsize=_STORED_REPORTS)
+def _built_profile(ano: int, turno: int, cargo: str, grupos: str) -> ProfileReport:
     from eleicoes.use_cases.apresentar_perfis import (
         _production_clusterer,
         _production_reader,
@@ -136,6 +157,7 @@ def _stored_profile(ano: int, turno: int, cargo: str, grupos: str) -> ProfileRep
         reader.close()
 
 
+@lru_cache(maxsize=_STORED_REPORTS)
 def _stored_class(ano: int, turno: int) -> ClassReport:
     from eleicoes.use_cases.apresentar_classe_governador import (
         _production_model,

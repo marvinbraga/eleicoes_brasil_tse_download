@@ -19,6 +19,8 @@ NOTES: Final[tuple[str, ...]] = (
     "Senador não tem branco nem nulo neste relatório.",
     "Os lugares do exterior permanecem no perfil de presidente.",
     "Os grupos são um ajuste desta eleição, não uma previsão.",
+    "A silhueta é estimada numa amostra de 2000 municípios quando há mais que isso.",
+    "Para grupos mais finos, peça um número fixo de grupos, como 5.",
 )
 _SORT_SCALE: Final = 1_000_000_000
 

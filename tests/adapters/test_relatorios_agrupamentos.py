@@ -9,6 +9,9 @@ from typing import cast
 import httpx
 import pytest
 from fastapi import FastAPI
+from tests.adapters.test_read_api import _ports as _read_ports
+from tests.adapters.test_read_api import _Reader as _ReadReader
+from tests.support import alternating_states, hand_class_report
 
 from eleicoes.adapters.html_classe_governador import NOTES as CLASS_NOTES
 from eleicoes.adapters.html_classe_governador import texto_regra
@@ -24,8 +27,14 @@ from eleicoes.domain.classe_governador import (
     ClassReport,
     ClassRule,
     RuleCut,
+    UfScore,
 )
-from eleicoes.domain.errors import CargoSemCelulasError, InvalidTurnoError
+from eleicoes.domain.errors import (
+    CargoSemCelulasError,
+    ElectionError,
+    InvalidGroupSpanError,
+    InvalidTurnoError,
+)
 from eleicoes.domain.perfis import GroupSpan, ProfileCity, ProfileGroup, ProfileLine, ProfileReport
 from eleicoes.ports.boletim_consulta import AsyncBoletimReader
 from eleicoes.ports.classe_governador import ClassFit
@@ -57,14 +66,24 @@ class _ProfileReader:
 
 
 class _ClassReader:
-    def __init__(self, lines: tuple[ClassLine, ...] = ()) -> None:
+    def __init__(
+        self,
+        lines: tuple[ClassLine, ...] = (),
+        ufs: tuple[tuple[str, str], ...] | None = None,
+    ) -> None:
         self.lines = lines
+        self.ufs = alternating_states(lines) if ufs is None else ufs
+        self.uf_calls: list[tuple[int, int]] = []
         self.calls: list[tuple[int, int]] = []
         self.closed = False
 
     def class_lines(self, ano: int, turno: int) -> tuple[ClassLine, ...]:
         self.calls.append((ano, turno))
         return self.lines
+
+    def municipal_ufs(self, ano: int, turno: int) -> tuple[tuple[str, str], ...]:
+        self.uf_calls.append((ano, turno))
+        return self.ufs
 
     def close(self) -> None:
         self.closed = True
@@ -85,17 +104,18 @@ class _Cluster:
 
 
 class _Model:
-    def __init__(self, result: ClassFit) -> None:
-        self.result = result
+    def __init__(self, rules: tuple[ClassRule, ...]) -> None:
+        self.rules = rules
 
     def fit(
         self,
         matrix: tuple[tuple[float, ...], ...],
         labels: tuple[str, ...],
         parties: tuple[int, ...],
+        groups: tuple[str, ...],
     ) -> ClassFit:
-        self.seen = (matrix, labels, parties)
-        return self.result
+        self.seen = (matrix, labels, parties, groups)
+        return ClassFit(labels, self.rules)
 
 
 def test_profile_json_uses_the_formatted_center_and_the_shared_notes() -> None:
@@ -121,7 +141,7 @@ def test_profile_json_uses_the_formatted_center_and_the_shared_notes() -> None:
     assert payload["buscou"] is False
     assert payload["silhueta"] is None
     assert payload["notas"] == list(PROFILE_NOTES)
-    assert len(PROFILE_NOTES) == 5
+    assert len(PROFILE_NOTES) == 7
     group = payload["grupos"][0]
     assert set(group) == {"numero", "municipios", "comparecimento", "centro"}
     assert group["numero"] == 1
@@ -168,26 +188,72 @@ def test_invalid_group_span_is_422_and_does_not_read() -> None:
 
 def test_class_json_uses_the_rule_text_and_the_shared_notes() -> None:
     payload = _class_payload()
-    assert set(payload) == {"ano", "turno", "acerto", "base", "linhas", "retidas", "notas"}
+    assert set(payload) == {
+        "ano",
+        "turno",
+        "acerto",
+        "base",
+        "base_lider",
+        "f1_macro",
+        "por_uf",
+        "sem_uf",
+        "abaixo_da_base",
+        "linhas",
+        "retidas",
+        "notas",
+    }
     assert payload["ano"] == 2026
     assert payload["turno"] == 1
     assert payload["acerto"] == "100,00%"
-    assert payload["base"] == "50,00%"
+    assert payload["base"] == "33,33%"
     assert payload["retidas"] == []
+    assert payload["abaixo_da_base"] is False
     assert payload["notas"] == list(CLASS_NOTES)
-    assert len(CLASS_NOTES) == 4
+    assert len(CLASS_NOTES) == 5
+    assert CLASS_NOTES[:2] == (
+        "O acerto vem de deixar cada UF de fora e prever seus municípios com a árvore das outras.",
+        "As regras mostradas são da árvore ajustada com todos os municípios.",
+    )
     first, second = payload["linhas"]
-    assert set(first) == {"classe", "rotulo", "apoio", "regras"}
+    assert set(first) == {"classe", "rotulo", "apoio", "regras", "recall"}
     assert first == {
         "classe": "consolidacao",
         "rotulo": "Consolidação",
-        "apoio": 1,
+        "apoio": 3,
         "regras": [texto_regra((RuleCut(13, 0.5, True),))],
+        "recall": "100,00%",
     }
     assert second["classe"] == "em_aberto"
     assert second["rotulo"] == "Em aberto"
-    assert second["apoio"] == 1
+    assert second["apoio"] == 3
     assert second["regras"] == [texto_regra(())]
+
+
+def test_json_adds_state_scores_and_both_baselines() -> None:
+    body = ClassJson.from_domain(hand_class_report()).model_dump()
+    assert {"acerto", "base", "linhas", "retidas", "notas"} <= body.keys()
+    assert body["base_lider"] == "100,00%"
+    assert body["f1_macro"] == "0,8286"
+    assert body["por_uf"] == [
+        {"uf": "AC", "municipios": 2, "acerto": "50,00%"},
+        {"uf": "BA", "municipios": 3, "acerto": "100,00%"},
+        {"uf": "DF", "municipios": 1, "acerto": "100,00%"},
+    ]
+    assert body["linhas"][0]["recall"] == "66,67%"
+    assert body["sem_uf"] == 0
+    assert body["abaixo_da_base"] is True
+
+
+def test_json_counts_the_places_without_uf() -> None:
+    body = ClassJson.from_domain(hand_class_report(without_uf=2)).model_dump()
+    assert body["sem_uf"] == 2
+
+
+def test_profile_notes_explain_the_sampled_silhouette() -> None:
+    assert PROFILE_NOTES[-2:] == (
+        "A silhueta é estimada numa amostra de 2000 municípios quando há mais que isso.",
+        "Para grupos mais finos, peça um número fixo de grupos, como 5.",
+    )
 
 
 def test_held_out_labels_keep_the_report_order() -> None:
@@ -197,14 +263,19 @@ def test_held_out_labels_keep_the_report_order() -> None:
         (13,),
         Fraction(1, 2),
         Fraction(1, 2),
-        (ClassOutcome("consolidacao", 1, ()),),
+        (ClassOutcome("consolidacao", 1, (), Fraction(1)),),
         ("sem_governador", "em_aberto"),
+        Fraction(1),
+        Fraction(1),
+        (UfScore("SP", 2, Fraction(1, 2)),),
+        0,
     )
     payload = ClassJson.from_domain(report).model_dump()
     assert payload["retidas"] == ["Sem governador", "Em aberto"]
     assert payload["acerto"] == "50,00%"
     assert payload["base"] == "50,00%"
     assert payload["linhas"][0]["regras"] == ["A árvore não cortou esta classe."]
+    assert payload["abaixo_da_base"] is True
 
 
 def test_silhouette_is_null_unless_the_search_produced_one() -> None:
@@ -249,6 +320,15 @@ def test_invalid_year_and_turno_keep_the_fixed_sentences() -> None:
     assert turno.json()["detail"] == "Turno inválido."
 
 
+def test_class_from_a_single_state_is_409() -> None:
+    lines = _sample()
+    reader = _ClassReader(lines, tuple((line.codigo, "SP") for line in lines))
+    response = _get(_class_app(reader), f"{_CLASS}?ano=2026&turno=1")
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Menos de 2 UFs para validar."
+    assert reader.uf_calls == [(2026, 1)]
+
+
 def test_stored_profile_job_closes_the_reader(monkeypatch: pytest.MonkeyPatch) -> None:
     reader = _ProfileReader(_senator_lines())
     _patch_profile(monkeypatch, reader)
@@ -258,23 +338,13 @@ def test_stored_profile_job_closes_the_reader(monkeypatch: pytest.MonkeyPatch) -
     assert reader.closed is True
 
 
-def test_stored_profile_job_closes_when_the_cargo_is_refused(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    reader = _ProfileReader(_president_lines())
-    _patch_profile(monkeypatch, reader)
-    with pytest.raises(CargoSemCelulasError, match="deputado federal"):
-        get_profile_job()(2026, 1, "deputadoFederal", "2-6")
-    assert reader.calls == []
-    assert reader.closed is True
-
-
 def test_stored_class_job_closes_the_reader(monkeypatch: pytest.MonkeyPatch) -> None:
     reader = _ClassReader(_sample())
     _patch_class(monkeypatch, reader)
     report = get_class_job()(2026, 1)
     assert report.hit_rate == Fraction(1, 1)
     assert reader.calls == [(2026, 1)]
+    assert reader.uf_calls == [(2026, 1)]
     assert reader.closed is True
 
 
@@ -287,6 +357,128 @@ def test_stored_class_job_closes_when_the_turno_is_invalid(
         get_class_job()(2026, 9)
     assert reader.calls == []
     assert reader.closed is True
+
+
+def test_stored_class_job_builds_once_per_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    opened: list[_ClassReader] = []
+    _count_class(monkeypatch, opened)
+    first = get_class_job()(2026, 1)
+    again = get_class_job()(2026, 1)
+    assert again is first
+    assert len(opened) == 1
+    other = get_class_job()(2022, 1)
+    assert other is not first
+    assert len(opened) == 2
+    assert [reader.calls for reader in opened] == [[(2026, 1)], [(2022, 1)]]
+
+
+def test_stored_class_job_does_not_cache_an_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    attempts: list[int] = []
+
+    def failing() -> _ClassReader:
+        attempts.append(1)
+        raise ElectionError("database session is not configured")
+
+    monkeypatch.setattr(
+        "eleicoes.use_cases.apresentar_classe_governador._production_reader",
+        failing,
+    )
+    for _attempt in range(2):
+        with pytest.raises(ElectionError):
+            get_class_job()(2026, 1)
+    assert len(attempts) == 2
+
+
+def test_stored_profile_job_builds_once_per_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    opened: list[_ProfileReader] = []
+
+    def fresh() -> _ProfileReader:
+        reader = _ProfileReader(_senator_lines())
+        opened.append(reader)
+        return reader
+
+    _patch_profile(monkeypatch, _ProfileReader())
+    monkeypatch.setattr("eleicoes.use_cases.apresentar_perfis._production_reader", fresh)
+    first = get_profile_job()(2026, 1, "senador", "2")
+    assert get_profile_job()(2026, 1, "senador", "2") is first
+    assert len(opened) == 1
+    get_profile_job()(2026, 1, "senador", "3")
+    assert len(opened) == 2
+
+
+def test_stored_profile_job_does_not_cache_an_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    attempts: list[int] = []
+
+    def failing() -> _ProfileReader:
+        attempts.append(1)
+        raise ElectionError("database session is not configured")
+
+    _patch_profile(monkeypatch, _ProfileReader())
+    monkeypatch.setattr("eleicoes.use_cases.apresentar_perfis._production_reader", failing)
+    for _attempt in range(2):
+        with pytest.raises(ElectionError):
+            get_profile_job()(2026, 1, "senador", "2-6")
+    assert len(attempts) == 2
+
+
+def test_stored_profile_job_normalizes_the_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    opened = _count_profile(monkeypatch)
+    first = get_profile_job()(2026, 1, "presidente", "2-6")
+    for grupos in (" 2-6", "02-06", "2-6 ", " 2 - 6 "):
+        assert get_profile_job()(2026, 1, "presidente", grupos) is first
+    assert get_profile_job()(2026, 1, " presidente", "2-6") is first
+    assert len(opened) == 1
+
+
+def test_stored_profile_job_keeps_fixed_and_searched_apart(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    opened = _count_profile(monkeypatch)
+    fixed = get_profile_job()(2026, 1, "presidente", "2")
+    assert get_profile_job()(2026, 1, "presidente", " 02 ") is fixed
+    searched = get_profile_job()(2026, 1, "presidente", "2-2")
+    assert searched is not fixed
+    assert len(opened) == 2
+
+
+def test_stored_profile_job_refuses_before_opening_a_reader(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    opened = _count_profile(monkeypatch)
+    with pytest.raises(CargoSemCelulasError):
+        get_profile_job()(2026, 1, "deputadoFederal", "2-6")
+    with pytest.raises(InvalidGroupSpanError):
+        get_profile_job()(2026, 1, "presidente", "6-2")
+    assert opened == []
+
+
+def _count_profile(monkeypatch: pytest.MonkeyPatch) -> list[_ProfileReader]:
+    opened: list[_ProfileReader] = []
+
+    def fresh() -> _ProfileReader:
+        reader = _ProfileReader(_president_lines())
+        opened.append(reader)
+        return reader
+
+    _patch_profile(monkeypatch, _ProfileReader())
+    monkeypatch.setattr("eleicoes.use_cases.apresentar_perfis._production_reader", fresh)
+    return opened
+
+
+def _count_class(monkeypatch: pytest.MonkeyPatch, opened: list[_ClassReader]) -> None:
+    def fresh() -> _ClassReader:
+        reader = _ClassReader(_sample())
+        opened.append(reader)
+        return reader
+
+    monkeypatch.setattr(
+        "eleicoes.use_cases.apresentar_classe_governador._production_reader",
+        fresh,
+    )
+    monkeypatch.setattr(
+        "eleicoes.use_cases.apresentar_classe_governador._production_model",
+        lambda: _Model(_rules()),
+    )
 
 
 def _profile(reader: _ProfileReader, cargo: str, grupos: str) -> dict[str, object]:
@@ -342,7 +534,7 @@ def _profile_job(
 
 
 def _class_job(reader: _ClassReader) -> Callable[[int, int], ClassReport]:
-    model = _Model(_fit())
+    model = _Model(_rules())
 
     def build(ano: int, turno: int) -> ClassReport:
         return build_governor_class(reader, model, ano, turno)
@@ -372,7 +564,7 @@ def _patch_class(monkeypatch: pytest.MonkeyPatch, reader: _ClassReader) -> None:
     )
     monkeypatch.setattr(
         "eleicoes.use_cases.apresentar_classe_governador._production_model",
-        lambda: _Model(_fit()),
+        lambda: _Model(_rules()),
     )
 
 
@@ -420,15 +612,10 @@ def _senator_lines() -> tuple[ProfileLine, ...]:
     )
 
 
-def _fit() -> ClassFit:
-    return ClassFit(
-        "consolidacao",
-        ("consolidacao", "em_aberto"),
-        ("consolidacao", "em_aberto"),
-        (
-            ClassRule("consolidacao", (RuleCut(13, 0.5, True),)),
-            ClassRule("em_aberto", ()),
-        ),
+def _rules() -> tuple[ClassRule, ...]:
+    return (
+        ClassRule("consolidacao", (RuleCut(13, 0.5, True),)),
+        ClassRule("em_aberto", ()),
     )
 
 
@@ -470,3 +657,69 @@ async def _fetch(application: FastAPI, path: str) -> httpx.Response:
     transport = httpx.ASGITransport(app=application, raise_app_exceptions=False)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         return await client.get(path)
+
+
+_REGENERATE = (
+    "/relatorios/dados/presidente-governador?ano=2026&turno=1&uf=SE",
+    "/relatorios/poder?ano=2026&turno=1&uf=SE&cargo=presidente",
+    "/relatorios/presidente-governador?ano=2026&turno=1&uf=SE",
+)
+
+
+@pytest.mark.parametrize("path", _REGENERATE)
+def test_regeneration_through_the_api_drops_the_stored_reports(
+    monkeypatch: pytest.MonkeyPatch,
+    path: str,
+) -> None:
+    built = _warm_reports(monkeypatch)
+    response = _get(create_app(ports=_read_ports()), f"{path}&atualizar=true")
+    assert response.status_code == 200
+    get_class_job()(2026, 1)
+    get_profile_job()(2026, 1, "senador", "2")
+    assert len(built.classes) == 2
+    assert len(built.profiles) == 2
+
+
+@pytest.mark.parametrize("path", _REGENERATE)
+def test_reading_without_atualizar_keeps_the_stored_reports(
+    monkeypatch: pytest.MonkeyPatch,
+    path: str,
+) -> None:
+    built = _warm_reports(monkeypatch)
+    response = _get(create_app(ports=_read_ports()), path)
+    assert response.status_code == 200
+    get_class_job()(2026, 1)
+    get_profile_job()(2026, 1, "senador", "2")
+    assert len(built.classes) == 1
+    assert len(built.profiles) == 1
+
+
+@pytest.mark.parametrize("path", _REGENERATE)
+def test_failed_regeneration_keeps_the_stored_reports(
+    monkeypatch: pytest.MonkeyPatch,
+    path: str,
+) -> None:
+    built = _warm_reports(monkeypatch)
+    reader = _ReadReader()
+    reader.fail = ElectionError("database read failed")
+    response = _get(create_app(ports=_read_ports(reader)), f"{path}&atualizar=true")
+    assert response.status_code == 500
+    get_class_job()(2026, 1)
+    assert len(built.classes) == 1
+
+
+class _Built:
+    def __init__(self) -> None:
+        self.classes: list[_ClassReader] = []
+        self.profiles: list[_ProfileReader] = []
+
+
+def _warm_reports(monkeypatch: pytest.MonkeyPatch) -> _Built:
+    built = _Built()
+    _count_class(monkeypatch, built.classes)
+    built.profiles = _count_profile(monkeypatch)
+    get_class_job()(2026, 1)
+    get_profile_job()(2026, 1, "senador", "2")
+    assert len(built.classes) == 1
+    assert len(built.profiles) == 1
+    return built

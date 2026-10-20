@@ -9,7 +9,11 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import Executable
 
-from eleicoes.adapters.orm.models import PowerReportLine, PresidentGovernorBallot
+from eleicoes.adapters.orm.models import (
+    PowerReportLine,
+    PresidentGovernorBallot,
+    PresidentGovernorLine,
+)
 from eleicoes.adapters.orm.sessions import SyncSessionFactory
 from eleicoes.domain.classe_governador import ClassLine
 from eleicoes.domain.errors import ElectionError, InconsistentCellError, StoredReadError
@@ -18,7 +22,9 @@ from eleicoes.domain.perfis import ProfileLine
 _MUNICIPIO = "municipio"
 _PROFILE_WIDTH = 8
 _CLASS_WIDTH = 7
+_UF_WIDTH = 2
 _CLASS_CARGOS = ("presidente", "governador")
+_PRESIDENTE = "presidente"
 _T = TypeVar("_T")
 
 
@@ -32,6 +38,9 @@ class PostgresStoredLines:
 
     def class_lines(self, ano: int, turno: int) -> tuple[ClassLine, ...]:
         return self._guard(lambda: self._classes(ano, turno))
+
+    def municipal_ufs(self, ano: int, turno: int) -> tuple[tuple[str, str], ...]:
+        return self._guard(lambda: self._ufs(ano, turno))
 
     def close(self) -> None:
         session = self._session
@@ -48,6 +57,11 @@ class PostgresStoredLines:
         with self._open().begin():
             fetched = self._open().execute(class_statement(ano, turno)).all()
         return tuple(_class_line(_as_tuple(row)) for row in fetched)
+
+    def _ufs(self, ano: int, turno: int) -> tuple[tuple[str, str], ...]:
+        with self._open().begin():
+            fetched = self._open().execute(uf_statement(ano, turno)).all()
+        return tuple(_uf_pair(_as_tuple(row)) for row in fetched)
 
     def _guard(self, work: Callable[[], _T]) -> _T:
         try:
@@ -110,6 +124,19 @@ def class_statement(ano: int, turno: int) -> Executable:
     )
 
 
+def uf_statement(ano: int, turno: int) -> Executable:
+    return (
+        select(PresidentGovernorLine.codigo, PresidentGovernorLine.uf)
+        .where(
+            PresidentGovernorLine.ano == ano,
+            PresidentGovernorLine.turno == turno,
+            PresidentGovernorLine.cargo == _PRESIDENTE,
+        )
+        .distinct()
+        .order_by(PresidentGovernorLine.uf, PresidentGovernorLine.codigo)
+    )
+
+
 def _profile_line(row: tuple[object, ...]) -> ProfileLine:
     if len(row) != _PROFILE_WIDTH:
         raise InconsistentCellError()
@@ -137,6 +164,12 @@ def _class_line(row: tuple[object, ...]) -> ClassLine:
         _count(row[5]),
         _count(row[6]),
     )
+
+
+def _uf_pair(row: tuple[object, ...]) -> tuple[str, str]:
+    if len(row) != _UF_WIDTH:
+        raise InconsistentCellError()
+    return _text(row[0]), _text(row[1])
 
 
 def _as_tuple(row: object) -> tuple[object, ...]:

@@ -207,6 +207,16 @@ class FewClassesError(ElectionError):
         super().__init__("Não há classes suficientes para separar.")
 
 
+class MissingCrossReportError(ElectionError):
+    def __init__(self) -> None:
+        super().__init__("Gere o relatório presidente × governador antes.")
+
+
+class FewStatesError(ElectionError):
+    def __init__(self) -> None:
+        super().__init__("Menos de 2 UFs para validar.")
+
+
 class InconsistentCellError(ElectionError):
     def __init__(self) -> None:
         super().__init__("Célula municipal inconsistente.")

@@ -16,6 +16,7 @@ from eleicoes.domain.grade import place_sort_key
 from eleicoes.domain.values import ElectionYear, Turno
 
 _MIN_K: Final = 2
+_MAX_K: Final = 10
 _MIN_PLACES: Final = 3
 _MAX_PARTY: Final = 99
 _PROFILE_CARGOS: Final = frozenset({"presidente", "governador", "senador"})
@@ -37,6 +38,8 @@ class GroupSpan:
         if isinstance(self.lower, bool) or isinstance(self.upper, bool):
             raise InvalidGroupSpanError()
         if self.lower < _MIN_K or self.upper < self.lower:
+            raise InvalidGroupSpanError()
+        if self.upper > _MAX_K:
             raise InvalidGroupSpanError()
         if not self.searched and self.lower != self.upper:
             raise InvalidGroupSpanError()
@@ -416,7 +419,7 @@ def _span(raw: str) -> GroupSpan:
 
 def _k(raw: str) -> int:
     text = raw.strip()
-    if text == "" or not text.isdigit():
+    if not (text.isascii() and text.isdecimal()):
         raise InvalidGroupSpanError()
     return int(text)
 

@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from eleicoes.adapters.html_classe_governador import NOTES as CLASS_NOTES
 from eleicoes.adapters.html_classe_governador import texto_regra
 from eleicoes.adapters.html_perfis import NOTES as PROFILE_NOTES
-from eleicoes.domain.classe_governador import ClassOutcome, ClassReport, RuleCut
+from eleicoes.domain.classe_governador import ClassOutcome, ClassReport, RuleCut, UfScore
 from eleicoes.domain.grade import CelulaGrade, GradeDePoder, LinhaGrade
 from eleicoes.domain.percentual import format_decimal, format_percent, format_ratio
 from eleicoes.domain.perfis import ProfileCity, ProfileGroup, ProfileReport
@@ -250,6 +250,7 @@ class LinhaClasseJson(BaseModel):
     rotulo: str
     apoio: int
     regras: list[str]
+    recall: str
 
     @classmethod
     def from_domain(cls, row: ClassOutcome) -> Self:
@@ -258,7 +259,18 @@ class LinhaClasseJson(BaseModel):
             rotulo=CLASS_LABELS[row.classe],
             apoio=row.support,
             regras=_regras(row.rules),
+            recall=format_percent(row.recall),
         )
+
+
+class AcertoUfJson(BaseModel):
+    uf: str
+    municipios: int
+    acerto: str
+
+    @classmethod
+    def from_domain(cls, score: UfScore) -> Self:
+        return cls(uf=score.uf, municipios=score.municipios, acerto=format_percent(score.hit_rate))
 
 
 class ClassJson(BaseModel):
@@ -266,6 +278,11 @@ class ClassJson(BaseModel):
     turno: int
     acerto: str
     base: str
+    base_lider: str
+    f1_macro: str
+    por_uf: list[AcertoUfJson]
+    sem_uf: int
+    abaixo_da_base: bool
     linhas: list[LinhaClasseJson]
     retidas: list[str]
     notas: list[str]
@@ -277,6 +294,11 @@ class ClassJson(BaseModel):
             turno=report.turno,
             acerto=format_percent(report.hit_rate),
             base=format_percent(report.baseline),
+            base_lider=format_percent(report.leader_baseline),
+            f1_macro=format_decimal(float(report.macro_f1)),
+            por_uf=[AcertoUfJson.from_domain(score) for score in report.by_uf],
+            sem_uf=report.without_uf,
+            abaixo_da_base=report.below_baseline,
             linhas=[LinhaClasseJson.from_domain(row) for row in report.rows],
             retidas=[CLASS_LABELS[label] for label in report.held_out],
             notas=list(CLASS_NOTES),

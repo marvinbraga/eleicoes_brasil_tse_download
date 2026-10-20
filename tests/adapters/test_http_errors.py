@@ -22,6 +22,7 @@ from eleicoes.domain.errors import (
     EmptyStoredCellsError,
     FewClassesError,
     FewMunicipalitiesError,
+    FewStatesError,
     InconsistentCellError,
     InvalidBoletimConsultaError,
     InvalidCargoError,
@@ -33,6 +34,7 @@ from eleicoes.domain.errors import (
     InvalidStoredReportError,
     InvalidTurnoError,
     InvalidUfError,
+    MissingCrossReportError,
     StoredReadError,
     UnusableGroupCountError,
 )
@@ -61,6 +63,12 @@ def test_each_domain_error_has_a_portuguese_status() -> None:
         (FewMunicipalitiesError(), 409, "Menos de 3 municípios com votos válidos."),
         (EmptyStoredCellsError(), 409, "Não há células gravadas para este cargo."),
         (FewClassesError(), 409, "Não há classes suficientes para separar."),
+        (FewStatesError(), 409, "Menos de 2 UFs para validar."),
+        (
+            MissingCrossReportError(),
+            409,
+            "Gere o relatório presidente × governador antes.",
+        ),
         (
             CargoSemCelulasError("O cargo deputado federal não tem células gravadas."),
             409,

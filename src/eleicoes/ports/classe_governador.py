@@ -10,20 +10,20 @@ from eleicoes.domain.presidente_governador import CLASS_ORDER
 
 @dataclass(frozen=True, slots=True)
 class ClassFit:
-    majority: str
-    expected: tuple[str, ...]
     predicted: tuple[str, ...]
     rules: tuple[ClassRule, ...]
 
     def __post_init__(self) -> None:
-        if self.majority not in CLASS_ORDER:
+        if not self.predicted:
             raise InconsistentCellError()
-        if not self.expected or len(self.expected) != len(self.predicted):
+        if any(label not in CLASS_ORDER for label in self.predicted):
             raise InconsistentCellError()
 
 
 class ClassSource(Protocol):
     def class_lines(self, ano: int, turno: int) -> tuple[ClassLine, ...]: ...
+
+    def municipal_ufs(self, ano: int, turno: int) -> tuple[tuple[str, str], ...]: ...
 
     def close(self) -> None: ...
 
@@ -34,4 +34,5 @@ class GovernorClassModel(Protocol):
         matrix: tuple[tuple[float, ...], ...],
         labels: tuple[str, ...],
         parties: tuple[int, ...],
+        groups: tuple[str, ...],
     ) -> ClassFit: ...

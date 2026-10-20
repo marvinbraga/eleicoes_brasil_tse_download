@@ -37,17 +37,12 @@ def build_governor_class(
 ) -> ClassReport:
     ElectionYear(ano)
     Turno(turno)
-    dataset = prepare_class_dataset(reader.class_lines(ano, turno))
-    fit = model.fit(dataset.matrix(), dataset.labels(), dataset.parties)
-    return class_report(
-        ano,
-        turno,
-        dataset,
-        fit.majority,
-        fit.expected,
-        fit.predicted,
-        fit.rules,
+    dataset = prepare_class_dataset(
+        reader.class_lines(ano, turno),
+        reader.municipal_ufs(ano, turno),
     )
+    fit = model.fit(dataset.matrix(), dataset.labels(), dataset.parties, dataset.groups())
+    return class_report(ano, turno, dataset, fit.predicted, fit.rules)
 
 
 class PresentGovernorClass:
@@ -169,9 +164,11 @@ def _skip_browser(_path: Path) -> bool:
 def _message(presented: PresentedClass) -> str:
     hit = format_percent(presented.report.hit_rate)
     base = format_percent(presented.report.baseline)
+    lider = format_percent(presented.report.leader_baseline)
     lines = [
         f"Relatório apresentado: {presented.path.resolve()}",
-        f"Acerto no teste: {hit}. Linha de base da maioria: {base}.",
+        f"Acerto em UF não vista: {hit}. Linha de base da maioria: {base}. "
+        f"Linha de base do líder presidencial: {lider}.",
     ]
     if not presented.opened:
         lines.append("Não foi possível abrir o navegador.")

@@ -8,10 +8,14 @@ from eleicoes.adapters.sklearn_ajuste import (
     _count_row,
     _silhouette,
     _tolist,
-    _unpack,
     limit_omp_threads,
 )
-from eleicoes.domain.errors import FewClassesError, UnusableGroupCountError
+from eleicoes.domain.errors import (
+    FewClassesError,
+    FewStatesError,
+    InconsistentCellError,
+    UnusableGroupCountError,
+)
 from eleicoes.domain.perfis import GroupSpan
 
 
@@ -49,22 +53,62 @@ def test_too_many_groups_for_the_sample() -> None:
         SklearnProfileClusterer().fit(rows, GroupSpan(4, 4, False))
 
 
-def test_tree_rules_are_portuguese_cuts_on_the_held_out_quarter() -> None:
+def test_tree_predicts_every_row_out_of_its_state() -> None:
     rows, labels = _separable()
-    fit = SklearnGovernorTree().fit(tuple(rows), tuple(labels), (13,))
+    groups = tuple(("SP", "MG", "RJ", "DF")[i % 4] for i in range(len(rows)))
+    fit = SklearnGovernorTree().fit(tuple(rows), tuple(labels), (13,), groups)
 
-    assert len(fit.expected) == 20
-    assert fit.predicted == fit.expected
-    assert fit.majority == "consolidacao"
+    assert len(fit.predicted) == len(rows)
+    assert fit.predicted == tuple(labels)
     assert {cut.party for rule in fit.rules for cut in rule.cuts} == {13}
     assert {cut.at_most for rule in fit.rules for cut in rule.cuts} == {True, False}
     assert all(len(rule.cuts) <= 3 for rule in fit.rules)
     assert any(0.2 < cut.threshold < 0.8 for rule in fit.rules for cut in rule.cuts)
 
 
-def test_unstratifiable_sample_is_a_class_error() -> None:
+def test_class_only_in_the_held_out_state_is_not_an_error() -> None:
+    rows = [[0.1]] * 20 + [[0.9]] * 20 + [[0.5]] * 2
+    labels = ("consolidacao",) * 20 + ("em_aberto",) * 20 + ("sem_governador",) * 2
+    groups = ("SP",) * 20 + ("MG",) * 20 + ("DF",) * 2
+    fit = SklearnGovernorTree().fit(tuple(map(tuple, rows)), labels, (13,), groups)
+    assert fit.predicted == ("em_aberto",) * 20 + ("consolidacao",) * 20 + ("em_aberto",) * 2
+
+
+def test_single_row_state_is_predicted_by_the_other_states() -> None:
+    rows = ((0.1,),) * 20 + ((0.9,),) * 20 + ((0.1,),)
+    labels = ("consolidacao",) * 20 + ("em_aberto",) * 21
+    groups = ("SP",) * 20 + ("MG",) * 20 + ("DF",)
+    fit = SklearnGovernorTree().fit(rows, labels, (13,), groups)
+    assert len(fit.predicted) == len(labels)
+    assert fit.predicted[-1] == "consolidacao"
+
+
+def test_one_state_is_a_state_error() -> None:
+    with pytest.raises(FewStatesError, match="Menos de 2 UFs"):
+        SklearnGovernorTree().fit(
+            ((0.0,), (1.0,)), ("consolidacao", "em_aberto"), (13,), ("SP", "SP")
+        )
+
+
+def test_groups_out_of_step_with_the_rows_are_inconsistent() -> None:
+    with pytest.raises(InconsistentCellError):
+        SklearnGovernorTree().fit(
+            ((0.0,), (1.0,), (0.5,)),
+            ("consolidacao", "em_aberto", "em_aberto"),
+            (13,),
+            ("SP", "MG"),
+        )
+
+
+def test_tree_failure_is_a_class_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    def broken(*_args: object, **_kwargs: object) -> object:
+        raise ValueError("bad fold")
+
+    monkeypatch.setattr("eleicoes.adapters.sklearn_ajuste.cross_val_predict", broken)
+    rows, labels = _separable()
+    groups = ("SP", "MG") * 40
     with pytest.raises(FewClassesError, match="Não há classes suficientes"):
-        SklearnGovernorTree().fit(((0.0,), (1.0,)), ("consolidacao", "em_aberto"), (13,))
+        SklearnGovernorTree().fit(tuple(rows), tuple(labels), (13,), groups)
 
 
 def test_omp_is_set_only_when_missing() -> None:
@@ -81,8 +125,6 @@ def test_bad_silhouette_and_unreadable_arrays() -> None:
         _silhouette([[0.0, 0.0], [1.0, 1.0], [0.0, 1.0], [1.0, 0.0]], (0, 0, 0, 0))
     with pytest.raises(UnusableGroupCountError):
         _tolist(object())
-    with pytest.raises(FewClassesError):
-        _unpack([1, 2, 3])
     assert _tolist((1, 2)) == [1, 2]
     assert _count_row([1.0, 2.0]) == (1.0, 2.0)
     assert _count_row([[3.0, 4.0]]) == (3.0, 4.0)
@@ -94,6 +136,59 @@ def test_nan_silhouette_does_not_win(monkeypatch: pytest.MonkeyPatch) -> None:
         lambda *_args, **_kwargs: float("nan"),
     )
     assert _silhouette([[0.0], [1.0], [0.2], [0.8]], (0, 0, 1, 1)) == -1.0
+
+
+def test_tiny_bimodal_feature_does_not_drive_the_split() -> None:
+    offsets = (-0.16, -0.08, 0.0, 0.08, 0.16)
+    rows = tuple(
+        (base + offsets[i % 5], 0.001 * (i % 2))
+        for base, start in ((0.1, 0), (0.9, 10))
+        for i in range(start, start + 10)
+    )
+    fit = SklearnProfileClusterer().fit(rows, GroupSpan(2, 2, False))
+    assert len(set(fit.assignments[:10])) == 1
+    assert len(set(fit.assignments[10:])) == 1
+    assert fit.assignments[0] != fit.assignments[10]
+
+
+def test_search_on_raw_shares_keeps_the_wide_split() -> None:
+    offsets = (-0.16, -0.08, 0.0, 0.08, 0.16)
+    rows = tuple(
+        (base + offsets[i % 5], 0.001 * (i % 2))
+        for base, start in ((0.1, 0), (0.9, 10))
+        for i in range(start, start + 10)
+    )
+    fit = SklearnProfileClusterer().fit(rows, GroupSpan(2, 3, True))
+    assert len(set(fit.assignments[:10])) == 1
+    assert len(set(fit.assignments[10:])) == 1
+    assert fit.assignments[0] != fit.assignments[10]
+    assert fit.silhouette is not None and fit.silhouette > 0.7
+
+
+def test_large_sample_scores_on_a_seeded_subsample(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict[str, object] = {}
+
+    def spy(_x: object, _labels: object, **kwargs: object) -> float:
+        seen.update(kwargs)
+        return 0.5
+
+    monkeypatch.setattr("eleicoes.adapters.sklearn_ajuste.silhouette_score", spy)
+    rows = [[float(i % 2), float(i % 3)] for i in range(2001)]
+    assert _silhouette(rows, tuple(i % 2 for i in range(2001))) == 0.5
+    assert seen == {"sample_size": 2000, "random_state": 0}
+
+
+def test_small_sample_scores_exactly(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict[str, object] = {}
+
+    def spy(_x: object, _labels: object, **kwargs: object) -> float:
+        seen.update(kwargs)
+        return 0.5
+
+    monkeypatch.setattr("eleicoes.adapters.sklearn_ajuste.silhouette_score", spy)
+    rows = [[float(i % 2)] for i in range(2000)]
+    assert _silhouette(rows, tuple(i % 2 for i in range(2000))) == 0.5
+    assert seen == {}
 
 
 def _blobs() -> tuple[list[tuple[float, float]], list[tuple[float, float]]]:

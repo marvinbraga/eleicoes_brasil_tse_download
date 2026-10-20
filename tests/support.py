@@ -1,6 +1,13 @@
 from collections.abc import Iterator
 from pathlib import Path
 
+from eleicoes.domain.classe_governador import (
+    ClassDataset,
+    ClassLine,
+    ClassPlace,
+    ClassReport,
+    class_report,
+)
 from eleicoes.domain.command import DownloadCommand
 from eleicoes.domain.report import RunReport, TransferStatus
 from eleicoes.domain.values import (
@@ -161,3 +168,34 @@ class MemoryGateway:
         if index >= len(self.pages):
             return CkanPage(total=0, packages=())
         return self.pages[index]
+
+
+def hand_class_dataset(df_leader: int = 22, without_uf: int = 0) -> ClassDataset:
+    rows = (
+        ("AC", "consolidacao", 13),
+        ("AC", "consolidacao", 13),
+        ("BA", "consolidacao", 13),
+        ("BA", "em_aberto", 22),
+        ("BA", "em_aberto", 22),
+        ("DF", "em_aberto", df_leader),
+    )
+    places = tuple(
+        ClassPlace(str(index), f"M{index}", 100, label, leader_votes(leader), uf, leader)
+        for index, (uf, label, leader) in enumerate(rows)
+    )
+    return ClassDataset((13, 22, 44), places, (), without_uf)
+
+
+def leader_votes(leader: int) -> tuple[tuple[int, int], ...]:
+    return tuple((party, 10 if party == leader else 3) for party in (13, 22, 44))
+
+
+def hand_class_report(without_uf: int = 0) -> ClassReport:
+    dataset = hand_class_dataset(without_uf=without_uf)
+    predicted = ("consolidacao", "em_aberto", "consolidacao", "em_aberto", "em_aberto", "em_aberto")
+    return class_report(2026, 1, dataset, predicted, ())
+
+
+def alternating_states(lines: tuple[ClassLine, ...]) -> tuple[tuple[str, str], ...]:
+    codes = sorted({line.codigo for line in lines})
+    return tuple((codigo, ("SP", "MG")[index % 2]) for index, codigo in enumerate(codes))

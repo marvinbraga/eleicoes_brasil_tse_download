@@ -4,18 +4,24 @@ import os
 from collections.abc import MutableMapping
 from typing import Final, Protocol, SupportsFloat, SupportsInt, cast
 
-from eleicoes.domain.classe_governador import ClassRule, RuleCut, majority_label
-from eleicoes.domain.errors import FewClassesError, UnusableGroupCountError
+from eleicoes.domain.classe_governador import ClassRule, RuleCut
+from eleicoes.domain.errors import (
+    FewClassesError,
+    FewStatesError,
+    InconsistentCellError,
+    UnusableGroupCountError,
+)
 from eleicoes.domain.perfis import GroupSpan, winning_k
 from eleicoes.ports.classe_governador import ClassFit
 from eleicoes.ports.perfis import RawClusterFit
 
 _N_INIT: Final = 10
 _RANDOM_STATE: Final = 0
-_TEST_SIZE: Final = 0.25
 _MAX_DEPTH: Final = 3
 _MIN_LEAF: Final = 20
 _LEAF: Final = -1
+_MIN_GROUPS: Final = 2
+_SILHOUETTE_SAMPLE: Final = 2000
 
 
 def limit_omp_threads(environ: MutableMapping[str, str]) -> None:
@@ -26,10 +32,10 @@ def limit_omp_threads(environ: MutableMapping[str, str]) -> None:
 limit_omp_threads(os.environ)
 
 # isort: split
+import numpy as np
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import LeaveOneGroupOut, cross_val_predict
 from sklearn.tree import DecisionTreeClassifier
 from threadpoolctl import threadpool_limits
 
@@ -52,9 +58,14 @@ class SklearnGovernorTree:
         matrix: tuple[tuple[float, ...], ...],
         labels: tuple[str, ...],
         parties: tuple[int, ...],
+        groups: tuple[str, ...],
     ) -> ClassFit:
+        if len(groups) != len(matrix):
+            raise InconsistentCellError()
+        if len(set(groups)) < _MIN_GROUPS:
+            raise FewStatesError()
         try:
-            return _tree(_matrix(matrix), labels, parties)
+            return _tree(matrix, labels, parties, groups)
         except ValueError as exc:
             raise FewClassesError() from exc
 
@@ -72,15 +83,15 @@ def _search(rows: list[list[float]], ks: tuple[int, ...]) -> RawClusterFit:
 def _once(rows: list[list[float]], k: int) -> RawClusterFit:
     _guard_k(rows, k)
     with threadpool_limits(limits=1):
-        labels, centers, _scaled = _kmeans(rows, k)
+        labels, centers = _kmeans(rows, k)
     return RawClusterFit(labels, centers, None)
 
 
 def _scored(rows: list[list[float]], k: int) -> tuple[RawClusterFit, float]:
     _guard_k(rows, k)
     with threadpool_limits(limits=1):
-        labels, centers, scaled = _kmeans(rows, k)
-        score = _silhouette(scaled, labels)
+        labels, centers = _kmeans(rows, k)
+        score = _silhouette(rows, labels)
     return RawClusterFit(labels, centers, score), score
 
 
@@ -92,48 +103,32 @@ def _guard_k(rows: list[list[float]], k: int) -> None:
 def _kmeans(
     rows: list[list[float]],
     k: int,
-) -> tuple[tuple[int, ...], tuple[tuple[float, ...], ...], object]:
-    scaler = StandardScaler()
-    scaled = scaler.fit_transform(rows)
+) -> tuple[tuple[int, ...], tuple[tuple[float, ...], ...]]:
     model = KMeans(n_clusters=k, n_init=_N_INIT, random_state=_RANDOM_STATE)
-    model.fit(scaled)
-    labels = _ints(model.labels_)
-    centers = _rows(scaler.inverse_transform(model.cluster_centers_))
-    return labels, centers, scaled
+    model.fit(rows)
+    return _ints(model.labels_), _rows(model.cluster_centers_)
 
 
 def _tree(
-    rows: list[list[float]],
+    matrix: tuple[tuple[float, ...], ...],
     labels: tuple[str, ...],
     parties: tuple[int, ...],
+    groups: tuple[str, ...],
 ) -> ClassFit:
+    x = np.asarray(matrix, dtype=float)
+    y = np.asarray(labels)
     with threadpool_limits(limits=1):
-        splits = train_test_split(
-            rows,
-            list(labels),
-            test_size=_TEST_SIZE,
-            random_state=_RANDOM_STATE,
-            stratify=list(labels),
-        )
-        train_x, test_x, train_y, test_y = _unpack(splits)
-        model = DecisionTreeClassifier(
-            max_depth=_MAX_DEPTH,
-            min_samples_leaf=_MIN_LEAF,
-            random_state=_RANDOM_STATE,
-        )
-        model.fit(train_x, train_y)
-        predicted = tuple(_texts(model.predict(test_x)))
-        rules = _rules(model, parties)
-    return ClassFit(majority_label(tuple(train_y)), tuple(test_y), predicted, rules)
+        predicted = cross_val_predict(_classifier(), x, y, groups=groups, cv=LeaveOneGroupOut())
+        rules = _rules(_classifier().fit(x, y), parties)
+    return ClassFit(tuple(_texts(predicted)), rules)
 
 
-def _unpack(
-    splits: object,
-) -> tuple[list[list[float]], list[list[float]], list[str], list[str]]:
-    parts = _tolist(splits)
-    if len(parts) != 4:
-        raise FewClassesError()
-    return _table(parts[0]), _table(parts[1]), _texts(parts[2]), _texts(parts[3])
+def _classifier() -> DecisionTreeClassifier:
+    return DecisionTreeClassifier(
+        max_depth=_MAX_DEPTH,
+        min_samples_leaf=_MIN_LEAF,
+        random_state=_RANDOM_STATE,
+    )
 
 
 def _rules(model: object, parties: tuple[int, ...]) -> tuple[ClassRule, ...]:
@@ -213,15 +208,21 @@ def _spec(model: object) -> _Tree:
     )
 
 
-def _silhouette(scaled: object, labels: tuple[int, ...]) -> float:
+def _silhouette(rows: list[list[float]], labels: tuple[int, ...]) -> float:
     try:
-        value = silhouette_score(scaled, list(labels))
+        value = silhouette_score(rows, list(labels), **_sampling(len(rows)))
     except ValueError as exc:
         raise UnusableGroupCountError() from exc
     score = float(value)
     if score != score:
         return -1.0
     return score
+
+
+def _sampling(count: int) -> dict[str, int]:
+    if count > _SILHOUETTE_SAMPLE:
+        return {"sample_size": _SILHOUETTE_SAMPLE, "random_state": _RANDOM_STATE}
+    return {}
 
 
 def _matrix(matrix: tuple[tuple[float, ...], ...]) -> list[list[float]]:
@@ -242,10 +243,6 @@ def _texts(values: object) -> list[str]:
 
 def _rows(values: object) -> tuple[tuple[float, ...], ...]:
     return tuple(_number_row(row) for row in _tolist(values))
-
-
-def _table(values: object) -> list[list[float]]:
-    return [list(_number_row(row)) for row in _tolist(values)]
 
 
 def _counts(values: object) -> tuple[tuple[float, ...], ...]:

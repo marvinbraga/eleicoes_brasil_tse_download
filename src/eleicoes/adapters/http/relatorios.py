@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse
 from eleicoes.adapters.http.dependencies import (
     ClassJob,
     ProfileJob,
+    clear_report_caches,
     get_boletim_reader,
     get_class_job,
     get_cross_store,
@@ -99,6 +100,8 @@ async def presidente_governador(
         uf,
         atualizar=atualizar,
     )
+    if atualizar:
+        clear_report_caches()
     return CrossReportJson.from_domain(report)
 
 
@@ -148,6 +151,8 @@ async def poder_html(
         cargo,
         atualizar=atualizar,
     )
+    if atualizar:
+        clear_report_caches()
     return HTMLResponse(content=html)
 
 
@@ -173,4 +178,6 @@ async def presidente_governador_html(
         uf,
         atualizar=atualizar,
     )
+    if atualizar:
+        clear_report_caches()
     return HTMLResponse(content=html)

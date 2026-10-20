@@ -57,6 +57,38 @@ def test_class_query_reads_both_cargos_and_skips_the_cedula() -> None:
     reader.close()
 
 
+def test_municipal_ufs_reads_president_lines_once_per_code() -> None:
+    session = ScriptedSession()
+    session.push(("1", "SP"), ("2", "MG"))
+    reader = PostgresStoredLines(lambda: session)
+
+    assert reader.municipal_ufs(2026, 1) == (("1", "SP"), ("2", "MG"))
+    selects = [item for _begin, item in session.executed if isinstance(item, Select)]
+    assert len(selects) == 1
+    compiled = selects[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled).lower()
+    table = "analise.relatorio_presidente_governador_linha"
+    assert f"select distinct {table}.codigo, {table}.uf \nfrom {table}" in sql
+    assert f"{table}.cargo = %(cargo_1)s" in sql
+    assert f"order by {table}.uf, {table}.codigo" in sql
+    assert "boletim" not in sql
+    assert "raw." not in sql
+    assert _bound(compiled.params) >= {2026, 1, "presidente"}
+    reader.close()
+
+
+def test_municipal_ufs_rejects_a_bad_row_and_translates_the_driver() -> None:
+    session = ScriptedSession()
+    session.push(("1", "SP", "extra"))
+    with pytest.raises(InconsistentCellError):
+        PostgresStoredLines(lambda: session).municipal_ufs(2026, 1)
+
+    broken = ScriptedSession()
+    broken.fail = SQLAlchemyError("nope")
+    with pytest.raises(StoredReadError):
+        PostgresStoredLines(lambda: broken).municipal_ufs(2026, 1)
+
+
 def test_bad_row_stays_a_domain_error_and_the_driver_is_translated() -> None:
     session = ScriptedSession()
     session.push(("short",))
