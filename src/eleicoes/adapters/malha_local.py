@@ -40,11 +40,17 @@ _COLOR: Final = re.compile(r"^#[0-9A-Fa-f]{6}$")
 _MAX_PARTY: Final = 99
 _PNG_MEDIA: Final = "image/png"
 _SVG_MEDIA: Final = "image/svg+xml"
+_EXTERIOR_NAME: Final = "exterior.csv"
+_EXTERIOR_COLUMNS: Final = ["codigo", "nome", "lon", "lat"]
+_TSE_DIGITS: Final = 5
+_MAX_LON: Final = 180.0
+_MAX_LAT: Final = 90.0
 
 
 class LocalMeshAssets:
-    def __init__(self, raiz: Path) -> None:
+    def __init__(self, raiz: Path, exterior: Path | None = None) -> None:
         self._raiz = raiz
+        self._exterior = exterior
 
     def load(self) -> MalhaCarregada:
         texts = self._texts()
@@ -77,7 +83,15 @@ class LocalMeshAssets:
                 manifesto.paises_objeto,
                 "id",
             ),
+            exterior=self._coordinates(),
         )
+
+    def _coordinates(self) -> dict[str, tuple[float, float]]:
+        if self._exterior is None:
+            return {}
+        if not self._exterior.is_file():
+            raise MeshMissingError(_EXTERIOR_NAME)
+        return _exterior(self._exterior.read_text(encoding="utf-8"))
 
     def _texts(self) -> dict[str, str]:
         return {name: self._read(name) for name in _TEXT_FILES}
@@ -168,6 +182,42 @@ def _csv_row(raw_row: object) -> dict[str, str]:
             raise InvalidPonteError
         row[key] = value
     return row
+
+
+def _exterior(raw: str) -> dict[str, tuple[float, float]]:
+    reader = csv.DictReader(raw.splitlines())
+    if reader.fieldnames != _EXTERIOR_COLUMNS:
+        raise MeshMismatchError(_EXTERIOR_NAME)
+    found: dict[str, tuple[float, float]] = {}
+    for row in reader:
+        code, coordinate = _exterior_row(row)
+        if code in found:
+            raise MeshMismatchError(_EXTERIOR_NAME)
+        found[code] = coordinate
+    return found
+
+
+def _exterior_row(row: dict[str | None, object]) -> tuple[str, tuple[float, float]]:
+    code = row.get("codigo")
+    if None in row or not isinstance(code, str) or not _tse_code(code):
+        raise MeshMismatchError(_EXTERIOR_NAME)
+    return code, (_degrees(row.get("lon"), _MAX_LON), _degrees(row.get("lat"), _MAX_LAT))
+
+
+def _tse_code(code: str) -> bool:
+    return len(code) == _TSE_DIGITS and code.isascii() and code.isdigit()
+
+
+def _degrees(value: object, limit: float) -> float:
+    if not isinstance(value, str):
+        raise MeshMismatchError(_EXTERIOR_NAME)
+    try:
+        degrees = float(value)
+    except ValueError as exc:
+        raise MeshMismatchError(_EXTERIOR_NAME) from exc
+    if not -limit <= degrees <= limit:
+        raise MeshMismatchError(_EXTERIOR_NAME)
+    return degrees
 
 
 def _party(key: str) -> int:

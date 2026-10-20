@@ -4,7 +4,7 @@ import json
 from html import escape
 from typing import Final
 
-from eleicoes.domain.mapa import PaginaDoMapa, Pintura, RecortePintado
+from eleicoes.domain.mapa import PaginaDoMapa, Pintura, PontoPintado, RecortePintado
 
 _IBGE: Final = "Malha municipal e de estados: IBGE. Licença compatível com CC BY 4.0."
 _REGIONS: Final = (
@@ -227,6 +227,79 @@ _PAGE_SCRIPT: Final = """\
     return denominador;
   }
 
+  var RAIO_MINIMO = 4;
+  var RAIO_MAXIMO = 16;
+  var VOTOS_DO_RAIO_MAXIMO = 30000;
+  var ZOOM_NOMES_DO_EXTERIOR = 4;
+
+  function estiloPonto(feature, resolution) {
+    var emDestaque = feature === destacado;
+    var tinta = misturar(feature.get("cor"), emDestaque ? "1/1" : feature.get("peso"));
+    var votos = votosValidos(feature.get("peso"));
+    var raio = raioDoPonto(votos) + (emDestaque ? 2 : 0);
+    var estilos = [new ol.style.Style({
+      zIndex: emDestaque ? Z_DESTAQUE : votos,
+      image: new ol.style.Circle({
+        radius: raio,
+        declutterMode: "obstacle",
+        fill: new ol.style.Fill({color: tinta.fill}),
+        stroke: new ol.style.Stroke({
+          color: emDestaque ? "#000000" : "#222222",
+          width: emDestaque ? 3 : 1
+        })
+      })
+    })];
+    if (emDestaque || nomesDoExteriorVisiveis(resolution)) {
+      estilos.push(new ol.style.Style({
+        zIndex: emDestaque ? Z_DESTAQUE : votos,
+        text: new ol.style.Text({
+          text: String(feature.get("nome") || "").replace(/ \\(ZZ\\)$/, ""),
+          font: emDestaque ? "bold 13px sans-serif" : "11px sans-serif",
+          offsetY: raio + 9,
+          fill: new ol.style.Fill({color: "#111111"}),
+          stroke: new ol.style.Stroke({color: "#ffffff", width: 3})
+        })
+      }));
+    }
+    return estilos;
+  }
+
+  function raioDoPonto(votos) {
+    var parte = Math.sqrt(Math.min(votos, VOTOS_DO_RAIO_MAXIMO) / VOTOS_DO_RAIO_MAXIMO);
+    return RAIO_MINIMO + (RAIO_MAXIMO - RAIO_MINIMO) * parte;
+  }
+
+  function nomesDoExteriorVisiveis(resolution) {
+    if (typeof resolution !== "number" || !isFinite(resolution) || resolution <= 0) {
+      return true;
+    }
+    return vista.getZoomForResolution(resolution) >= ZOOM_NOMES_DO_EXTERIOR;
+  }
+
+  function colecaoDePontos(itens) {
+    return {
+      type: "FeatureCollection",
+      features: itens.map(function (item) {
+        return {
+          type: "Feature",
+          geometry: {type: "Point", coordinates: [item.lon, item.lat]},
+          properties: {
+            codigo: String(item.codigo),
+            cor: item.cor,
+            peso: item.peso,
+            numero: item.numero,
+            nome: item.nome,
+            logo: pintura.logos[item.numero],
+            segundo: item.segundo,
+            votosSegundo: item.votosSegundo,
+            branco: item.branco,
+            nulo: item.nulo
+          }
+        };
+      })
+    };
+  }
+
   function maiorParte(feature) {
     var geometria = feature.getGeometry();
     if (!geometria || geometria.getType() !== "MultiPolygon") {
@@ -422,7 +495,7 @@ _PAGE_SCRIPT: Final = """\
   function pintadoNoPixel(pixel) {
     var achado = mapa.forEachFeatureAtPixel(pixel, function (feature) {
       return feature.get("cor") ? feature : undefined;
-    });
+    }, {hitTolerance: 4});
     return achado || null;
   }
 
@@ -487,7 +560,8 @@ _PAGE_SCRIPT: Final = """\
       camada(mundo, estiloMundo, null, null),
       camada(brasil, estilo, null, 4),
       camada(colecao(ufs, pintura.ufsObjeto), estilo, 4, 6),
-      camada(colecao(municipios, pintura.municipiosObjeto), estilo, 6, 28, true)
+      camada(colecao(municipios, pintura.municipiosObjeto), estilo, 6, 28, true),
+      camada(colecaoDePontos(pintura.exterior || []), estiloPonto, null, null, true)
     ],
     controls: ol.control.defaults.defaults().extend([
       new ol.control.Control({element: painelZoom})
@@ -589,6 +663,7 @@ def _payload(pagina: PaginaDoMapa) -> dict[str, object]:
         "pais": country,
         "ufs": [_item(item) for item in recorte.ufs],
         "municipios": [_item(item) for item in recorte.municipios],
+        "exterior": [_ponto(ponto) for ponto in recorte.exterior],
         "brasilId": pagina.brasil_id,
         "ufsObjeto": pagina.ufs_objeto,
         "municipiosObjeto": pagina.municipios_objeto,
@@ -605,7 +680,8 @@ def _logos(recorte: RecortePintado) -> dict[str, str]:
 
 def _paintings(recorte: RecortePintado) -> tuple[Pintura, ...]:
     country = () if recorte.pais is None else (recorte.pais,)
-    return country + recorte.ufs + recorte.municipios
+    abroad = tuple(ponto.pintura for ponto in recorte.exterior)
+    return country + recorte.ufs + recorte.municipios + abroad
 
 
 def _item(pintura: Pintura) -> dict[str, str | int]:
@@ -620,3 +696,7 @@ def _item(pintura: Pintura) -> dict[str, str | int]:
         "branco": pintura.branco,
         "nulo": pintura.nulo,
     }
+
+
+def _ponto(ponto: PontoPintado) -> dict[str, str | int | float]:
+    return {**_item(ponto.pintura), "lon": ponto.lon, "lat": ponto.lat}

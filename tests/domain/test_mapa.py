@@ -4,6 +4,7 @@ from eleicoes.domain.mapa import (
     InvalidPonteError,
     Marca,
     MarkMissingError,
+    RecortePintado,
     ponte_de_linhas,
     recorte_pintado,
 )
@@ -272,3 +273,82 @@ def test_paint_without_runner_up_leaves_it_empty() -> None:
     assert painted.municipios[0].votos_segundo == 0
     assert painted.municipios[0].branco == 0
     assert painted.municipios[0].nulo == 0
+
+
+def _exterior_paint(cargo: str, exterior: dict[str, tuple[float, float]]) -> RecortePintado:
+    view = view_from_places(
+        2026,
+        1,
+        (
+            _place("AC", "01007", "Bujari", 22, 13),
+            MunicipalPlace(
+                "ZZ",
+                "29386",
+                "Lisboa",
+                CargoTally((PartyTally(13, 7, 0), PartyTally(22, 2, 0)), 1, 3),
+                None,
+            ),
+        ),
+    )
+    marcas = {22: Marca("#112233", "data:a"), 13: Marca("#AABBCC", "data:b")}
+    return recorte_pintado(
+        view,
+        cargo,
+        _ponte(),
+        marcas,
+        frozenset({"1200138"}),
+        frozenset({"12"}),
+        "076",
+        exterior=exterior,
+    )
+
+
+def test_abroad_place_with_a_coordinate_becomes_a_point() -> None:
+    painted = _exterior_paint("presidente", {"29386": (-9.14, 38.72)})
+    [ponto] = painted.exterior
+    assert ponto.lon == -9.14
+    assert ponto.lat == 38.72
+    assert ponto.pintura.codigo == "29386"
+    assert ponto.pintura.numero == "13"
+    assert ponto.pintura.cor == "#AABBCC"
+    assert ponto.pintura.logo == "data:b"
+    assert ponto.pintura.nome == "Lisboa"
+    assert ponto.pintura.peso == "7/9"
+    assert ponto.pintura.segundo == "22"
+    assert ponto.pintura.votos_segundo == 2
+    assert ponto.pintura.branco == 1
+    assert ponto.pintura.nulo == 3
+    assert "Lisboa" not in painted.sem_poligono
+    assert [item.codigo for item in painted.municipios] == ["1200138"]
+
+
+def test_abroad_place_without_a_coordinate_stays_a_hole() -> None:
+    painted = _exterior_paint("presidente", {"99999": (0.0, 0.0)})
+    assert painted.exterior == ()
+    assert "Lisboa" in painted.sem_poligono
+
+
+def test_governor_map_has_no_abroad_points() -> None:
+    painted = _exterior_paint("governador", {"29386": (-9.14, 38.72)})
+    assert painted.exterior == ()
+    assert "Lisboa" not in painted.sem_poligono
+    assert [item.numero for item in painted.municipios] == ["13"]
+
+
+def test_paint_without_exterior_keeps_abroad_places_as_holes() -> None:
+    view = view_from_places(2026, 1, (_place("ZZ", "29386", "Lisboa", 22, None),))
+    painted = recorte_pintado(
+        view,
+        "presidente",
+        _ponte(),
+        {22: Marca("#112233", "data:a")},
+        frozenset(),
+        frozenset(),
+        "076",
+    )
+    assert painted.exterior == ()
+    assert "Lisboa" in painted.sem_poligono
+
+
+def test_recorte_built_positionally_has_no_points() -> None:
+    assert RecortePintado(None, (), (), ()).exterior == ()

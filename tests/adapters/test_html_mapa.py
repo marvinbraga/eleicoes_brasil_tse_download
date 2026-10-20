@@ -4,7 +4,7 @@ import json
 from dataclasses import replace
 
 from eleicoes.adapters.html_mapa import html_do_mapa
-from eleicoes.domain.mapa import PaginaDoMapa, Pintura, RecortePintado
+from eleicoes.domain.mapa import PaginaDoMapa, Pintura, PontoPintado, RecortePintado
 
 _LOGO = "data:image/png;base64,QQ=="
 _MUNICIPIOS = (
@@ -204,6 +204,44 @@ def test_low_zoom_municipal_label_shows_only_the_name() -> None:
     assert (
         "vista.getZoomForResolution(resolution) >= ZOOM_ROTULO_COMPLETO ? texto : String(nome)"
     ) in html
+
+
+def test_abroad_places_become_points_on_top() -> None:
+    page = _page()
+    lisboa = replace(Pintura("29955", "#445566", "13", "data:image/png;base64,Qg=="), nome="LISBOA")
+    ponto = PontoPintado(lisboa, -9.1393, 38.7223)
+    html = html_do_mapa(replace(page, recorte=replace(page.recorte, exterior=(ponto,))))
+    pintura = json.loads(_block(html, "pintura"))
+
+    assert pintura["exterior"] == [
+        {
+            "codigo": "29955",
+            "cor": "#445566",
+            "numero": "13",
+            "peso": "1/1",
+            "nome": "LISBOA",
+            "segundo": "",
+            "votosSegundo": 0,
+            "branco": 0,
+            "nulo": 0,
+            "lon": -9.1393,
+            "lat": 38.7223,
+        }
+    ]
+    assert pintura["logos"]["13"] == "data:image/png;base64,Qg=="
+    assert "function estiloPonto(feature, resolution)" in html
+    assert 'declutterMode: "obstacle"' in html
+    assert "var VOTOS_DO_RAIO_MAXIMO = 30000;" in html
+    assert 'geometry: {type: "Point", coordinates: [item.lon, item.lat]}' in html
+    assert "camada(colecaoDePontos(pintura.exterior || []), estiloPonto, null, null, true)" in html
+    assert "{hitTolerance: 4}" in html
+    assert r'.replace(/ \(ZZ\)$/, "")' in html
+    mundo = html.split("function estiloMundo()", 1)[1].split("function estilo(", 1)[0]
+    assert "estiloPonto" not in mundo
+
+
+def test_page_without_abroad_points_has_empty_list() -> None:
+    assert json.loads(_block(html_do_mapa(_page()), "pintura"))["exterior"] == []
 
 
 def test_hover_highlights_and_details_the_place() -> None:

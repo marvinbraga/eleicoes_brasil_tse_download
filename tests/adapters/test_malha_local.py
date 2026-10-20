@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from eleicoes.adapters.malha_local import LocalMeshAssets
-from eleicoes.domain.mapa import MarkInvalidError, MeshMissingError
+from eleicoes.domain.mapa import MarkInvalidError, MeshMismatchError, MeshMissingError
 
 _ONE_PIXEL_PNG = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
@@ -127,3 +127,64 @@ def test_missing_logo_names_the_file(tmp_path: Path) -> None:
     with pytest.raises(MeshMissingError) as error:
         LocalMeshAssets(tmp_path).load()
     assert error.value.nome == "downloads/malha/logomarcas/22.png"
+
+
+def _exterior_csv(tmp_path: Path, *rows: str) -> Path:
+    path = tmp_path / "exterior.csv"
+    lines = ("codigo,nome,lon,lat", *rows)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
+def test_exterior_reads_coordinates_by_tse_code(tmp_path: Path) -> None:
+    _write_fixture(tmp_path)
+    exterior = _exterior_csv(tmp_path, "29386,Lisboa,-9.1393,38.7223", "29912,Tóquio,139.69,35.68")
+    loaded = LocalMeshAssets(tmp_path, exterior).load()
+    assert loaded.exterior == {"29386": (-9.1393, 38.7223), "29912": (139.69, 35.68)}
+
+
+def test_exterior_is_empty_without_a_path(tmp_path: Path) -> None:
+    _write_fixture(tmp_path)
+    assert LocalMeshAssets(tmp_path).load().exterior == {}
+
+
+def test_missing_exterior_names_the_file(tmp_path: Path) -> None:
+    _write_fixture(tmp_path)
+    with pytest.raises(MeshMissingError) as error:
+        LocalMeshAssets(tmp_path, tmp_path / "exterior.csv").load()
+    assert error.value.nome == "exterior.csv"
+
+
+@pytest.mark.parametrize(
+    "row",
+    [
+        "29386,Lisboa,-9.1,91.0",
+        "29386,Lisboa,-180.5,38.7",
+        "2938A,Lisboa,-9.1,38.7",
+        "2938,Lisboa,-9.1,38.7",
+        "29386,Lisboa,oeste,38.7",
+        "29386,Lisboa,nan,38.7",
+        "29386,Lisboa,-9.1",
+    ],
+)
+def test_bad_exterior_row_is_a_mismatch(tmp_path: Path, row: str) -> None:
+    _write_fixture(tmp_path)
+    exterior = _exterior_csv(tmp_path, row)
+    with pytest.raises(MeshMismatchError) as error:
+        LocalMeshAssets(tmp_path, exterior).load()
+    assert error.value.nome == "exterior.csv"
+
+
+def test_duplicate_exterior_code_is_a_mismatch(tmp_path: Path) -> None:
+    _write_fixture(tmp_path)
+    exterior = _exterior_csv(tmp_path, "29386,Lisboa,-9.1,38.7", "29386,Porto,-8.6,41.1")
+    with pytest.raises(MeshMismatchError):
+        LocalMeshAssets(tmp_path, exterior).load()
+
+
+def test_wrong_exterior_header_is_a_mismatch(tmp_path: Path) -> None:
+    _write_fixture(tmp_path)
+    exterior = tmp_path / "exterior.csv"
+    exterior.write_text("code,name,x,y\n29386,Lisboa,-9.1,38.7\n", encoding="utf-8")
+    with pytest.raises(MeshMismatchError):
+        LocalMeshAssets(tmp_path, exterior).load()

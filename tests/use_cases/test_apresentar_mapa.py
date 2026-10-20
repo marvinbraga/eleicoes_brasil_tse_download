@@ -6,7 +6,13 @@ from pathlib import Path
 import pytest
 
 from eleicoes.domain.errors import ElectionError, InvalidStoredReportError
-from eleicoes.domain.mapa import Marca, MeshMissingError, PonteTseIbge, ponte_de_linhas
+from eleicoes.domain.mapa import (
+    Marca,
+    MeshMissingError,
+    PaginaDoMapa,
+    PonteTseIbge,
+    ponte_de_linhas,
+)
 from eleicoes.domain.presidente_governador import CargoTally, MunicipalPlace, PartyTally
 from eleicoes.ports.malha import MalhaCarregada, Manifesto
 from eleicoes.ports.relatorio_presidente_governador import StoredCrossReport
@@ -313,12 +319,12 @@ def test_missing_assets_use_the_local_mesh(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    seen: list[Path] = []
+    seen: list[tuple[Path, Path | None]] = []
     assets = _Assets()
 
     class _Wrap:
-        def __init__(self, raiz: Path) -> None:
-            seen.append(raiz)
+        def __init__(self, raiz: Path, exterior: Path | None = None) -> None:
+            seen.append((raiz, exterior))
 
         def load(self) -> MalhaCarregada:
             return assets.load()
@@ -331,7 +337,28 @@ def test_missing_assets_use_the_local_mesh(
         collect=lambda _ano, _turno: (_bujari(),),
     )
     assert code == 0
-    assert seen == [Path("downloads/malha")]
+    assert seen == [(Path("downloads/malha"), Path("dados/exterior.csv"))]
+
+
+def test_abroad_coordinates_reach_the_painted_cut(tmp_path: Path) -> None:
+    pages: list[PaginaDoMapa] = []
+
+    def render(page: PaginaDoMapa) -> str:
+        pages.append(page)
+        return ""
+
+    code = main(
+        _command(tmp_path / "mapa.html"),
+        store=_Memory(),
+        assets=_Assets(exterior={"29386": (-9.14, 38.72)}),
+        collect=lambda _ano, _turno: (_bujari(), _place("ZZ", "29386", "Lisboa", 13, 13)),
+        render=render,
+    )
+    assert code == 0
+    [ponto] = pages[0].recorte.exterior
+    assert (ponto.pintura.codigo, ponto.pintura.numero) == ("29386", "13")
+    assert (ponto.lon, ponto.lat) == (-9.14, 38.72)
+    assert "Lisboa" not in pages[0].recorte.sem_poligono
 
 
 def test_injected_reader_collects_without_production(
@@ -485,9 +512,11 @@ class _Assets:
         *,
         ids_pais: frozenset[str] | None = None,
         marcas: dict[int, Marca] | None = None,
+        exterior: dict[str, tuple[float, float]] | None = None,
     ) -> None:
         self._ids = frozenset({"076"}) if ids_pais is None else ids_pais
         self._marcas = _marks() if marcas is None else marcas
+        self._exterior = {} if exterior is None else exterior
 
     def load(self) -> MalhaCarregada:
         return MalhaCarregada(
@@ -503,6 +532,7 @@ class _Assets:
             codigos_municipio=frozenset({"1200138"}),
             codigos_uf=frozenset({"12"}),
             ids_pais=self._ids,
+            exterior=self._exterior,
         )
 
 

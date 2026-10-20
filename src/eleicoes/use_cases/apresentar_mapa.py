@@ -37,6 +37,7 @@ Collect = Callable[[int, int], tuple[MunicipalPlace, ...]]
 Render = Callable[[PaginaDoMapa], str]
 OpenReport = Callable[[Path], bool]
 _MESH_DIR = Path("downloads/malha")
+_EXTERIOR_CSV = Path("dados/exterior.csv")
 
 
 @dataclass(frozen=True, slots=True)
@@ -212,7 +213,7 @@ def _production_store() -> RelatorioPresidenteGovernadorStore:
 def _production_assets() -> MeshAssets:
     from eleicoes.adapters.malha_local import LocalMeshAssets
 
-    return LocalMeshAssets(_MESH_DIR)
+    return LocalMeshAssets(_MESH_DIR, _EXTERIOR_CSV)
 
 
 def _production_collect(ano: int, turno: int) -> tuple[MunicipalPlace, ...]:
@@ -260,6 +261,7 @@ def _page(
         mesh.codigos_municipio,
         mesh.codigos_uf,
         manifesto.brasil_id,
+        exterior=mesh.exterior,
     )
     return PaginaDoMapa(
         ano,

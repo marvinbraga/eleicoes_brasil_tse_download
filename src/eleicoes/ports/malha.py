@@ -1,7 +1,7 @@
 """Mesh read port. Later tasks import these names from this module."""
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol
 
 from eleicoes.domain.mapa import Marca, PonteTseIbge
@@ -29,6 +29,7 @@ class MalhaCarregada:
     codigos_municipio: frozenset[str]
     codigos_uf: frozenset[str]
     ids_pais: frozenset[str]
+    exterior: Mapping[str, tuple[float, float]] = field(default_factory=dict)
 
 
 class MeshAssets(Protocol):

@@ -85,6 +85,13 @@ class Pintura:
 
 
 @dataclass(frozen=True, slots=True)
+class PontoPintado:
+    pintura: Pintura
+    lon: float
+    lat: float
+
+
+@dataclass(frozen=True, slots=True)
 class PonteTseIbge:
     municipio_por_tse: Mapping[str, str]
     uf_por_sigla: Mapping[str, str]
@@ -96,6 +103,7 @@ class RecortePintado:
     ufs: tuple[Pintura, ...]
     municipios: tuple[Pintura, ...]
     sem_poligono: tuple[str, ...]
+    exterior: tuple[PontoPintado, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,6 +155,8 @@ def recorte_pintado(
     codigos_municipio: frozenset[str],
     codigos_uf: frozenset[str],
     brasil_id: str,
+    *,
+    exterior: Mapping[str, tuple[float, float]] | None = None,
 ) -> RecortePintado:
     if cargo not in _CARGOS:
         raise InvalidCargoError(cargo)
@@ -157,12 +167,14 @@ def recorte_pintado(
     if ausentes:
         raise BridgeMissingError(ausentes)
     municipios, buracos = _municipios(view, cargo, ponte, marcas, codigos_municipio)
+    pontos, buracos_exterior = _exterior(view, cargo, marcas, exterior or {})
     ufs, buracos_uf = _ufs(view, cargo, ponte, marcas, codigos_uf)
     return RecortePintado(
         _pais(view, cargo, marcas, brasil_id),
         ufs,
         municipios,
-        tuple(sorted(buracos + buracos_uf)),
+        tuple(sorted(buracos + buracos_exterior + buracos_uf)),
+        pontos,
     )
 
 
@@ -204,11 +216,10 @@ def _municipios(
     painted: list[Pintura] = []
     holes: list[str] = []
     for uf, places in view.municipalities:
+        if uf == _EXTERIOR:
+            continue
         for place in places:
             if _lider(place, cargo) is None:
-                continue
-            if uf == _EXTERIOR:
-                holes.append(place.nome)
                 continue
             ibge = ponte.municipio_por_tse[_chave_tse(place.codigo)]
             if ibge not in codigos:
@@ -216,6 +227,30 @@ def _municipios(
                 continue
             painted.append(_pintura(ibge, place, cargo, marcas))
     return tuple(painted), tuple(holes)
+
+
+def _exterior(
+    view: CrossReportView,
+    cargo: str,
+    marcas: Mapping[int, Marca],
+    coordenadas: Mapping[str, tuple[float, float]],
+) -> tuple[tuple[PontoPintado, ...], tuple[str, ...]]:
+    points: list[PontoPintado] = []
+    holes: list[str] = []
+    for place in _lugares_no_exterior(view):
+        if _lider(place, cargo) is None:
+            continue
+        coordenada = coordenadas.get(_chave_tse(place.codigo))
+        if coordenada is None:
+            holes.append(place.nome)
+            continue
+        lon, lat = coordenada
+        points.append(PontoPintado(_pintura(place.codigo, place, cargo, marcas), lon, lat))
+    return tuple(points), tuple(holes)
+
+
+def _lugares_no_exterior(view: CrossReportView) -> tuple[PlaceReading, ...]:
+    return tuple(place for uf, places in view.municipalities if uf == _EXTERIOR for place in places)
 
 
 def _ufs(
