@@ -296,7 +296,7 @@ No navegador, a mesma consulta abre em `http://localhost:14000/relatorios/perfis
 
 ## Ler a classe do governador
 
-A árvore usa só a mistura de presidente e estima a classe já definida no cruzamento. Um quarto dos municípios fica de fora do ajuste e mede o acerto. A comparação é a classe mais comum.
+A árvore usa só a mistura de presidente e estima a classe já definida no cruzamento. O acerto vem de deixar cada UF de fora e prever os municípios dela com a árvore ajustada nas outras. A comparação são duas linhas de base medidas do mesmo jeito: a classe mais comum e a classe mais comum para cada líder presidencial. Quando o acerto fica abaixo de uma delas, o relatório avisa que as regras descrevem esta eleição e não servem para prever outro estado.
 
 ```bash
 uv run python scripts/relatorio_classe_governador.py --ano 2026 --turno 1 --sem-navegador
@@ -305,6 +305,8 @@ uv run python scripts/relatorio_classe_governador.py --ano 2026 --turno 1 --sem-
 O arquivo sai em `relatorios/classe-governador-{ano}-turno-{turno}.html`.
 
 No navegador, a mesma consulta abre em `http://localhost:14000/relatorios/classe-governador`, também só depois de Consultar.
+
+A API guarda em memória os perfis e a classe já calculados. Depois de regenerar os relatórios base pela linha de comando (`--atualizar`), reinicie a API; uma chamada da API com `atualizar=true` limpa essa memória sozinha.
 
 ## Abrir o mapa de presidente ou de governador
 
