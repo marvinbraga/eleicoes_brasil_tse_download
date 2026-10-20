@@ -42,13 +42,13 @@ _REQUIRED = (
     "ol.format.GeoJSON",
     "ol.style.Fill",
     "ol.style.Text",
-    "declutter: false",
+    "declutter: declutter === true",
     "overflow: true",
     "function soBrasil",
     "camada(mundo, estiloMundo, null, null)",
     "camada(brasil, estilo, null, 4)",
     "camada(colecao(ufs, pintura.ufsObjeto), estilo, 4, 6)",
-    "camada(colecao(municipios, pintura.municipiosObjeto), estilo, 6, 28)",
+    "camada(colecao(municipios, pintura.municipiosObjeto), estilo, 6, 28, true)",
     "properties.logo = pintura.logos[item.numero]",
     "IBGE",
     "OpenLayers Contributors",
@@ -122,11 +122,17 @@ def test_page_renders_the_leader_choropleth() -> None:
         "numero": "22",
         "peso": "1/1",
         "nome": "",
+        "segundo": "",
+        "votosSegundo": 0,
+        "branco": 0,
+        "nulo": 0,
     }
-    assert 'properties.peso = item.peso' in html
+    assert "properties.peso = item.peso" in html
     assert "properties.nome = item.nome" in html
     assert 'data-fundo="#ffffff"' in html
-    assert 'text: rotulo(feature.get("nome"), feature.get("numero"), feature.get("peso"))' in html
+    assert (
+        'var texto = rotulo(feature.get("nome"), feature.get("numero"), feature.get("peso"));'
+    ) in html
     assert "function rotulo(nome, numero, peso)" in html
     assert "if (numerador === 0)" in html
     assert "milhar(denominador)" in html
@@ -157,7 +163,7 @@ def test_municipal_label_follows_zoom_and_valid_votes() -> None:
     assert "var ZOOM_MUNICIPIOS = 6;" in html
     assert "var ZOOM_TODOS = 11;" in html
     assert "var PISO_INICIAL = 800000;" in html
-    assert "function rotuloVisivel(feature, resolution)" in html
+    assert "function rotuloVisivel(feature, resolution, geometria, texto)" in html
     assert "function ehMunicipio(feature)" in html
     assert "codigo.length >= 6" in html
     assert "function minimoDeVotos(zoom)" in html
@@ -165,10 +171,66 @@ def test_municipal_label_follows_zoom_and_valid_votes() -> None:
     assert "function maiorParte(feature)" in html
     assert "!(zoom >= ZOOM_MUNICIPIOS) || zoom >= ZOOM_TODOS" in html
     assert "vista.getZoomForResolution(resolution)" in html
-    assert "Math.floor(zoom) - ZOOM_MUNICIPIOS" in html
-    assert "piso = Math.floor(piso / 2);" in html
+    assert (
+        "var FAIXAS_DE_ROTULO = [[6.5, 400000], [7, 150000], [7.5, 60000], "
+        "[8, 25000], [8.5, 10000]];"
+    ) in html
+    assert "zoom >= FAIXAS_DE_ROTULO[i][0]" in html
+    assert "function cabeNaTela(geometria, texto, resolution)" in html
+    assert "cabeNaTela(geometria, texto, resolution)" in html
+    assert "maisLonga * LARGURA_DO_CARACTERE" in html
+    assert "linhas.length * ALTURA_DA_LINHA" in html
+    assert 'zIndex: emDestaque ? Z_DESTAQUE : votosValidos(feature.get("peso"))' in html
     assert 'geometria.getType() !== "MultiPolygon"' in html
     assert "view: vista" in html
+
+
+def test_page_shows_current_zoom() -> None:
+    html = html_do_mapa(_page())
+
+    assert '<div id="mapa"><div id="zoom" aria-live="polite"></div>' in html
+    assert "#zoom {" in html
+    assert "function mostrarZoom()" in html
+    assert 'vista.on("change:resolution", mostrarZoom);' in html
+    assert "minimoDeVotos(zoom)" in html
+    assert 'detalhe += " · só nomes";' in html
+
+
+def test_low_zoom_municipal_label_shows_only_the_name() -> None:
+    html = html_do_mapa(_page())
+
+    assert "var ZOOM_ROTULO_COMPLETO = 9;" in html
+    assert "function textoDoRotulo(feature, resolution, completo)" in html
+    assert (
+        "vista.getZoomForResolution(resolution) >= ZOOM_ROTULO_COMPLETO ? texto : String(nome)"
+    ) in html
+
+
+def test_hover_highlights_and_details_the_place() -> None:
+    page = _page()
+    city = replace(_paint("1200138"), segundo="13", votos_segundo=7, branco=2, nulo=1)
+    html = html_do_mapa(replace(page, recorte=replace(page.recorte, municipios=(city,))))
+    pintura = json.loads(_block(html, "pintura"))
+
+    assert '<div id="detalhe" role="tooltip" hidden></div></div>' in html
+    assert "#detalhe {" in html
+    assert "pointer-events: none" in html
+    assert pintura["municipios"][0]["segundo"] == "13"
+    assert pintura["municipios"][0]["votosSegundo"] == 7
+    assert pintura["municipios"][0]["branco"] == 2
+    assert pintura["municipios"][0]["nulo"] == 1
+    assert "properties.votosSegundo = item.votosSegundo;" in html
+    assert "var emDestaque = feature === destacado;" in html
+    assert 'misturar(cor, emDestaque ? "1/1" : feature.get("peso"))' in html
+    assert 'font: emDestaque ? "bold 14px sans-serif" : "12px sans-serif"' in html
+    assert 'zIndex: emDestaque ? Z_DESTAQUE : votosValidos(feature.get("peso"))' in html
+    assert "new ol.Overlay({element: painelDetalhe, stopEvent: false})" in html
+    assert 'mapa.on("pointermove"' in html
+    assert 'mapa.on("singleclick"' in html
+    assert 'addEventListener("pointerleave"' in html
+    assert "novo.textContent = texto;" in html
+    assert "innerHTML" not in html.split("(function () {", 1)[1]
+    assert '"Margem: " + margem' in html
 
 
 def test_hostile_hole_is_escaped() -> None:

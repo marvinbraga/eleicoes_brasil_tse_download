@@ -43,7 +43,18 @@ _ISC: Final = (
     "OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR "
     "PERFORMANCE OF THIS SOFTWARE."
 )
-_PAGE_CSS: Final = "body { background: #ffffff; } #mapa { background: #ffffff; height: 80vh; }"
+_PAGE_CSS: Final = (
+    "body { background: #ffffff; } #mapa { background: #ffffff; height: 80vh; }"
+    " #zoom { position: absolute; left: .5em; bottom: .5em; padding: .25em .5em;"
+    " background: rgba(255,255,255,.85); border: 1px solid #cccccc; border-radius: 4px;"
+    " font: 12px sans-serif; color: #111111; }"
+    " #detalhe { background: #ffffff; color: #111111; border: 1px solid #888888;"
+    " border-radius: 6px; padding: .5em .75em; font: 13px/1.5 sans-serif;"
+    " box-shadow: 0 2px 8px rgba(0,0,0,.25); pointer-events: none; white-space: nowrap; }"
+    " #detalhe strong { display: block; font-size: 14px; margin-bottom: .25em; }"
+    " #detalhe .partido { display: flex; align-items: center; gap: .4em; }"
+    " #detalhe img { height: 20px; width: auto; }"
+)
 _PAGE_SCRIPT: Final = """\
 (function () {
   var pintura = JSON.parse(document.getElementById("pintura").textContent);
@@ -77,6 +88,10 @@ _PAGE_SCRIPT: Final = """\
       }
       properties.logo = pintura.logos[item.numero];
       properties.codigo = String(item.codigo);
+      properties.segundo = item.segundo;
+      properties.votosSegundo = item.votosSegundo;
+      properties.branco = item.branco;
+      properties.nulo = item.nulo;
     }
   }
 
@@ -103,32 +118,59 @@ _PAGE_SCRIPT: Final = """\
   var ZOOM_MUNICIPIOS = 6;
   var ZOOM_TODOS = 11;
   var PISO_INICIAL = 800000;
+  var FAIXAS_DE_ROTULO = [[6.5, 400000], [7, 150000], [7.5, 60000], [8, 25000], [8.5, 10000]];
+  var LARGURA_DO_CARACTERE = 6.6;
+  var ALTURA_DA_LINHA = 14;
+  var ZOOM_ROTULO_COMPLETO = 9;
+  var Z_DESTAQUE = Number.MAX_SAFE_INTEGER;
+  var destacado = null;
 
   function estilo(feature, resolution) {
     var cor = feature.get("cor");
     if (!cor) {
       return estiloMundo();
     }
-    var tinta = misturar(cor, feature.get("peso"));
+    var emDestaque = feature === destacado;
+    var tinta = misturar(cor, emDestaque ? "1/1" : feature.get("peso"));
     var estilos = [new ol.style.Style({
+      zIndex: emDestaque ? Z_DESTAQUE : 0,
       fill: new ol.style.Fill({color: tinta.fill}),
-      stroke: new ol.style.Stroke({color: "#222222", width: 1})
+      stroke: new ol.style.Stroke({
+        color: emDestaque ? "#000000" : "#222222",
+        width: emDestaque ? 3 : 1
+      })
     })];
-    if (rotuloVisivel(feature, resolution)) {
+    var geometria = maiorParte(feature);
+    var texto = textoDoRotulo(feature, resolution, emDestaque);
+    if (emDestaque || rotuloVisivel(feature, resolution, geometria, texto)) {
       estilos.push(new ol.style.Style({
-        geometry: maiorParte(feature),
+        geometry: geometria,
+        zIndex: emDestaque ? Z_DESTAQUE : votosValidos(feature.get("peso")),
         text: new ol.style.Text({
-          text: rotulo(feature.get("nome"), feature.get("numero"), feature.get("peso")),
-          font: "12px sans-serif",
+          text: texto,
+          font: emDestaque ? "bold 14px sans-serif" : "12px sans-serif",
           overflow: true,
-          fill: new ol.style.Fill({color: tinta.ink})
+          fill: new ol.style.Fill({color: tinta.ink}),
+          stroke: emDestaque ? new ol.style.Stroke({color: tinta.fill, width: 3}) : undefined
         })
       }));
     }
     return estilos;
   }
 
-  function rotuloVisivel(feature, resolution) {
+  function textoDoRotulo(feature, resolution, completo) {
+    var texto = rotulo(feature.get("nome"), feature.get("numero"), feature.get("peso"));
+    var nome = feature.get("nome");
+    if (completo || !ehMunicipio(feature) || nome == null || String(nome) === "") {
+      return texto;
+    }
+    if (typeof resolution !== "number" || !isFinite(resolution) || resolution <= 0) {
+      return texto;
+    }
+    return vista.getZoomForResolution(resolution) >= ZOOM_ROTULO_COMPLETO ? texto : String(nome);
+  }
+
+  function rotuloVisivel(feature, resolution, geometria, texto) {
     if (!ehMunicipio(feature)) {
       return true;
     }
@@ -139,7 +181,23 @@ _PAGE_SCRIPT: Final = """\
     if (!(zoom >= ZOOM_MUNICIPIOS) || zoom >= ZOOM_TODOS) {
       return true;
     }
-    return votosValidos(feature.get("peso")) >= minimoDeVotos(zoom);
+    return votosValidos(feature.get("peso")) >= minimoDeVotos(zoom) ||
+      cabeNaTela(geometria, texto, resolution);
+  }
+
+  function cabeNaTela(geometria, texto, resolution) {
+    if (!geometria) {
+      return false;
+    }
+    var linhas = String(texto).split("\\n");
+    var maisLonga = 0;
+    for (var i = 0; i < linhas.length; i++) {
+      maisLonga = Math.max(maisLonga, linhas[i].length);
+    }
+    var extensao = geometria.getExtent();
+    var largura = (extensao[2] - extensao[0]) / resolution;
+    var altura = (extensao[3] - extensao[1]) / resolution;
+    return largura >= maisLonga * LARGURA_DO_CARACTERE && altura >= linhas.length * ALTURA_DA_LINHA;
   }
 
   function ehMunicipio(feature) {
@@ -148,10 +206,11 @@ _PAGE_SCRIPT: Final = """\
   }
 
   function minimoDeVotos(zoom) {
-    var passo = Math.floor(zoom) - ZOOM_MUNICIPIOS;
     var piso = PISO_INICIAL;
-    for (var i = 0; i < passo; i++) {
-      piso = Math.floor(piso / 2);
+    for (var i = 0; i < FAIXAS_DE_ROTULO.length; i++) {
+      if (zoom >= FAIXAS_DE_ROTULO[i][0]) {
+        piso = FAIXAS_DE_ROTULO[i][1];
+      }
     }
     return piso;
   }
@@ -285,13 +344,13 @@ _PAGE_SCRIPT: Final = """\
     ];
   }
 
-  function camada(geojson, style, minZoom, maxZoom) {
+  function camada(geojson, style, minZoom, maxZoom, declutter) {
     var opcoes = {
       source: new ol.source.Vector({features: new ol.format.GeoJSON({
         dataProjection: "EPSG:4326",
         featureProjection: "EPSG:4326"
       }).readFeatures(geojson)}),
-      declutter: false,
+      declutter: declutter === true,
       style: style
     };
     if (minZoom !== null) {
@@ -310,17 +369,145 @@ _PAGE_SCRIPT: Final = """\
   aplicar(municipios, pintura.municipiosObjeto, pintura.municipios);
   var brasil = soBrasil(colecao(paises, pintura.paisesObjeto), pintura.brasilId);
 
-  var vista = new ol.View({projection: "EPSG:4326", center: [-54, -14], zoom: 3});
+  function mostrarZoom() {
+    var zoom = vista.getZoom();
+    if (typeof zoom !== "number" || !isFinite(zoom)) {
+      return;
+    }
+    var nivel = zoom.toFixed(1).replace(".", ",");
+    var detalhe;
+    if (zoom <= 4) {
+      detalhe = "país";
+    } else if (zoom <= 6) {
+      detalhe = "UFs";
+    } else if (zoom >= ZOOM_TODOS) {
+      detalhe = "municípios, todos os rótulos";
+    } else {
+      detalhe = "municípios, rótulos ≥ " + milhar(minimoDeVotos(zoom)) +
+        " votos válidos ou que cabem na tela";
+    }
+    if (zoom > 6 && zoom < ZOOM_ROTULO_COMPLETO) {
+      detalhe += " · só nomes";
+    }
+    painelZoom.textContent = "Zoom " + nivel + " · " + detalhe;
+  }
 
-  new ol.Map({
+  function destacar(feature, pixel, coordenada) {
+    if (feature !== destacado) {
+      var anterior = destacado;
+      destacado = feature;
+      if (anterior) {
+        anterior.changed();
+      }
+      if (feature) {
+        feature.changed();
+      }
+    }
+    mapa.getTargetElement().style.cursor = feature ? "pointer" : "";
+    if (!feature) {
+      painelDetalhe.hidden = true;
+      cartao.setPosition(undefined);
+      return;
+    }
+    preencherDetalhe(feature);
+    painelDetalhe.hidden = false;
+    var tamanho = mapa.getSize();
+    var direita = pixel[0] > tamanho[0] / 2;
+    var baixo = pixel[1] > tamanho[1] / 2;
+    cartao.setPositioning((baixo ? "bottom-" : "top-") + (direita ? "right" : "left"));
+    cartao.setOffset([direita ? -16 : 16, baixo ? -16 : 16]);
+    cartao.setPosition(coordenada);
+  }
+
+  function pintadoNoPixel(pixel) {
+    var achado = mapa.forEachFeatureAtPixel(pixel, function (feature) {
+      return feature.get("cor") ? feature : undefined;
+    });
+    return achado || null;
+  }
+
+  function preencherDetalhe(feature) {
+    painelDetalhe.textContent = "";
+    var nome = feature.get("nome");
+    painelDetalhe.appendChild(elemento("strong", nome ? String(nome) : "—"));
+    var partes = String(feature.get("peso") == null ? "" : feature.get("peso")).split("/");
+    var lider = Number(partes[0]);
+    var validos = partes.length === 2 ? Number(partes[1]) : NaN;
+    if (!eInteiro(lider) || !eInteiro(validos) || validos <= 0) {
+      return;
+    }
+    painelDetalhe.appendChild(linhaDePartido("1º", feature.get("numero"), lider, validos));
+    var segundo = feature.get("segundo");
+    var votosSegundo = Number(feature.get("votosSegundo"));
+    if (segundo && eInteiro(votosSegundo)) {
+      painelDetalhe.appendChild(linhaDePartido("2º", segundo, votosSegundo, validos));
+      var margem = percentual(lider - votosSegundo, validos).replace("%", " p.p.");
+      painelDetalhe.appendChild(elemento("div", "Margem: " + margem));
+    }
+    painelDetalhe.appendChild(elemento("div", "Votos válidos: " + milhar(validos)));
+    var branco = Number(feature.get("branco"));
+    var nulo = Number(feature.get("nulo"));
+    if (eInteiro(branco) && eInteiro(nulo) && branco + nulo > 0) {
+      painelDetalhe.appendChild(
+        elemento("div", "Brancos: " + milhar(branco) + " · Nulos: " + milhar(nulo))
+      );
+    }
+  }
+
+  function linhaDePartido(posicao, numero, votos, validos) {
+    var linha = elemento("div", "");
+    linha.className = "partido";
+    var logo = pintura.logos[numero];
+    if (logo) {
+      var imagem = document.createElement("img");
+      imagem.src = logo;
+      imagem.alt = "";
+      linha.appendChild(imagem);
+    }
+    linha.appendChild(document.createTextNode(
+      posicao + " · " + numero + " · " + percentual(votos, validos) + " (" + milhar(votos) + ")"
+    ));
+    return linha;
+  }
+
+  function elemento(tag, texto) {
+    var novo = document.createElement(tag);
+    novo.textContent = texto;
+    return novo;
+  }
+
+  var vista = new ol.View({projection: "EPSG:4326", center: [-54, -14], zoom: 3});
+  var painelZoom = document.getElementById("zoom");
+  var painelDetalhe = document.getElementById("detalhe");
+  var cartao = new ol.Overlay({element: painelDetalhe, stopEvent: false});
+
+  var mapa = new ol.Map({
     target: "mapa",
     layers: [
       camada(mundo, estiloMundo, null, null),
       camada(brasil, estilo, null, 4),
       camada(colecao(ufs, pintura.ufsObjeto), estilo, 4, 6),
-      camada(colecao(municipios, pintura.municipiosObjeto), estilo, 6, 28)
+      camada(colecao(municipios, pintura.municipiosObjeto), estilo, 6, 28, true)
     ],
+    controls: ol.control.defaults.defaults().extend([
+      new ol.control.Control({element: painelZoom})
+    ]),
+    overlays: [cartao],
     view: vista
+  });
+  vista.on("change:resolution", mostrarZoom);
+  mostrarZoom();
+  mapa.on("pointermove", function (evento) {
+    if (evento.dragging) {
+      return;
+    }
+    destacar(pintadoNoPixel(evento.pixel), evento.pixel, evento.coordinate);
+  });
+  mapa.on("singleclick", function (evento) {
+    destacar(pintadoNoPixel(evento.pixel), evento.pixel, evento.coordinate);
+  });
+  mapa.getViewport().addEventListener("pointerleave", function () {
+    destacar(null, null, null);
   });
 })();
 """
@@ -338,7 +525,8 @@ def html_do_mapa(pagina: PaginaDoMapa) -> str:
         "</head>\n"
         '<body data-fundo="#ffffff">\n'
         f"<h1>{title}</h1>\n"
-        '<div id="mapa"></div>\n'
+        '<div id="mapa"><div id="zoom" aria-live="polite"></div>'
+        '<div id="detalhe" role="tooltip" hidden></div></div>\n'
         f"{_footer(pagina)}\n"
         f"{_scripts(pagina)}\n"
         "</body>\n"
@@ -420,11 +608,15 @@ def _paintings(recorte: RecortePintado) -> tuple[Pintura, ...]:
     return country + recorte.ufs + recorte.municipios
 
 
-def _item(pintura: Pintura) -> dict[str, str]:
+def _item(pintura: Pintura) -> dict[str, str | int]:
     return {
         "codigo": pintura.codigo,
         "cor": pintura.cor,
         "numero": pintura.numero,
         "peso": pintura.peso,
         "nome": pintura.nome,
+        "segundo": pintura.segundo,
+        "votosSegundo": pintura.votos_segundo,
+        "branco": pintura.branco,
+        "nulo": pintura.nulo,
     }

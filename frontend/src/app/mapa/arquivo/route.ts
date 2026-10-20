@@ -13,6 +13,9 @@ const CSS_ESCURO = [
   "h1 { color: #fafafa; }",
   "footer, footer p, footer li { color: #a1a1a1; }",
   ".ol-control button { background-color: #262626; color: #fafafa; }",
+  "body #zoom { background: rgba(23,23,23,.9); border-color: #3a3a3a; color: #fafafa; }",
+  "body #detalhe { background: #1f1f1f; border-color: #3a3a3a; color: #fafafa;",
+  "box-shadow: 0 2px 10px rgba(0,0,0,.6); }",
 ].join(" ");
 
 const FUNDO_CLARO = 'data-fundo="#ffffff"';
