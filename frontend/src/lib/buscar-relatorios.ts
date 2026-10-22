@@ -1,4 +1,5 @@
 import { urlApi } from "@/lib/eleicoes";
+import { lerMunicipais2024, type RelatorioMunicipais } from "@/lib/municipais-2024";
 import {
   lerCadeiras,
   lerClasseGovernador,
@@ -75,6 +76,14 @@ export function buscarCadeiras(
 ): Promise<Resultado<SimulacaoCadeiras>> {
   const params = new URLSearchParams({ ano, turno });
   return buscar("/relatorios/dados/cadeiras", params, lerCadeiras);
+}
+
+export function buscarMunicipais2024(uf: string | null): Promise<Resultado<RelatorioMunicipais>> {
+  const params = new URLSearchParams();
+  if (uf !== null) {
+    params.set("uf", uf);
+  }
+  return buscar("/relatorios/dados/municipais-2024", params, lerMunicipais2024);
 }
 
 async function buscar<T>(
