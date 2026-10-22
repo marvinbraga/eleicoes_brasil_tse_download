@@ -212,12 +212,26 @@ class MissingCrossReportError(ElectionError):
         super().__init__("Gere o relatório presidente × governador antes.")
 
 
+def comando_relatorio_poder(cargo: str) -> str:
+    return f"uv run python scripts/relatorio_poder.py --cargo {cargo} --sem-navegador"
+
+
 class MissingPowerReportError(ElectionError):
     def __init__(self, cargo: str) -> None:
         self.cargo = cargo
         super().__init__(
             f"O relatório de poder de {cargo} ainda não foi gravado. "
-            f"Gere com: uv run python scripts/relatorio_poder.py --cargo {cargo} --sem-navegador"
+            f"Gere com: {comando_relatorio_poder(cargo)}"
+        )
+
+
+class MissingStrengthSourcesError(ElectionError):
+    def __init__(self, cargos: tuple[str, ...]) -> None:
+        self.cargos = cargos
+        comandos = "; ".join(comando_relatorio_poder(cargo) for cargo in cargos)
+        super().__init__(
+            "Nenhum relatório de poder usado pelo placar de força foi gravado. "
+            f"Gere com: {comandos}"
         )
 
 

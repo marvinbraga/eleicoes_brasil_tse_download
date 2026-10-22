@@ -42,3 +42,11 @@ class AsyncRelatorioPoderStore(Protocol):
         cargo: str,
         cells: tuple[StoredCell, ...],
     ) -> datetime: ...
+
+    async def load_levels(
+        self,
+        ano: int,
+        turno: int,
+        cargo: str,
+        niveis: tuple[str, ...],
+    ) -> StoredReport | None: ...

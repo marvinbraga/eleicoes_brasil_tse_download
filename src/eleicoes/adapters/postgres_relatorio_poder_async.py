@@ -9,7 +9,11 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
-from eleicoes.adapters.postgres_relatorio_poder import read_power, write_power
+from eleicoes.adapters.postgres_relatorio_poder import (
+    read_power,
+    read_power_levels,
+    write_power,
+)
 from eleicoes.domain.errors import ElectionError
 from eleicoes.domain.stored_grade import StoredCell
 from eleicoes.ports.relatorio_poder import StoredReport
@@ -25,6 +29,18 @@ class AsyncPostgresPowerReportStore:
     async def load(self, ano: int, turno: int, cargo: str) -> StoredReport | None:
         def work(sync: Session) -> StoredReport | None:
             return read_power(sync, ano, turno, cargo)
+
+        return await self._run(work)
+
+    async def load_levels(
+        self,
+        ano: int,
+        turno: int,
+        cargo: str,
+        niveis: tuple[str, ...],
+    ) -> StoredReport | None:
+        def work(sync: Session) -> StoredReport | None:
+            return read_power_levels(sync, ano, turno, cargo, niveis)
 
         return await self._run(work)
 

@@ -12,8 +12,13 @@ from tests.adapters.orm_fakes import ScriptedSession, memory_sessions
 
 import eleicoes.adapters.postgres_relatorio_poder as power_store
 from eleicoes.adapters.orm.sessions import open_sync_session
-from eleicoes.adapters.postgres_relatorio_poder import PostgresPowerReportStore
-from eleicoes.domain.errors import DatabaseConfigError, ElectionError, SchemaOutdatedError
+from eleicoes.adapters.postgres_relatorio_poder import PostgresPowerReportStore, read_power_levels
+from eleicoes.domain.errors import (
+    DatabaseConfigError,
+    ElectionError,
+    InvalidNivelError,
+    SchemaOutdatedError,
+)
 from eleicoes.domain.stored_grade import StoredCell
 from eleicoes.ports.relatorio_poder import StoredReport
 
@@ -236,3 +241,23 @@ def _line(**overrides: object) -> SimpleNamespace:
     }
     values.update(overrides)
     return SimpleNamespace(**values)
+
+
+def test_read_power_levels_keeps_only_the_requested_levels() -> None:
+    sessions = memory_sessions()
+    store = PostgresPowerReportStore(sessions)
+    moment = store.save(2026, 1, "deputadoFederal", (_VOTES, _ZERO, _CITY))
+    session = sessions()
+    with session.begin():
+        cidades = read_power_levels(session, 2026, 1, "deputadoFederal", ("municipio",))
+        estados = read_power_levels(session, 2026, 1, "deputadoFederal", ("uf", "pais"))
+        ausente = read_power_levels(session, 2026, 1, "senador", ("uf",))
+    assert cidades == StoredReport((_CITY,), moment)
+    assert estados is not None
+    assert set(estados.cells) == {_VOTES, _ZERO}
+    assert ausente is None
+    with pytest.raises(InvalidNivelError):
+        read_power_levels(session, 2026, 1, "deputadoFederal", ("estado",))
+    with pytest.raises(InvalidNivelError):
+        read_power_levels(session, 2026, 1, "deputadoFederal", ())
+    store.close()

@@ -204,6 +204,20 @@ def test_power_store_round_trip_and_driver_errors() -> None:
     assert isinstance(caught.value.__cause__, psycopg.Error)
 
 
+def test_power_store_loads_only_the_requested_levels() -> None:
+    sessions = memory_sessions()
+    ready = sessions()
+    Base.metadata.create_all(ready.get_bind())
+    ready.close()
+    store = AsyncPostgresPowerReportStore(SyncSessionBridge(sessions()))
+    city = StoredCell("municipio", "1120", "ARACAJU (SE)", 20, 13, 5, 1)
+    state = StoredCell("uf", "SE", "Sergipe", 20, 13, 5, 1)
+    moment = asyncio.run(store.save(2026, 2, "governador", (city, state)))
+    loaded = asyncio.run(store.load_levels(2026, 2, "governador", ("uf",)))
+    assert loaded == StoredReport((state,), moment)
+    assert asyncio.run(store.load_levels(2026, 1, "governador", ("uf",))) is None
+
+
 def test_power_store_keeps_a_domain_clock_error() -> None:
     session = ScriptedSession()
     session.push(SimpleNamespace(gerado_em=datetime(2026, 10, 8, 14, 30)))

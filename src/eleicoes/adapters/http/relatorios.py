@@ -24,6 +24,7 @@ from eleicoes.adapters.http.schemas_municipais import MunicipaisJson
 from eleicoes.adapters.http.schemas_relatorios import (
     ClassJson,
     CrossReportJson,
+    ForcaJson,
     GradeJson,
     ProfileJson,
 )
@@ -34,6 +35,7 @@ from eleicoes.ports.relatorio_cadeiras import AsyncSeatVoteStore
 from eleicoes.ports.relatorio_poder import AsyncRelatorioPoderStore
 from eleicoes.ports.relatorio_presidente_governador import AsyncRelatorioPresidenteGovernadorStore
 from eleicoes.use_cases.apresentar_municipais import MUNICIPAL_REPORT_YEAR, RenderMunicipalReport
+from eleicoes.use_cases.placar_forca import MontarPlacarForca
 from eleicoes.use_cases.render_reports import RenderPowerReport, RenderPresidentGovernorReport
 from eleicoes.use_cases.simular_cadeiras import stored_simulation
 
@@ -144,6 +146,25 @@ async def perfis(
 async def classe_governador(ano: int, turno: int, build: ClassBuild) -> ClassJson:
     report = await asyncio.to_thread(build, ano, turno)
     return ClassJson.from_domain(report)
+
+
+_FORCA = (
+    "Exige ano e turno. cargo_referencia escolhe o cargo dos indicadores municipais "
+    "(padrão deputadoEstadual). Lê só as células gravadas do relatório de poder. "
+    "Cargos sem gravação voltam em faltando, com o comando para gerar; "
+    "sem nenhum cargo gravado, responde 409."
+)
+
+
+@router.get("/relatorios/dados/forca", summary="Placar de força partidária", description=_FORCA)
+async def forca(
+    ano: int,
+    turno: int,
+    store: PowerStore,
+    cargo_referencia: str = "deputadoEstadual",
+) -> ForcaJson:
+    placar = await MontarPlacarForca(store).execute(ano, turno, cargo_referencia)
+    return ForcaJson.from_domain(placar)
 
 
 _CADEIRAS = (

@@ -55,6 +55,7 @@ def test_health_and_openapi_advertise_the_read_routes() -> None:
         "/relatorios/poder",
         "/relatorios/presidente-governador",
         "/relatorios/dados/cadeiras",
+        "/relatorios/dados/forca",
     }
     assert expected <= set(paths)
     assert paths["/votos/cargos"]["get"]["summary"] == "Totais do cargo"
@@ -294,11 +295,27 @@ class _PowerStore:
     def __init__(self) -> None:
         self.saves: list[tuple[object, ...]] = []
         self.stored: StoredReport | None = StoredReport((), datetime(2026, 10, 4, tzinfo=UTC))
+        self.by_cargo: dict[str, StoredReport | None] = {}
+        self.level_calls: list[tuple[str, tuple[str, ...]]] = []
 
     async def load(self, _ano: int, _turno: int, _cargo: str) -> StoredReport | None:
         if self.saves:
             return None
         return self.stored
+
+    async def load_levels(
+        self,
+        _ano: int,
+        _turno: int,
+        cargo: str,
+        niveis: tuple[str, ...],
+    ) -> StoredReport | None:
+        self.level_calls.append((cargo, niveis))
+        found = self.by_cargo.get(cargo, self.stored)
+        if found is None:
+            return None
+        kept = tuple(cell for cell in found.cells if cell.nivel in niveis)
+        return StoredReport(kept, found.gerado_em)
 
     async def save(
         self,
@@ -541,3 +558,86 @@ def test_grade_without_somente_gravado_still_reads_the_ballots() -> None:
     assert grade.json()["linhas"][0]["codigo"] == "1120"
     assert any(name == "party_power" for name, *_rest in reader.calls)
     assert power.saves == []
+
+
+_FORCA = "/relatorios/dados/forca?ano=2026&turno=1"
+
+
+def _forca_power() -> _PowerStore:
+    power = _PowerStore()
+    moment = datetime(2026, 10, 22, tzinfo=UTC)
+    power.by_cargo = {
+        "presidente": StoredReport(
+            (
+                StoredCell("pais", "BR", "Brasil", 100, 22, 60, 0),
+                StoredCell("uf", "AC", "Acre", 100, 22, 60, 0),
+            ),
+            moment,
+        ),
+        "deputadoFederal": None,
+        "deputadoEstadual": StoredReport(
+            (
+                StoredCell("uf", "AC", "Acre", 100, 22, 30, 5),
+                StoredCell("municipio", "1", "RIO BRANCO (AC)", 100, 22, 30, 5),
+            ),
+            moment,
+        ),
+    }
+    return power
+
+
+def test_forca_returns_integer_counts_and_lists_missing_offices() -> None:
+    power = _forca_power()
+    application = create_app(ports=_ports(power=power))
+    response = _get(application, _FORCA)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["cargo_referencia"] == "deputadoEstadual"
+    assert body["limiares"] == [1, 2, 5, 10, 20]
+    assert body["faltando"] == [
+        {
+            "cargo": "deputadoFederal",
+            "comando": (
+                "uv run python scripts/relatorio_poder.py --cargo deputadoFederal --sem-navegador"
+            ),
+        }
+    ]
+    unidade = body["pais"]["unidades"][0]
+    assert unidade["chave"] == "22"
+    assert unidade["tipo"] == "partido"
+    assert unidade["presidente"] == 60
+    assert unidade["deputado_federal"] is None
+    assert unidade["deputado_estadual"] == 35
+    assert unidade["ufs_lider_estadual"] == 1
+    assert unidade["municipal"]["lidera"] == 1
+    assert unidade["municipal"]["presenca"] == [
+        {"limiar": limiar, "municipios": 1} for limiar in (1, 2, 5, 10, 20)
+    ]
+    assert body["pais"]["base"] == {
+        "validos_presidente": 60,
+        "validos_deputado_federal": None,
+        "validos_deputado_estadual": 35,
+        "ufs_deputado_estadual": 1,
+        "municipal": {"municipios": 1, "validos": 35, "empates": 0},
+    }
+    assert body["ufs"][0]["codigo"] == "AC"
+    assert power.level_calls == [
+        ("presidente", ("pais", "uf")),
+        ("deputadoFederal", ("pais", "uf")),
+        ("deputadoEstadual", ("uf", "municipio")),
+    ]
+    assert power.saves == []
+
+
+def test_forca_without_any_stored_office_is_409() -> None:
+    power = _PowerStore()
+    power.stored = None
+    response = _get(create_app(ports=_ports(power=power)), _FORCA)
+    assert response.status_code == 409
+    assert "placar de força" in response.json()["detail"]
+
+
+def test_forca_rejects_an_unknown_reference_office() -> None:
+    response = _get(create_app(ports=_ports()), f"{_FORCA}&cargo_referencia=deputadoDistrital")
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Cargo inválido."

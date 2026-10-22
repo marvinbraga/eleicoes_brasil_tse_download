@@ -1,6 +1,6 @@
 """Guarda as grades do relatório de poder. A senha fica na fábrica de sessão."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import datetime
 from typing import TypeVar
 
@@ -21,7 +21,8 @@ from eleicoes.adapters.orm.schema import (
     server_clock,
 )
 from eleicoes.adapters.orm.sessions import SyncSessionFactory
-from eleicoes.domain.errors import ElectionError
+from eleicoes.domain.errors import ElectionError, InvalidNivelError
+from eleicoes.domain.grade import GradeLevel
 from eleicoes.domain.stored_grade import StoredCell
 from eleicoes.ports.relatorio_poder import StoredReport
 
@@ -30,6 +31,16 @@ _BROKEN = "power report row is incomplete"
 _FAILED = "power report store failed"
 _SQLITE = "sqlite"
 _T = TypeVar("_T")
+# Plain columns, not entities: the scoreboard reads ~160k rows and only needs the values.
+_CELL_COLUMNS = (
+    PowerReportLine.nivel,
+    PowerReportLine.codigo,
+    PowerReportLine.nome,
+    PowerReportLine.comparecimento,
+    PowerReportLine.partido,
+    PowerReportLine.votos_nominais,
+    PowerReportLine.votos_legenda,
+)
 
 
 class PostgresPowerReportStore:
@@ -109,6 +120,30 @@ def read_power(session: Session, ano: int, turno: int, cargo: str) -> StoredRepo
     lines = session.execute(_lines(ano, turno, cargo)).scalars().all()
     moment = require_clock(session, headers.gerado_em, _BROKEN)
     return StoredReport(tuple(_cell(line) for line in lines), moment)
+
+
+def read_power_levels(
+    session: Session,
+    ano: int,
+    turno: int,
+    cargo: str,
+    niveis: tuple[str, ...],
+) -> StoredReport | None:
+    if not niveis:
+        raise InvalidNivelError(niveis)
+    checked = tuple(GradeLevel(nivel).value for nivel in niveis)
+    headers = _headers(session, ano, turno, cargo)
+    if headers is None:
+        return None
+    statement = select(*_CELL_COLUMNS).where(
+        PowerReportLine.ano == ano,
+        PowerReportLine.turno == turno,
+        PowerReportLine.cargo == cargo,
+        PowerReportLine.nivel.in_(checked),
+    )
+    rows = session.execute(statement).all()
+    moment = require_clock(session, headers.gerado_em, _BROKEN)
+    return StoredReport(tuple(_row_cell(row) for row in rows), moment)
 
 
 def write_power(
@@ -204,6 +239,19 @@ def _cell(line: PowerReportLine) -> StoredCell:
         _count(line.partido),
         _count(line.votos_nominais),
         _count(line.votos_legenda),
+    )
+
+
+def _row_cell(row: Sequence[object]) -> StoredCell:
+    nivel, codigo, nome, comparecimento, partido, nominais, legenda = row
+    return StoredCell(
+        _text(nivel),
+        _text(codigo),
+        _text(nome),
+        _count(comparecimento),
+        _count(partido),
+        _count(nominais),
+        _count(legenda),
     )
 
 

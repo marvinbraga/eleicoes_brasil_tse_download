@@ -8,6 +8,15 @@ from eleicoes.adapters.html_classe_governador import NOTES as CLASS_NOTES
 from eleicoes.adapters.html_classe_governador import texto_regra
 from eleicoes.adapters.html_perfis import NOTES as PROFILE_NOTES
 from eleicoes.domain.classe_governador import ClassOutcome, ClassReport, RuleCut, UfScore
+from eleicoes.domain.errors import comando_relatorio_poder
+from eleicoes.domain.forca import (
+    BaseMunicipal,
+    BaseRecorte,
+    ForcaUnidade,
+    Municipal,
+    PlacarForca,
+    Recorte,
+)
 from eleicoes.domain.grade import CelulaGrade, GradeDePoder, LinhaGrade
 from eleicoes.domain.percentual import format_decimal, format_percent, format_ratio
 from eleicoes.domain.perfis import ProfileCity, ProfileGroup, ProfileReport
@@ -315,3 +324,128 @@ def _regras(rules: tuple[tuple[RuleCut, ...], ...]) -> list[str]:
     if not rules:
         return [texto_regra(())]
     return [texto_regra(cuts) for cuts in rules]
+
+
+class PresencaJson(BaseModel):
+    limiar: int
+    municipios: int
+
+
+class MunicipalForcaJson(BaseModel):
+    lidera: int
+    validos_liderados: int
+    presenca: list[PresencaJson]
+
+    @classmethod
+    def from_domain(cls, item: Municipal) -> Self:
+        presenca = [PresencaJson(limiar=p.limiar, municipios=p.municipios) for p in item.presenca]
+        return cls(
+            lidera=item.lidera,
+            validos_liderados=item.validos_liderados,
+            presenca=presenca,
+        )
+
+
+class BaseMunicipalJson(BaseModel):
+    municipios: int
+    validos: int
+    empates: int
+
+    @classmethod
+    def from_domain(cls, base: BaseMunicipal) -> Self:
+        return cls(municipios=base.municipios, validos=base.validos, empates=base.empates)
+
+
+class BaseForcaJson(BaseModel):
+    validos_presidente: int | None
+    validos_deputado_federal: int | None
+    validos_deputado_estadual: int | None
+    ufs_deputado_estadual: int | None
+    municipal: BaseMunicipalJson | None
+
+    @classmethod
+    def from_domain(cls, base: BaseRecorte) -> Self:
+        found = base.municipal
+        municipal = None if found is None else BaseMunicipalJson.from_domain(found)
+        return cls(
+            validos_presidente=base.validos_presidente,
+            validos_deputado_federal=base.validos_deputado_federal,
+            validos_deputado_estadual=base.validos_deputado_estadual,
+            ufs_deputado_estadual=base.ufs_deputado_estadual,
+            municipal=municipal,
+        )
+
+
+class UnidadeForcaJson(BaseModel):
+    chave: str
+    tipo: str
+    nome: str | None
+    partidos: list[int]
+    presidente: int | None
+    deputado_federal: int | None
+    deputado_estadual: int | None
+    ufs_lider_estadual: int | None
+    municipal: MunicipalForcaJson | None
+
+    @classmethod
+    def from_domain(cls, item: ForcaUnidade) -> Self:
+        found = item.municipal
+        municipal = None if found is None else MunicipalForcaJson.from_domain(found)
+        return cls(
+            chave=item.chave,
+            tipo="partido",
+            nome=None,
+            partidos=list(item.partidos),
+            presidente=item.presidente,
+            deputado_federal=item.deputado_federal,
+            deputado_estadual=item.deputado_estadual,
+            ufs_lider_estadual=item.ufs_lider_estadual,
+            municipal=municipal,
+        )
+
+
+class RecorteForcaJson(BaseModel):
+    codigo: str
+    nome: str
+    base: BaseForcaJson
+    unidades: list[UnidadeForcaJson]
+
+    @classmethod
+    def from_domain(cls, recorte: Recorte) -> Self:
+        return cls(
+            codigo=recorte.codigo,
+            nome=recorte.nome,
+            base=BaseForcaJson.from_domain(recorte.base),
+            unidades=[UnidadeForcaJson.from_domain(item) for item in recorte.unidades],
+        )
+
+
+class FaltandoJson(BaseModel):
+    cargo: str
+    comando: str
+
+
+class ForcaJson(BaseModel):
+    ano: int
+    turno: int
+    cargo_referencia: str
+    limiares: list[int]
+    faltando: list[FaltandoJson]
+    pais: RecorteForcaJson
+    ufs: list[RecorteForcaJson]
+
+    @classmethod
+    def from_domain(cls, placar: PlacarForca) -> Self:
+        faltando = [
+            FaltandoJson(cargo=cargo, comando=comando_relatorio_poder(cargo))
+            for cargo in placar.faltando
+        ]
+        return cls(
+            ano=placar.ano,
+            turno=placar.turno,
+            cargo_referencia=placar.cargo_referencia,
+            limiares=list(placar.limiares),
+            faltando=faltando,
+            pais=RecorteForcaJson.from_domain(placar.pais),
+            ufs=[RecorteForcaJson.from_domain(item) for item in placar.ufs],
+        )
