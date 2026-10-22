@@ -201,11 +201,7 @@ function partidoMarca(
 }
 
 function compararMarca(a: PartidoMarca, b: PartidoMarca): number {
-  const cruz = BigInt(b.legenda) * BigInt(a.votos) - BigInt(a.legenda) * BigInt(b.votos);
-  if (cruz !== ZERO) {
-    return cruz > ZERO ? 1 : -1;
-  }
-  return b.votos - a.votos || a.partido - b.partido;
+  return compararParte(b, a) || b.votos - a.votos || a.partido - b.partido;
 }
 
 function ufMarca(linha: LinhaGrade, ranking: readonly PartidoMarca[]): UfMarca {
@@ -247,8 +243,7 @@ export type LegendaPartido = { legenda: number; votos: number; texto: string };
 export function fatiaLegendaNacional(grade: GradeRelatorio): Map<number, LegendaPartido> {
   const somas = somarPorPartido(grade.linhas);
   const fatias = new Map<number, LegendaPartido>();
-  for (const partido of [...somas.keys()].sort((a, b) => a - b)) {
-    const contagem = somas.get(partido) ?? { nominais: 0, legenda: 0 };
+  for (const [partido, contagem] of [...somas.entries()].sort(([a], [b]) => a - b)) {
     const votos = contagem.nominais + contagem.legenda;
     if (votos > 0) {
       fatias.set(partido, {
@@ -402,13 +397,14 @@ export function layoutRanking(
   const util = medidas.largura - medidas.esquerda - medidas.direita;
   return {
     ...base,
+    // layoutBarras keeps input order, so index i is ranking[i] in all three arrays.
     barras: base.barras.map((barra, indice) => {
-      const item = itens[indice] ?? barra;
+      const { valor } = itens[indice];
       return {
         ...barra,
-        valor: item.valor,
-        largura: (Math.max(0, item.valor) / escala) * util,
-        classe: marca.ranking[indice]?.classe ?? "media",
+        valor,
+        largura: (Math.max(0, valor) / escala) * util,
+        classe: marca.ranking[indice].classe,
       };
     }),
     xReferencia: medidas.esquerda + (media / escala) * util,
@@ -481,11 +477,12 @@ export type LayoutHalteres = {
   referencias: ReferenciaHalteres[];
 };
 
-const REFERENCIAS_HALTERES = [
-  { valor: 0.5, rotulo: "0,5×" },
-  { valor: 1, rotulo: "1×" },
-  { valor: FATOR_LIMIAR, rotulo: `${FATOR_LIMIAR}×` },
-] as const;
+// The outer lines are the classeMarca thresholds (1/FATOR_LIMIAR and FATOR_LIMIAR).
+const REFERENCIAS_HALTERES = [1 / FATOR_LIMIAR, 1, FATOR_LIMIAR].map((valor) => ({
+  valor,
+  rotulo: `${String(valor).replace(".", ",")}×`,
+}));
+const FOLGA_ROTULO = 4;
 
 export function layoutHalteres(
   pares: readonly ParCargos[],
@@ -507,7 +504,7 @@ export function layoutHalteres(
     const posicao = x(referencia.valor);
     const cabe =
       ultimoVisivel === null ||
-      posicao - ultimoVisivel >= larguraTexto(referencia.rotulo, fonte) + 4;
+      posicao - ultimoVisivel >= larguraTexto(referencia.rotulo, fonte) + FOLGA_ROTULO;
     if (cabe) {
       ultimoVisivel = posicao;
     }

@@ -245,4 +245,83 @@ assert.equal(
   "Voto de legenda como múltiplo da média de cada cargo. PDT 12: federal 2,47×, estadual 0,80×; PT 13: federal 0,74×, estadual 1,60×; PODE 20: federal 0,07×, estadual 0,16×.",
 );
 
+
+// casos extras da revisão (Task 4): ramos de decisão que a ordem dos fixtures escondia
+// ---- proposed additions ----
+// D9: number tiebreak must not rely on insertion order (larger number seen first)
+const gradeOrdem = grade("deputadoFederal", [
+  linha("AC", "Acre", { 50: [90_000, 10_000] }),
+  linha("BA", "Bahia", { 13: [90_000, 10_000] }),
+]);
+const ordemNumero = marcaDoCargo("deputadoFederal", gradeOrdem) as MarcaCargo;
+assert.deepEqual(ordemNumero.ranking.map((item) => item.partido), [13, 50]);
+// D17: sorted by number regardless of insertion order; zero-vote party absent
+assert.deepEqual([...fatiaLegendaNacional(gradeOrdem).keys()], [13, 50]);
+assert.equal(fatiaLegendaNacional(gradeEstadual).has(16), false);
+// D5: just below the thresholds stays "media"
+assert.equal(classeMarca(199_999, 1_000_000, 1, 10), "media");
+assert.equal(classeMarca(50_001, 1_000_000, 1, 10), "media");
+// D10: zero difference -> no maisMuda; partial overlap -> only shared parties
+assert.equal(comparacaoCargos(estadual, estadual).maisMuda, null);
+assert.deepEqual(comparacaoCargos(federal, empate).pares.map((par) => par.partido), [13]);
+// D10: tie on |delta| goes to smaller number even if it comes later in the federal ranking
+const tieF = marcaDoCargo("deputadoFederal", grade("deputadoFederal", [
+  linha("SP", "São Paulo", { 20: [80_000, 20_000], 13: [90_000, 10_000] }),
+])) as MarcaCargo;
+const tieE = marcaDoCargo("deputadoEstadual", grade("deputadoEstadual", [
+  linha("SP", "São Paulo", { 20: [90_000, 10_000], 13: [80_000, 20_000] }),
+])) as MarcaCargo;
+assert.deepEqual(tieF.ranking.map((item) => item.partido), [20, 13]);
+assert.equal(comparacaoCargos(tieF, tieE).maisMuda?.partido, 13);
+// D8 through ufMarca: absent / sem-candidato / poucos never show a percentage
+const celulas = marcaDoCargo("deputadoFederal", grade("deputadoFederal", [
+  linha("AC", "Acre", { 13: [0, 2_000], 22: [3_000, 999] }),
+  linha("SP", "São Paulo", { 13: [200_000, 10_000], 22: [200_000, 10_000], 40: [200_000, 20_000] }),
+])) as MarcaCargo;
+assert.deepEqual(celulas.ufs[0].celulas.map((c) => [c.partido, c.estado, c.texto]), [
+  [40, "sem-votos", "—"],
+  [13, "sem-candidato", "—"],
+  [22, "poucos", "—"],
+]);
+// UF with zero votes: "—" and left out of the sentence; UF ties broken by name, not grade order
+const ufs = marcaDoCargo("deputadoFederal", grade("deputadoFederal", [
+  linha("AC", "Acre", { 13: [0, 0] }),
+  linha("AP", "Amapá", { 13: [90_000, 10_000] }),
+  linha("AL", "Alagoas", { 13: [90_000, 10_000] }),
+  linha("RR", "Roraima", { 13: [95_000, 5_000] }),
+  linha("BA", "Bahia", { 13: [95_000, 5_000] }),
+])) as MarcaCargo;
+assert.equal(ufs.ufs[0].texto, "—");
+assert.equal(
+  leituraMarca(ufs, null).at(-1),
+  "Para deputado federal, a UF com mais voto de legenda é Alagoas (10,00%) e a com menos é Bahia (5,00%).",
+);
+// fora singular
+const umVoto = marcaDoCargo("deputadoFederal", grade("deputadoFederal", [
+  linha("SP", "São Paulo", { 13: [100_000, 0], 16: [0, 1] }),
+])) as MarcaCargo;
+assert.equal(
+  leituraMarca(umVoto, null).at(-1),
+  "Fora do ranking de deputado federal, por terem menos de 100.000 votos: PSTU 16 (100,00% de legenda em 1 voto).",
+);
+// layoutRanking: all-zero (cargo without legenda) -> null; zero shares but media > 0 -> drawn
+assert.equal(layoutRanking(minimo), null);
+assert.equal(minimo.ranking[0].indice, 0);
+const zerada = layoutRanking(umVoto) as LayoutRanking;
+assert.equal(zerada.barras.length, 1);
+assert.equal(zerada.barras[0].largura, 0);
+assert.equal(zerada.xReferencia, MEDIDAS_PADRAO.largura - MEDIDAS_PADRAO.direita);
+// several "forte", no "pessoa"
+const fortes = marcaDoCargo("deputadoFederal", grade("deputadoFederal", [
+  linha("SP", "São Paulo", { 10: [70_000, 30_000], 11: [70_000, 30_000], 15: [810_000, 90_000] }),
+])) as MarcaCargo;
+assert.deepEqual(leituraMarca(fortes, null).slice(1, 3), [
+  "Marca forte para deputado federal: REPUBLICANOS 10 (30,00%) e PP 11 (30,00%), cada um com pelo menos o dobro da média do cargo (13,64%).",
+  "Para deputado federal, nenhum partido do ranking fica abaixo da metade da média do cargo (13,64%).",
+]);
+// contrato do Placar: a soma da fatia nacional é o total do cargo
+const fatiaFederal = [...fatiaLegendaNacional(gradeFederal).values()];
+assert.equal(fatiaFederal.reduce((soma, item) => soma + item.legenda, 0), federal.legenda);
+assert.equal(fatiaFederal.reduce((soma, item) => soma + item.votos, 0), federal.votos);
+
 console.log("ok");
