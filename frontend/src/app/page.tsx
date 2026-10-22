@@ -29,6 +29,12 @@ const DESTINOS = [
     descricao: "A classe do governador lida pela mistura de presidente.",
   },
   {
+    href: "/relatorios/cadeiras",
+    titulo: "Simulação de cadeiras",
+    descricao:
+      "Estimativa de cadeiras na Câmara, nas Assembleias, no Senado e nos governos.",
+  },
+  {
     href: "/mapa",
     titulo: "Mapa",
     descricao: "Arquivo de mapa já gerado.",

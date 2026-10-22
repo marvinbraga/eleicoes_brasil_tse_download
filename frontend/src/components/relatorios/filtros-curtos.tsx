@@ -22,7 +22,7 @@ import {
 
 type FiltrosCurtosProps = {
   ano: Ano;
-  turno: Turno;
+  turno?: Turno;
   cargo?: CargoPerfil;
   grupos?: GruposPerfil;
 };
@@ -69,7 +69,9 @@ export function FiltrosCurtos({ ano, turno, cargo, grupos }: FiltrosCurtosProps)
   function consultar() {
     const params = new URLSearchParams();
     params.set("ano", anoAtual);
-    params.set("turno", turnoAtual);
+    if (turnoAtual !== undefined) {
+      params.set("turno", turnoAtual);
+    }
     if (cargoAtual !== undefined) {
       params.set("cargo", cargoAtual);
     }
@@ -99,13 +101,15 @@ export function FiltrosCurtos({ ano, turno, cargo, grupos }: FiltrosCurtosProps)
           options={OPCOES_ANO}
           onChange={(valor) => setAnoAtual(lerAno(valor))}
         />
-        <FiltroSelect
-          id="turno"
-          label="Turno"
-          value={turnoAtual}
-          options={OPCOES_TURNO}
-          onChange={(valor) => setTurnoAtual(lerTurno(valor))}
-        />
+        {turnoAtual !== undefined ? (
+          <FiltroSelect
+            id="turno"
+            label="Turno"
+            value={turnoAtual}
+            options={OPCOES_TURNO}
+            onChange={(valor) => setTurnoAtual(lerTurno(valor))}
+          />
+        ) : null}
         {cargoAtual !== undefined ? (
           <FiltroSelect
             id="cargo"

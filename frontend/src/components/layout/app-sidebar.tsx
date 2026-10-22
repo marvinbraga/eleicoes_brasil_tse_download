@@ -23,6 +23,7 @@ const ITENS = [
   { href: "/relatorios/poder", rotulo: "Poder" },
   { href: "/relatorios/perfis", rotulo: "Perfis" },
   { href: "/relatorios/classe-governador", rotulo: "Classe do governador" },
+  { href: "/relatorios/cadeiras", rotulo: "Cadeiras" },
   { href: "/mapa", rotulo: "Mapa" },
 ] as const;
 

@@ -1,5 +1,6 @@
 import { urlApi } from "@/lib/eleicoes";
 import {
+  lerCadeiras,
   lerClasseGovernador,
   lerGrade,
   lerRelatorioCruzado,
@@ -9,6 +10,7 @@ import {
   type RelatorioClasseGovernador,
   type RelatorioCruzado,
   type RelatorioPerfis,
+  type SimulacaoCadeiras,
 } from "@/lib/relatorios";
 
 export type Resultado<T> =
@@ -65,6 +67,14 @@ export function buscarClasseGovernador(
 ): Promise<Resultado<RelatorioClasseGovernador>> {
   const params = new URLSearchParams({ ano, turno });
   return buscar("/relatorios/dados/classe-governador", params, lerClasseGovernador);
+}
+
+export function buscarCadeiras(
+  ano: string,
+  turno: string,
+): Promise<Resultado<SimulacaoCadeiras>> {
+  const params = new URLSearchParams({ ano, turno });
+  return buscar("/relatorios/dados/cadeiras", params, lerCadeiras);
 }
 
 async function buscar<T>(

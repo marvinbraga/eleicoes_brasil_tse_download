@@ -5,6 +5,7 @@ import {
   resumoBarras,
   type ItemBarra,
   type LayoutBarras,
+  type MedidasBarras,
 } from "@/lib/grafico-poder";
 
 type GraficoPoderProps = {
@@ -13,10 +14,18 @@ type GraficoPoderProps = {
   introducao: string;
   legenda: string;
   itens: readonly ItemBarra[];
+  medidas?: MedidasBarras;
 };
 
-export function GraficoPoder({ id, titulo, introducao, legenda, itens }: GraficoPoderProps) {
-  const layout = layoutBarras(itens);
+export function GraficoPoder({
+  id,
+  titulo,
+  introducao,
+  legenda,
+  itens,
+  medidas,
+}: GraficoPoderProps) {
+  const layout = layoutBarras(itens, medidas);
   const estreito = layoutBarras(itens, MEDIDAS_ESTREITO);
   if (layout === null || estreito === null) {
     return null;
