@@ -3,6 +3,7 @@ from collections.abc import Mapping
 import pytest
 
 from eleicoes.adapters.http.errors import http_error
+from eleicoes.adapters.orm.migrate import head_revision
 from eleicoes.composition.cli import main
 from eleicoes.composition.migracao import migrate_database
 from eleicoes.domain.errors import SCHEMA_OUTDATED_HINT, DatabaseConfigError, SchemaOutdatedError
@@ -53,7 +54,7 @@ def test_migrate_database_uses_the_published_port(monkeypatch: pytest.MonkeyPatc
     revision = migrate_database(
         {"POSTGRES_HOST": "postgres", "POSTGRES_PORT": "5432", "POSTGRES_PUBLISH_PORT": "25432"}
     )
-    assert revision == "0002"
+    assert revision == head_revision()
     assert seen[0]["POSTGRES_HOST"] == "127.0.0.1"
     assert seen[0]["POSTGRES_PORT"] == "25432"
 

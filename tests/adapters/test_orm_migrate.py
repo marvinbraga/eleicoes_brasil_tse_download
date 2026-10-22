@@ -129,14 +129,14 @@ def test_require_current_schema_accepts_the_head() -> None:
     session.close()
 
 
-def test_migrations_form_one_linear_chain_ending_at_0002() -> None:
+def test_migrations_form_one_linear_chain_ending_at_0003() -> None:
     script = ScriptDirectory.from_config(migration_config())
-    assert head_revision() == "0002"
-    assert [item.revision for item in script.walk_revisions()] == ["0002", "0001"]
+    assert head_revision() == "0003"
+    assert [item.revision for item in script.walk_revisions()] == ["0003", "0002", "0001"]
 
 
 def test_offline_sql_creates_the_base_schema_and_relaxes_legacy_columns() -> None:
-    sql = _offline("head")
+    sql = _offline("0002")
     assert "CREATE TABLE alembic_version" in sql
     assert "CREATE SCHEMA IF NOT EXISTS raw" in sql
     assert "CREATE SCHEMA IF NOT EXISTS analise" in sql
@@ -160,9 +160,27 @@ def test_new_base_tables_have_no_legacy_text_columns() -> None:
 
 
 def test_offline_sql_from_the_stamped_base_only_relaxes_columns() -> None:
-    sql = _offline("0001:head")
+    sql = _offline("0001:0002")
     assert "CREATE TABLE IF NOT EXISTS" not in sql
     assert "DROP NOT NULL" in sql
+
+
+def test_0003_drops_only_the_legacy_text_columns() -> None:
+    sql = _offline("0002:0003")
+    assert "ALTER TABLE analise.relatorio_poder DROP COLUMN IF EXISTS html" in sql
+    assert "ALTER TABLE analise.relatorio_poder DROP COLUMN IF EXISTS resumo" in sql
+    assert "UPDATE alembic_version SET version_num='0003'" in sql
+    for column in ("html", "resumo"):
+        sql = sql.replace(f"DROP COLUMN IF EXISTS {column}", "")
+    assert "DROP " not in sql
+
+
+def test_0003_downgrade_restores_the_columns_without_their_text() -> None:
+    sql = _offline_downgrade("0003:0002")
+    assert "ALTER TABLE analise.relatorio_poder ADD COLUMN IF NOT EXISTS html text" in sql
+    assert "ALTER TABLE analise.relatorio_poder ADD COLUMN IF NOT EXISTS resumo text" in sql
+    assert "NOT NULL" not in sql
+    assert "UPDATE alembic_version SET version_num='0002'" in sql
 
 
 def test_migrations_refuse_to_drop_the_base_schema() -> None:
