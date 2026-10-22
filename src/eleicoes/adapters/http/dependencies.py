@@ -8,6 +8,7 @@ from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from eleicoes.adapters.http.bundle import ReadPorts
+from eleicoes.adapters.http.dependencies_verticalizacao import clear_vertical_caches
 from eleicoes.adapters.orm.sessions import AsyncSessionMaker
 from eleicoes.adapters.postgres_boletim_consulta_async import AsyncPostgresBoletimReader
 from eleicoes.adapters.postgres_municipais_async import (
@@ -189,6 +190,7 @@ def clear_report_caches() -> None:
     _built_profile.cache_clear()
     _stored_class.cache_clear()
     _stored_capillarity.cache_clear()
+    clear_vertical_caches()
 
 
 def _stored_profile(ano: int, turno: int, cargo: str, grupos: str) -> ProfileReport:

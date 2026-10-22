@@ -97,7 +97,7 @@
 }
 ```
 
-`classe: null` aparece quando o partido não concorreu nem à majoritária nem à proporcional do par no recorte.
+`classe: null` aparece quando o partido não concorreu nem à majoritária nem à proporcional do par no recorte. Também aparece quando ele concorreu à majoritária no recorte, mas só em UF sem a proporcional gravada (como governador só no DF): não há comparação e isso não é "sem candidato" (D12, ajuste da revisão da Task 5). Uma UF sem a majoritária gravada também não gera "sem candidato".
 
 ## Global Constraints
 
@@ -139,7 +139,7 @@
 - Consumes: `ElectionYear`, `Turno`, `UF_CODES` (`domain/values.py`), e `InconsistentCellError`, `InvalidUfError`, `MissingPowerReportError` (`domain/errors.py`).
 - Produces: `CARGOS`, `MAJORITARIOS`, `PROPORCIONAIS`, as constantes de cargo, `EXTERIOR`, `VerticalLine`, `MunicipioVertical`, `VerticalBase`, `CargoShare`, `municipal_uf`, `vertical_base` e `cargo_share`.
 
-- [ ] **Step 1: Escrever os testes que falham**
+- [x] **Step 1: Escrever os testes que falham**
 
 ```python
 """Vertical base: stored lines become per-UF and per-city votes. No ballot is read."""
@@ -234,12 +234,12 @@ def test_scope_rejects_exterior_and_unknown_states() -> None:
             base.scope(uf)
 ```
 
-- [ ] **Step 2: Rodar e ver falhar**
+- [x] **Step 2: Rodar e ver falhar**
 
 Run: `uv run pytest tests/domain/test_verticalizacao.py -q`
 Expected: `ModuleNotFoundError: No module named 'eleicoes.domain.verticalizacao'`.
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 ```python
 """Party strength across offices, read from the stored power cells. No ballot is read."""
@@ -466,7 +466,7 @@ def _count(value: int) -> None:
         raise InconsistentCellError()
 ```
 
-- [ ] **Step 4: Rodar até passar**
+- [x] **Step 4: Rodar até passar**
 
 Run: `uv run pytest tests/domain/test_verticalizacao.py -q && uv run mypy src/eleicoes/domain/verticalizacao.py tests/domain/test_verticalizacao.py && uv run ruff check src/eleicoes/domain/verticalizacao.py tests/domain/test_verticalizacao.py`
 Expected: `5 passed`, `Success: no issues found in 2 source files`, `All checks passed!`.
@@ -485,7 +485,7 @@ Expected: `5 passed`, `Success: no issues found in 2 source files`, `All checks 
 - Consumes: `VerticalBase` e as constantes da Task 1.
 - Produces: `RAZAO`, `DIFERENCA`, `BASE_RELEVANTE`, `PUXADOR`, `BASE`, `ALINHADO`, `SEM_CANDIDATO`, `PARES_CANONICOS`, `classify`, `UfComparison`, `AbsentState`, `Comparison` e `compare`.
 
-- [ ] **Step 1: Testes que falham**
+- [x] **Step 1: Testes que falham**
 
 ```python
 """Puxador / base rules. Thresholds count at the boundary."""
@@ -555,9 +555,9 @@ def test_pooled_share_weights_states_by_majoritarian_valid_votes() -> None:
 
 Inclua `VerticalLine` no import de `eleicoes.domain.verticalizacao`. Conta conferida: em MG, a majoritária é 10% e a esperada 25%; como 25 ≥ 2 × 10 e a diferença é de 15 pp, a classe é base. Em SP, 60% contra 50% dá alinhado. A soma das UF dá 35% contra 37,5%, também alinhado.
 
-- [ ] **Step 2:** `uv run pytest tests/domain/test_verticalizacao_regras.py -q` → `ModuleNotFoundError`.
+- [x] **Step 2:** `uv run pytest tests/domain/test_verticalizacao_regras.py -q` → `ModuleNotFoundError`.
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 ```python
 """Puxador / base: the majoritarian share against what the proportional base predicts."""
@@ -697,7 +697,7 @@ def _absent(
     return AbsentState(uf, Fraction(base.votos_uf(uf, proporcional)[partido], valid))
 ```
 
-- [ ] **Step 4:** `uv run pytest tests/domain/test_verticalizacao_regras.py -q && uv run mypy src tests && uv run ruff check src tests` → tudo verde.
+- [x] **Step 4:** `uv run pytest tests/domain/test_verticalizacao_regras.py -q && uv run mypy src tests && uv run ruff check src tests` → tudo verde.
 
 **If Task Fails:** se a esperada der 0/0, confira o `pool == 0`. Se a soma dos pesos estiver errada, imprima `weights` no teste e compare com os válidos da UF.
 
@@ -713,7 +713,7 @@ def _absent(
 - Consumes: `VerticalBase`, `MunicipioVertical` e as constantes.
 - Produces: `MINIMO_MUNICIPIOS`, `PARES_COERENCIA`, `Coherence`, `ScatterPoint`, `coherence` e `scatter_points`.
 
-- [ ] **Step 1: Testes que falham** (com fixture de municípios via `city_lines` e linhas de UF com votos > 0 nos dois cargos)
+- [x] **Step 1: Testes que falham** (com fixture de municípios via `city_lines` e linhas de UF com votos > 0 nos dois cargos)
   1. **Offsets entre UF não contam.** Em SP há 5 municípios com x = 5, 10, 15, 20, 25% e y = 2x (10 a 50%). Em MG há 5 municípios com o mesmo x e y = 2x + 30 pp (40 a 80%). Toda fatia fica abaixo de 100%. Monte cada município com votos inteiros sobre 100 válidos por cargo, colocando o resto num partido 99. O r intra-UF é `pytest.approx(1.0)`, mesmo com o r agregado menor. Confira o agregado no teste com `numpy.corrcoef` para provar que ele é diferente.
   2. **Inverso.** y = 60% − x em 10 municípios de uma UF → `approx(-1.0)`.
   3. **Peso.** Em 12 municípios com comparecimentos diferentes, `r == approx(_ref)`. A referência vem de `numpy.cov(x, y, aweights=w)` calculado por UF depois de centrar. O numpy já está no `.venv` por causa do sklearn, mas só no teste.
@@ -723,9 +723,9 @@ def _absent(
   7. **Variância nula.** x igual em todos → `None`.
   8. **UF sem o cargo.** Uma UF sem linhas de Dep. estadual (como o DF) não entra no par Dep. estadual × Governador, e os pontos dela não aparecem.
 
-- [ ] **Step 2:** `uv run pytest tests/domain/test_verticalizacao_coerencia.py -q` → `ModuleNotFoundError`.
+- [x] **Step 2:** `uv run pytest tests/domain/test_verticalizacao_coerencia.py -q` → `ModuleNotFoundError`.
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 ```python
 """Within-state coherence: weighted Pearson on shares centred per UF."""
@@ -841,7 +841,7 @@ def _within(
 
 Aqui o caminho quente usa float e não `Fraction` (30 partidos × 7 pares × 5.570 municípios). Só os pontos da dispersão, que são poucos, usam `Fraction`.
 
-- [ ] **Step 4:** `uv run pytest tests/domain/test_verticalizacao_coerencia.py -q && uv run mypy src tests && uv run ruff check src tests` → verde.
+- [x] **Step 4:** `uv run pytest tests/domain/test_verticalizacao_coerencia.py -q && uv run mypy src tests && uv run ruff check src tests` → verde.
 
 **If Task Fails:** um r fora de [-1, 1] indica centragem errada. Confira se a média é por UF. Um `KeyError` em `city.votos[x]` aparece se `_paired` deixou passar um município sem o cargo, e o filtro `validos.get(x, 0) > 0` evita isso.
 
@@ -886,15 +886,15 @@ Regras:
   7. "O esperado é a fatia que o partido teria na majoritária se os votos seguissem a força dele na proporcional, entre os partidos que lançaram candidato."
   8. "O Distrito Federal não tem deputado estadual gravado. Por isso fica fora do par governador e deputado estadual e da coerência com deputado estadual."
 
-- [ ] **Step 1: Testes que falham**
+- [x] **Step 1: Testes que falham**
   - `profile` com {puxador, alinhado} → `puxador`; {puxador, base} → `misto`; {sem_candidato, None} → `sem_comparacao`; {alinhado} → `alinhado`.
   - Ordem D14 com empate de deputado federal resolvido pelo deputado estadual.
   - `vertical_report(base, "SP").uf == "SP"`, e `vertical_report(base, None).municipios` soma as UF.
   - `scatter_view` padrão escolhe o primeiro partido. `cargo_x == cargo_y` dá `InvalidCargoError`, `"vereador"` dá `InvalidCargoError`, e `partido=100` dá `InvalidNumeroError`.
   - `coerencia_mediana` ignora a referência Fed × Est (um teste em que só a referência tem r não nulo dá `None`).
-- [ ] **Step 2:** rodar e ver falhar.
-- [ ] **Step 3:** implementar.
-- [ ] **Step 4:** `uv run pytest tests/domain -q -k verticalizacao && uv run mypy src tests && uv run ruff check src tests` → verde.
+- [x] **Step 2:** rodar e ver falhar.
+- [x] **Step 3:** implementar.
+- [x] **Step 4:** `uv run pytest tests/domain -q -k verticalizacao && uv run mypy src tests && uv run ruff check src tests` → verde.
 
 **If Task Fails:** um erro de import circular indica que `verticalizacao_relatorio` só pode importar dos três módulos anteriores, e nunca o contrário.
 
@@ -906,6 +906,8 @@ Regras:
 2. Foco: D3, D7, D9, D11 e D12 conferidos contra o código. Bordas dos limiares. Nenhuma ausência vira zero.
 3. Siga para a próxima task só com zero achados Critical, High ou Medium.
 
+**Resultado (2026-10-22):** zero achados Critical, High ou Medium. Correções vindas da revisão: (a) na soma, `sem_candidato` só vale se o partido não concorreu à majoritária em nenhuma UF do recorte (D12); quem concorreu só onde a proporcional não está gravada (governador só no DF) fica com `classe: null`; (b) uma UF sem a majoritária gravada não gera "sem candidato"; (c) testes de borda com exatamente 2× e exatamente 10 pp; (d) o r é limitado a [−1, 1] contra arredondamento; (e) `MAX_PARTIDO` passou a ser compartilhado.
+
 ---
 
 ### Task 6: Porta, adaptador SQL e caso de uso
@@ -915,7 +917,7 @@ Regras:
 - Create: `src/eleicoes/adapters/postgres_verticalizacao.py`
 - Create: `src/eleicoes/use_cases/verticalizacao.py`
 - Test: `tests/adapters/test_postgres_verticalizacao.py`
-- Test: `tests/use_cases/test_verticalizacao.py`
+- Test: `tests/use_cases/test_verticalizacao_base.py` (o nome `test_verticalizacao.py` colide com `tests/domain/test_verticalizacao.py`, porque as pastas de teste não têm `__init__.py`)
 
 **Interfaces:**
 ```python
@@ -962,15 +964,15 @@ Cada linha vira `VerticalLine(*row)`, com 7 colunas. Com outra largura, a linha 
 
 `build_vertical_base` valida `ElectionYear` e `Turno` antes de ler, e depois chama `vertical_base(year, turn, source.vertical_lines(year, turn))`. `_production_reader` copia `apresentar_classe_governador._production_reader` (com `load_dotenv`, `_host_settings` e `open_sync_session`) e devolve `PostgresVerticalLines`.
 
-- [ ] **Step 1: Testes que falham** (`ScriptedSession` de `tests/adapters/orm_fakes.py`)
+- [x] **Step 1: Testes que falham** (`ScriptedSession` de `tests/adapters/orm_fakes.py`)
   - Uma linha empurrada `("governador", "uf", "SP", "SP", 100, 13, 40)` vira `VerticalLine` igual. Há só 1 `Select`, e o SQL compilado em postgresql contém `analise.relatorio_poder_linha` e não contém `boletim`, `secoes` nem `raw.`. Os parâmetros incluem `municipio`, `uf` e os 5 cargos. A soma `votos_nominais + votos_legenda` aparece no SELECT e no WHERE.
   - Uma linha de 6 colunas dá `InconsistentCellError`.
   - `SQLAlchemyError` na execução dá `StoredReadError`.
   - `close()` fecha a sessão uma vez.
   - Caso de uso: uma fonte falsa com `turno=9` dá `InvalidTurnoError` sem chamar `vertical_lines`. Uma fonte falsa válida devolve `VerticalBase` com `ano == 2026`.
-- [ ] **Step 2:** rodar e ver falhar.
-- [ ] **Step 3:** implementar.
-- [ ] **Step 4:** `uv run pytest tests/adapters/test_postgres_verticalizacao.py tests/use_cases/test_verticalizacao.py -q && uv run mypy src tests && uv run ruff check src tests` → verde.
+- [x] **Step 2:** rodar e ver falhar.
+- [x] **Step 3:** implementar.
+- [x] **Step 4:** `uv run pytest tests/adapters/test_postgres_verticalizacao.py tests/use_cases/test_verticalizacao.py -q && uv run mypy src tests && uv run ruff check src tests` → verde.
 
 **If Task Fails:** se o `ScriptedSession` não devolver as linhas, leia `tests/adapters/orm_fakes.py:51` (`_rows`), que espera `push` antes de `execute`.
 
@@ -1013,7 +1015,7 @@ async def verticalizacao(ano: int, turno: int, build: VerticalBuild, uf: str | N
 
 O schema tem os modelos `CargoVerticalJson`, `CoerenciaJson`, `UfComparacaoJson`, `SemCandidatoJson`, `ComparacaoJson`, `PartidoVerticalJson`, `PontoJson`, `DispersaoJson`, `LimiaresJson` e `VerticalJson`, com campos e ordem exatamente como em "Contrato". Cada um tem `from_domain`, no padrão de `schemas_relatorios.ClassJson`. Fatias e esperadas usam `format_percent`. `r` usa `format_decimal(r)`. `razao` usa `format_decimal(float(razao))`. Um `None` vira `null`. `limiares` = `{"razao": str(RAZAO), "diferenca": format_percent(DIFERENCA), "base_relevante": format_percent(BASE_RELEVANTE), "minimo_municipios": MINIMO_MUNICIPIOS}`. `notas = list(NOTES)`.
 
-- [ ] **Step 1: Testes que falham** (com `create_app(ports=_ports())` de `tests/adapters/test_read_api.py` e `application.dependency_overrides[get_vertical_job] = lambda: job`, como em `test_relatorios_agrupamentos.py:515`)
+- [x] **Step 1: Testes que falham** (com `create_app(ports=_ports())` de `tests/adapters/test_read_api.py` e `application.dependency_overrides[get_vertical_job] = lambda: job`, como em `test_relatorios_agrupamentos.py:515`)
   - A rota aparece no `/openapi.json` com `summary == "Verticalização"` e os parâmetros `{"ano","turno","uf","partido","cargo_x","cargo_y"}`.
   - Um job falso que devolve a `VerticalView` de uma base pequena dá 200, e o JSON tem as chaves do contrato, `cargos` com 5 itens, `coerencia` com 7 e `comparacoes` com 3. `r` nulo sai como `null`.
   - `uf=TODAS` e `uf=` chegam ao job como `None`. `uf=sp` chega como `"sp"` e o job normaliza.
@@ -1025,9 +1027,9 @@ O schema tem os modelos `CargoVerticalJson`, `CoerenciaJson`, `UfComparacaoJson`
     - (c) não guarda erro (como `test_stored_class_job_does_not_cache_an_error`);
     - (d) `clear_report_caches()` força uma nova leitura.
   - Use `clear_vertical_caches()` num fixture `autouse` para isolar os testes.
-- [ ] **Step 2:** rodar e ver falhar.
-- [ ] **Step 3:** implementar e encaixar (`api.py` e `dependencies.py`).
-- [ ] **Step 4:** `uv run pytest -q && uv run ruff check src tests && uv run ruff format --check src tests && uv run mypy src tests` → toda a suíte verde.
+- [x] **Step 2:** rodar e ver falhar.
+- [x] **Step 3:** implementar e encaixar (`api.py` e `dependencies.py`).
+- [x] **Step 4:** `uv run pytest -q && uv run ruff check src tests && uv run ruff format --check src tests && uv run mypy src tests` → toda a suíte verde.
 
 **If Task Fails:**
 - Se 409 virar 500, confira se `MissingPowerReportError` não foi embrulhado. `asyncio.to_thread` repassa a exceção original.
@@ -1038,17 +1040,31 @@ O schema tem os modelos `CargoVerticalJson`, `CoerenciaJson`, `UfComparacaoJson`
 ### Task 8: Verificação real do backend
 
 - [ ] **Step 1:** Reconstruir e subir a API: `docker compose build api && docker compose up -d api`. Esperado: o contêiner `api` em `healthy` depois de cerca de 20 s (`docker compose ps api`).
-- [ ] **Step 2:** `time curl -s 'http://localhost:15000/relatorios/dados/verticalizacao?ano=2026&turno=1' -o /tmp/claude-1000/vert.json -w '%{http_code}\n'`. Esperado: `200`, com o primeiro pedido em menos de 30 s e o segundo em menos de 1 s (cache).
-- [ ] **Step 3:** Conferir um número contra o SQL. Para o primeiro partido de `partidos` (P), a `fatia` de deputadoFederal deve bater, em 2 casas, com:
+- [x] **Step 2:** `time curl -s 'http://localhost:15000/relatorios/dados/verticalizacao?ano=2026&turno=1' -o /tmp/claude-1000/vert.json -w '%{http_code}\n'`. Esperado: `200`, com o primeiro pedido em menos de 30 s e o segundo em menos de 1 s (cache).
+- [x] **Step 3:** Conferir um número contra o SQL. Para o primeiro partido de `partidos` (P), a `fatia` de deputadoFederal deve bater, em 2 casas, com:
   ```sql
   select round(100.0 * sum(votos_nominais + votos_legenda) filter (where partido = P)
          / sum(votos_nominais + votos_legenda), 2)
   from analise.relatorio_poder_linha
   where ano = 2026 and turno = 1 and cargo = 'deputadoFederal' and nivel = 'uf' and codigo <> 'ZZ';
   ```
-- [ ] **Step 4:** Rodar `…&uf=SP&partido=13&cargo_x=deputadoEstadual&cargo_y=governador`. Esperado: `dispersao.pontos` com cerca de 645 itens (municípios de SP), ou `[]` se o 13 não concorreu a governador em SP, caso em que `comparacoes[0].sem_candidato` traz SP.
-- [ ] **Step 5:** `…&uf=ZZ` dá 422. `…&cargo_x=governador&cargo_y=governador` dá 422.
+- [x] **Step 4:** Rodar `…&uf=SP&partido=13&cargo_x=deputadoEstadual&cargo_y=governador`. Esperado: `dispersao.pontos` com cerca de 645 itens (municípios de SP), ou `[]` se o 13 não concorreu a governador em SP, caso em que `comparacoes[0].sem_candidato` traz SP.
+- [x] **Step 5:** `…&uf=ZZ` dá 422. `…&cargo_x=governador&cargo_y=governador` dá 422.
 - [ ] **Step 6:** Memória: `docker stats --no-stream api`. Esperado: uso bem abaixo de 1,5 GiB depois do cache quente. Anote o valor no resumo da task.
+
+**Resultado (2026-10-22, execução no worktree, sem Docker):** os Steps 2 a 5 rodaram em processo com `get_vertical_job()` contra o Postgres real, só leitura. Os Steps 1 e 6 (contêiner e `docker stats`) ficam para o orquestrador. Números:
+- Brasil a frio: 3,4 s. Com cache: 0,015 s. JSON de 0,53 MB. Pico de memória do processo: 370 MB.
+- `municipios = 5571`, `sem_uf = 0`, 30 partidos. O primeiro é o 22, e a fatia de deputado federal dele (22,64%) bate com o SQL do Step 3 (22.64).
+- A dispersão padrão (22, Dep. federal × Governador) tem 3.118 pontos, com r = 0,3749.
+- SP, partido 13, Dep. estadual × Governador: 645 pontos, r = 0,7450, classe `alinhado` e sem `sem_candidato`.
+- `uf=DF`: Dep. estadual com `ufs_total = 0` ("n/a").
+- `uf=ZZ` dá 422 "UF inválida.", e governador × governador dá 422 "Cargo inválido.".
+- Calibração (classe somada no Brasil, 30 partidos):
+  - Governador ↔ Dep. estadual: 24 alinhado, 2 puxador, 1 base, 3 sem candidato. Por UF: 161 alinhado, 9 puxador, 10 base.
+  - Senador ↔ Dep. federal: 27 alinhado, 2 puxador, 1 sem candidato. Por UF: 221 alinhado, 28 puxador, 20 base.
+  - Presidente ↔ Dep. federal: 11 alinhado, 1 base, 17 sem candidato, 1 null. Por UF: 291 alinhado, 10 puxador, 23 base.
+  - Perfil: 23 alinhado, 4 puxador, 2 base, 1 sem comparação.
+  - Os limiares ficam como estão, por decisão do usuário (rever depois).
 
 ---
 
@@ -1057,6 +1073,8 @@ O schema tem os modelos `CargoVerticalJson`, `CoerenciaJson`, `UfComparacaoJson`
 1. **REQUIRED SUB-SKILL:** jarvis:codereview com todos os revisores, sobre o diff do backend.
 2. Foco: o contrato bate com "Contrato", os anexos nos arquivos compartilhados são mínimos e o cache é limpo.
 3. Siga para a próxima task só com zero achados Critical, High ou Medium.
+
+**Resultado (2026-10-22):** zero achados Critical, High ou Medium. Dois Low foram corrigidos: a validação do par de cargos e do partido (`require_scatter`) agora roda antes da carga em cache, e há testes HTTP com o job real para `uf=ZZ`, cargo x = y e `partido=100`. Ficam como limites conhecidos o build em dobro quando dois pedidos chegam a frio ao mesmo tempo (igual ao `ClassJob`) e o relatório em cache que sobrevive à base (`maxsize=2`).
 
 ---
 
@@ -1099,8 +1117,8 @@ export function buscarVerticalizacao(
 }
 ```
 
-- [ ] **Step 1:** Implementar.
-- [ ] **Step 2:** `cd frontend && pnpm exec tsc --noEmit && pnpm exec eslint src/lib/verticalizacao.ts src/lib/buscar-relatorios.ts`. Esperado: sem saída de erro.
+- [x] **Step 1:** Implementar.
+- [x] **Step 2:** `cd frontend && pnpm exec tsc --noEmit && pnpm exec eslint src/lib/verticalizacao.ts src/lib/buscar-relatorios.ts`. Esperado: sem saída de erro.
 
 ---
 
@@ -1150,7 +1168,7 @@ Regras:
   5. Se sobrarem casos além dos 3 de cada tipo: `Mais ${k} casos na tabela.`.
   - Os nomes de cargo nas frases vêm em minúsculas: "presidente", "governador", "senador", "deputado federal" e "deputado estadual".
 
-- [ ] **Step 1:** Escrever `verificar-grafico-verticalizacao.ts` com `node:assert/strict` e um `RelatorioVerticalizacao` montado à mão. Casos:
+- [x] **Step 1:** Escrever `verificar-grafico-verticalizacao.ts` com `node:assert/strict` e um `RelatorioVerticalizacao` montado à mão. Casos:
   - bordas de faixa (0,05 → 1; 0,0499 → 0; 0,35 → 4; null → null; r 0,2 → 1; −0,2 → −1; 0,19 → 0; 0,8 → 4);
   - célula ausente com "—" e faixa null;
   - célula sem eleição (`ufs_total === 0`) com "n/a", `semEleicao: true` e o tooltip próprio;
@@ -1162,9 +1180,9 @@ Regras:
   - ordem dos pontos por raio;
   - as 5 frases com texto exato, inclusive o singular "1 UF", o r nulo e o "e inversa";
   - `resumoMatriz` contém todos os valores.
-- [ ] **Step 2:** `cd frontend && node --experimental-strip-types src/lib/verificar-grafico-verticalizacao.ts`. Esperado: `ERR_MODULE_NOT_FOUND`.
-- [ ] **Step 3:** Implementar.
-- [ ] **Step 4:** Rodar até imprimir `ok`. Depois `pnpm exec tsc --noEmit` e `pnpm exec eslint src/lib/grafico-verticalizacao.ts src/lib/verificar-grafico-verticalizacao.ts`.
+- [x] **Step 2:** `cd frontend && node --experimental-strip-types src/lib/verificar-grafico-verticalizacao.ts`. Esperado: `ERR_MODULE_NOT_FOUND`.
+- [x] **Step 3:** Implementar.
+- [x] **Step 4:** Rodar até imprimir `ok`. Depois `pnpm exec tsc --noEmit` e `pnpm exec eslint src/lib/grafico-verticalizacao.ts src/lib/verificar-grafico-verticalizacao.ts`.
 
 **If Task Fails:** um import sem `.ts` quebra o `--experimental-strip-types`. Use `./fatia.ts`, `./partidos.ts` e assim por diante, como em `grafico-perfis.ts`.
 
@@ -1215,7 +1233,7 @@ Valores (validados em 2026-10-22 com `node <skill>/dataviz/scripts/validate_pale
 
 No escuro, a magnitude cresce para o claro, ou seja, o mais forte tem o maior contraste com a superfície. É uma escolha própria e não uma inversão automática. O tema escuro do app é a classe `.dark` (`globals.css:103`).
 
-- [ ] **Step 1:** Criar o arquivo. Rodar de novo o validador nas 6 rampas (teal claro e escuro, braço azul claro e escuro, braço vermelho claro e escuro, cada uma da faixa mais fraca para a mais forte) com `--ordinal`. Esperado: `ALL CHECKS PASS` nas 6. Rodar `node -e 'import("<skill>/scripts/validate_palette.js").then(m=>…contrast(tinta, fundo)…)'` nos 28 pares fundo/tinta. Esperado: todos ≥ 4,5. O caminho do skill é `/tmp/claude-1000/bundled-skills/2.1.308/b3ed5388aace147827b588d8cd073e96/dataviz/`, mas pode mudar: procure com `ls /tmp/claude-1000/bundled-skills/*/*/dataviz/scripts`.
+- [x] **Step 1:** Criar o arquivo. Rodar de novo o validador nas 6 rampas (teal claro e escuro, braço azul claro e escuro, braço vermelho claro e escuro, cada uma da faixa mais fraca para a mais forte) com `--ordinal`. Esperado: `ALL CHECKS PASS` nas 6. Rodar `node -e 'import("<skill>/scripts/validate_palette.js").then(m=>…contrast(tinta, fundo)…)'` nos 28 pares fundo/tinta. Esperado: todos ≥ 4,5. O caminho do skill é `/tmp/claude-1000/bundled-skills/2.1.308/b3ed5388aace147827b588d8cd073e96/dataviz/`, mas pode mudar: procure com `ls /tmp/claude-1000/bundled-skills/*/*/dataviz/scripts`.
 
 ---
 
@@ -1224,6 +1242,16 @@ No escuro, a magnitude cresce para o claro, ou seja, o mais forte tem o maior co
 1. **REQUIRED SUB-SKILL:** jarvis:codereview sobre as Tasks 10 a 12.
 2. Foco: as frases batem com D11 e D12, nenhum null vira 0 e a acessibilidade do `<desc>` está completa.
 3. Siga só com zero achados Critical, High ou Medium.
+
+**Resultado (2026-10-22):** um achado Medium, corrigido. A força ("forte", "moderada", "fraca"), o "e inversa" e a faixa de cor do r usavam o valor cru, e não o valor de 2 casas que o leitor vê: 0,2996 aparecia como "fraca (r = 0,30)". Agora saem do r arredondado, e o verificador cobre 0,2996, −0,0012 e 0,1996. Lows corrigidos: a leitura recusa partidos com cargos fora da ordem de `cargos` ou sem os 7 pares e as 3 comparações, e o `<desc>` diz a unidade. Desvios registrados:
+- `RespostaVerticalizacaoInvalidaError` local, com a mesma mensagem, porque `relatorios.ts` importa com o alias `@/` e quebra o `node --experimental-strip-types`.
+- Na variante estreita, a sigla longa é cortada com "…" ("REPUBLICA…", "SOLIDARIE…") para caber em `esquerda − 6`. O nome inteiro fica no tooltip e no `<desc>`.
+- `MEDIDAS_COERENCIA_ESTREITO` usa fonte 11 (cabeçalho 10), porque com 7 colunas em 340 px a célula tem 33 px e "−0,15" com fonte 12 não cabe.
+- Os cabeçalhos da coerência vão em duas linhas ("Fed.×" / "Pres."), e "Ref." fica acima da última.
+- A célula ausente mostra no tooltip "Não concorreu em nenhuma das N UFs" em vez de "No recorte todo: 0,00%".
+- Com r nulo e municípios suficientes, a frase é "Não há variação suficiente para medir…".
+- "Mais 1 caso na tabela." usa o singular.
+- `formatarRazao` e `formatarR` ficam exportados para a tabela e a dispersão.
 
 ---
 
@@ -1261,8 +1289,8 @@ Desenho:
   - "Puxador é o partido cuja candidatura majoritária teve pelo menos o dobro do esperado pela força em deputado, com 10 pontos ou mais de diferença. Base sem cabeça forte é o contrário. O esperado é a fatia que o partido teria se os votos da majoritária seguissem os de deputado entre os partidos que lançaram candidato."
 - **`page.tsx`** copia `classe-governador/page.tsx` com `import "./verticalizacao.css"`, `metadata.title = "Verticalização"`, `maxDuration = 600` e `CHAVES_FILTRO = ["ano", "turno", "uf"]`. Usa `<FiltrosRelatorio ano turno uf />` sem cargo nem nível. Esse modo já existe: `relatorio-pagina.tsx:54` o usa na página presidente-governador, e lá o botão de HTML fica desabilitado. `ConsultaRelatorio` (`lib/eleicoes.ts:93`) não tem `partido`, `x` nem `y`, então declare no próprio `page.tsx` o tipo `type ConsultaVerticalizacao = ConsultaRelatorio & { partido?: ValorConsulta; x?: ValorConsulta; y?: ValorConsulta }` e use-o em `searchParams: Promise<ConsultaVerticalizacao>`, sem mexer no tipo compartilhado. Lê `partido` (inteiro 0..99 ou null), `x` e `y` (válidos em `CARGOS_VERTICAIS`, com padrão `deputadoFederal` e `governador`) e passa tudo a `DadosVerticalizacao`.
 
-- [ ] **Step 1:** Implementar os componentes, a página e o item da sidebar.
-- [ ] **Step 2:** `cd frontend && pnpm exec tsc --noEmit && pnpm exec eslint src/components/relatorios/*verticalizacao*.tsx src/app/relatorios/verticalizacao/page.tsx src/components/layout/app-sidebar.tsx src/components/layout/app-breadcrumb.tsx src/app/page.tsx && node --experimental-strip-types src/lib/verificar-grafico-verticalizacao.ts`. Esperado: sem erros e `ok`.
+- [x] **Step 1:** Implementar os componentes, a página e o item da sidebar.
+- [x] **Step 2:** `cd frontend && pnpm exec tsc --noEmit && pnpm exec eslint src/components/relatorios/*verticalizacao*.tsx src/app/relatorios/verticalizacao/page.tsx src/components/layout/app-sidebar.tsx src/components/layout/app-breadcrumb.tsx src/app/page.tsx && node --experimental-strip-types src/lib/verificar-grafico-verticalizacao.ts`. Esperado: sem erros e `ok`.
 - [ ] **Step 3:** Conferir no navegador (chrome-devtools, aba própria `isolatedContext: "verticalizacao"`, com o `pnpm dev` do frontend e a API da Task 8):
   - `/relatorios/verticalizacao?ano=2026&turno=1&uf=TODAS&consultar=1`: as frases, as duas matrizes, a dispersão padrão e a tabela aparecem;
   - `uf=SP`: as fatias mudam e a coerência vale só para SP;
@@ -1278,7 +1306,7 @@ Desenho:
   - item "Verticalização" ativo na sidebar.
 
   Salvar as capturas `verticalizacao-*.png` no scratchpad.
-- [ ] **Step 4:** Sem commit nesta task.
+- [x] **Step 4:** Sem commit nesta task.
 
 **If Task Fails:**
 - Se o `import "./verticalizacao.css"` falhar no build, mova o import para um `layout.tsx` novo em `app/relatorios/verticalizacao/`. O App Router aceita CSS global em layout e page.
@@ -1291,6 +1319,15 @@ Desenho:
 1. **REQUIRED SUB-SKILL:** jarvis:codereview com todos os revisores, sobre o diff completo.
 2. Rodar de novo a suíte inteira, backend (`uv run pytest -q`, `ruff`, `mypy`) e frontend (`tsc`, `eslint`, `verificar`).
 3. Siga só com zero achados Critical, High ou Medium. Depois, faça o commit com jarvis:commit, se o humano pedir.
+
+**Resultado (2026-10-22):** as revisões rodaram com um revisor focado por bloco (domínio, backend, frontend puro e componentes), e não com o conjunto completo do jarvis:codereview. Na revisão final apareceu um achado Medium, que foi corrigido. A legenda das matrizes era filha direta de `figure.folha-quieta`, e a regra `.folha-quieta > .flex` do `globals.css` a achatava em 0,7rem. Agora ela fica dentro de um `div`. Lows corrigidos:
+- Um `x = y` digitado na URL volta ao par padrão.
+- O partido escolhido entra nas opções mesmo quando está fora da lista.
+- A contagem de pontos no `<desc>` está formatada.
+- A checagem de partido redundante na página saiu.
+- O `import` de `UF_TODAS` em `buscar-relatorios.ts` ficou numa linha nova, só por adição.
+
+A suíte inteira passou: pytest, ruff, mypy, os 11 `verificar-*.ts`, `tsc` e `pnpm lint`. A verificação no navegador (Task 14, Step 3) e os Steps 1 e 6 da Task 8 ficam para o orquestrador.
 
 ---
 

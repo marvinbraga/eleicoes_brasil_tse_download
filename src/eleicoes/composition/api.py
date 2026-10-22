@@ -22,6 +22,7 @@ from eleicoes.adapters.http.errors import (
     unexpected,
 )
 from eleicoes.adapters.http.relatorios import router as relatorios_router
+from eleicoes.adapters.http.verticalizacao import router as verticalizacao_router
 from eleicoes.adapters.http.votos import router as votos_router
 from eleicoes.adapters.orm.sessions import AsyncSessionMaker, database_endpoint, sqlalchemy_url
 from eleicoes.composition.correspondencia import _host_settings
@@ -46,6 +47,7 @@ def create_app(
     )
     application.include_router(votos_router)
     application.include_router(relatorios_router)
+    application.include_router(verticalizacao_router)
     application.add_api_route("/health", health, methods=["GET"], summary="Saúde da API")
     _handlers(application)
     return application

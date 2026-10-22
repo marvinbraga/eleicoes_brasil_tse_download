@@ -45,6 +45,12 @@ const DESTINOS = [
     descricao: "Se a força de cada partido está espalhada ou concentrada nos municípios.",
   },
   {
+    href: "/relatorios/verticalizacao",
+    titulo: "Verticalização",
+    descricao:
+      "Se a força de cada partido se sustenta entre presidente, governador, senador e deputados.",
+  },
+  {
     href: "/relatorios/municipais-2024",
     titulo: "Municipais 2024",
     descricao: "Prefeitos, eleitorado governado e vereadores de 2024 por partido.",

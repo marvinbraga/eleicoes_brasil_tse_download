@@ -1,0 +1,36 @@
+/* Cores da página Verticalização. Validadas com o validate_palette.js (skill dataviz) em
+   2026-10-22: as 6 rampas com --ordinal (claro em #ffffff, escuro em #171717) e as 28 tintas
+   com contraste >= 4,5:1. No escuro, a magnitude cresce para o claro. */
+:root {
+  --vz-seq-0: #6fbdb3; --vz-seq-tinta-0: #0b0b0b;
+  --vz-seq-1: #45a69c; --vz-seq-tinta-1: #0b0b0b;
+  --vz-seq-2: #22897f; --vz-seq-tinta-2: #0b0b0b;
+  --vz-seq-3: #0d6f6e; --vz-seq-tinta-3: #ffffff;
+  --vz-seq-4: #0a4f4e; --vz-seq-tinta-4: #ffffff;
+  --vz-div-n4: #a92b2a; --vz-div-tinta-n4: #ffffff;
+  --vz-div-n3: #d03b3b; --vz-div-tinta-n3: #ffffff;
+  --vz-div-n2: #e66767; --vz-div-tinta-n2: #0b0b0b;
+  --vz-div-n1: #ef9a99; --vz-div-tinta-n1: #0b0b0b;
+  --vz-div-0:  #f0efec; --vz-div-tinta-0:  #0b0b0b;
+  --vz-div-p1: #86b6ef; --vz-div-tinta-p1: #0b0b0b;
+  --vz-div-p2: #5598e7; --vz-div-tinta-p2: #0b0b0b;
+  --vz-div-p3: #256abf; --vz-div-tinta-p3: #ffffff;
+  --vz-div-p4: #104281; --vz-div-tinta-p4: #ffffff;
+  --vz-hachura: var(--border);
+}
+.dark {
+  --vz-seq-0: #1a6662; --vz-seq-tinta-0: #f0efec;
+  --vz-seq-1: #2b9a91; --vz-seq-tinta-1: #0b0b0b;
+  --vz-seq-2: #5bb8ae; --vz-seq-tinta-2: #0b0b0b;
+  --vz-seq-3: #8fd0c8; --vz-seq-tinta-3: #0b0b0b;
+  --vz-seq-4: #c4e8e4; --vz-seq-tinta-4: #0b0b0b;
+  --vz-div-n4: #f2a7a6; --vz-div-tinta-n4: #0b0b0b;
+  --vz-div-n3: #e66767; --vz-div-tinta-n3: #0b0b0b;
+  --vz-div-n2: #b83b3a; --vz-div-tinta-n2: #f0efec;
+  --vz-div-n1: #9a2f2e; --vz-div-tinta-n1: #f0efec;
+  --vz-div-0:  #383835; --vz-div-tinta-0:  #f0efec;
+  --vz-div-p1: #1c4a86; --vz-div-tinta-p1: #f0efec;
+  --vz-div-p2: #2a6cc0; --vz-div-tinta-p2: #f0efec;
+  --vz-div-p3: #5598e7; --vz-div-tinta-p3: #0b0b0b;
+  --vz-div-p4: #9ec5f4; --vz-div-tinta-p4: #0b0b0b;
+}
