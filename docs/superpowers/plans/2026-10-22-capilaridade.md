@@ -191,7 +191,7 @@ Erros: 422 `"Ano inválido."` / `"Turno inválido."` / `"Cargo inválido."` / `"
   class InvalidRecorteError(ElectionError); class EmptyRecorteError(ElectionError)
   ```
 
-- [ ] **Step 1: Escrever os testes que falham** em `tests/domain/test_capilaridade.py`:
+- [x] **Step 1: Escrever os testes que falham** em `tests/domain/test_capilaridade.py`:
 
 ```python
 """Capillarity: municipalities, scopes and exact concentration metrics."""
@@ -297,11 +297,11 @@ def test_cargo_must_be_one_of_the_five() -> None:
         require_capillarity_cargo("prefeito")
 ```
 
-- [ ] **Step 2: Rodar e ver falhar.**
+- [x] **Step 2: Rodar e ver falhar.**
   Run: `uv run pytest tests/domain/test_capilaridade.py -q`
   Expected: `ModuleNotFoundError: No module named 'eleicoes.domain.capilaridade'` (erro de coleta, `1 error`).
 
-- [ ] **Step 3: Adicionar os erros** no fim de `src/eleicoes/domain/errors.py`:
+- [x] **Step 3: Adicionar os erros** no fim de `src/eleicoes/domain/errors.py`:
 
 ```python
 class InvalidRecorteError(ElectionError):
@@ -318,7 +318,7 @@ class EmptyRecorteError(ElectionError):
         super().__init__(f"Não há municípios gravados para {cargo} no recorte {recorte}.")
 ```
 
-- [ ] **Step 4: Criar `src/eleicoes/domain/capilaridade.py`** (primeira parte):
+- [x] **Step 4: Criar `src/eleicoes/domain/capilaridade.py`** (primeira parte):
 
 ```python
 """Where a party's votes come from among the municipalities of one scope. Pure and exact."""
@@ -475,7 +475,7 @@ def subdivision_of(scope: Scope, place: Municipality) -> tuple[str, str] | None:
     return None
 ```
 
-- [ ] **Step 5: Rodar até passar.**
+- [x] **Step 5: Rodar até passar.**
   Run: `uv run pytest tests/domain/test_capilaridade.py -q`
   Expected: `8 passed`.
   Run: `uv run ruff check src/eleicoes/domain/capilaridade.py src/eleicoes/domain/errors.py tests/domain/test_capilaridade.py && uv run ruff format --check src/eleicoes/domain/capilaridade.py tests/domain/test_capilaridade.py`
@@ -512,7 +512,7 @@ def subdivision_of(scope: Scope, place: Municipality) -> tuple[str, str] | None:
   def party_metrics(partido: int, scope: Scope, members: Sequence[Municipality]) -> PartyMetrics
   ```
 
-- [ ] **Step 1: Escrever os testes que falham** (adicionar ao arquivo e aos imports: `PRESENCA`, `PartyMetrics`, `concentration_index`, `party_metrics`):
+- [x] **Step 1: Escrever os testes que falham** (adicionar ao arquivo e aos imports: `PRESENCA`, `PartyMetrics`, `concentration_index`, `party_metrics`):
 
 ```python
 def test_index_is_zero_when_the_share_is_the_same_everywhere() -> None:
@@ -603,11 +603,11 @@ def test_top_count_rounds_up_and_is_at_least_one() -> None:
     assert [p.codigo for p in found.fortes][:2] == ["10", "9"]
 ```
 
-- [ ] **Step 2: Rodar e ver falhar.**
+- [x] **Step 2: Rodar e ver falhar.**
   Run: `uv run pytest tests/domain/test_capilaridade.py -q`
   Expected: `ImportError: cannot import name 'concentration_index'` (erro de coleta).
 
-- [ ] **Step 3: Implementar** (adicionar a `capilaridade.py`, com os imports `from collections.abc import Sequence` e `from fractions import Fraction`):
+- [x] **Step 3: Implementar** (adicionar a `capilaridade.py`, com os imports `from collections.abc import Sequence` e `from fractions import Fraction`):
 
 ```python
 PRESENCA: Final = Fraction(5, 100)
@@ -814,7 +814,7 @@ def _strength(place: Municipality, partido: int) -> PlaceStrength:
     return PlaceStrength(place.codigo, place.nome, place.of(partido), place.validos)
 ```
 
-- [ ] **Step 4: Rodar até passar.**
+- [x] **Step 4: Rodar até passar.**
   Run: `uv run pytest tests/domain/test_capilaridade.py -q`
   Expected: `17 passed`.
   Run: `uv run ruff check src/eleicoes/domain/capilaridade.py tests/domain/test_capilaridade.py && uv run mypy`
@@ -853,7 +853,7 @@ def _strength(place: Municipality, partido: int) -> PlaceStrength:
   def summarize(view: CapillarityView) -> tuple[PartySummary, ...]
   ```
 
-- [ ] **Step 1: Escrever os testes que falham** em `tests/domain/test_capilaridade_classe.py`:
+- [x] **Step 1: Escrever os testes que falham** em `tests/domain/test_capilaridade_classe.py`:
 
 ```python
 """Capillarity classes: ordered rules, one boundary test per threshold."""
@@ -983,11 +983,11 @@ def test_report_without_places_is_missing() -> None:
         build_report(2026, 1, "senador", MunicipalSet((), 3))
 ```
 
-- [ ] **Step 2: Rodar e ver falhar.**
+- [x] **Step 2: Rodar e ver falhar.**
   Run: `uv run pytest tests/domain/test_capilaridade_classe.py -q`
   Expected: `ModuleNotFoundError: No module named 'eleicoes.domain.capilaridade_classe'`.
 
-- [ ] **Step 3: Implementar `src/eleicoes/domain/capilaridade_classe.py`:**
+- [x] **Step 3: Implementar `src/eleicoes/domain/capilaridade_classe.py`:**
 
 ```python
 """Readable spread class per party, the view per scope, and the summary the scoreboard reuses."""
@@ -1153,7 +1153,7 @@ def summarize(view: CapillarityView) -> tuple[PartySummary, ...]:
     )
 ```
 
-- [ ] **Step 4: Rodar até passar.**
+- [x] **Step 4: Rodar até passar.**
   Run: `uv run pytest tests/domain/test_capilaridade_classe.py tests/domain/test_capilaridade.py -q`
   Expected: `27 passed`.
   Run: `uv run ruff check src/eleicoes/domain tests/domain && uv run mypy`
@@ -1191,7 +1191,7 @@ def summarize(view: CapillarityView) -> tuple[PartySummary, ...]:
   def municipal_statement(ano: int, turno: int, cargo: str) -> Executable
   ```
 
-- [ ] **Step 1: Escrever o teste que falha** (adicionar a `tests/adapters/test_postgres_perfis.py`, com o import `from eleicoes.domain.stored_grade import StoredCell`):
+- [x] **Step 1: Escrever o teste que falha** (adicionar a `tests/adapters/test_postgres_perfis.py`, com o import `from eleicoes.domain.stored_grade import StoredCell`):
 
 ```python
 def test_municipal_cells_is_one_select_on_the_municipal_level_only() -> None:
@@ -1223,11 +1223,11 @@ def test_municipal_cells_rejects_a_short_row() -> None:
         reader.municipal_cells(2026, 1, "senador")
 ```
 
-- [ ] **Step 2: Rodar e ver falhar.**
+- [x] **Step 2: Rodar e ver falhar.**
   Run: `uv run pytest tests/adapters/test_postgres_perfis.py -q -k municipal_cells`
   Expected: `2 failed` com `AttributeError: 'PostgresStoredLines' object has no attribute 'municipal_cells'`.
 
-- [ ] **Step 3: Implementar.** `src/eleicoes/ports/capilaridade.py`:
+- [x] **Step 3: Implementar.** `src/eleicoes/ports/capilaridade.py`:
 
 ```python
 """Port for the stored municipal cells the capillarity report reads."""
@@ -1292,7 +1292,7 @@ def _cell(row: tuple[object, ...]) -> StoredCell:
     )
 ```
 
-- [ ] **Step 4: Rodar até passar.**
+- [x] **Step 4: Rodar até passar.**
   Run: `uv run pytest tests/adapters/test_postgres_perfis.py -q`
   Expected: todos passam (os existentes mais 2).
   Run: `uv run ruff check src/eleicoes/ports/capilaridade.py src/eleicoes/adapters/postgres_perfis.py && uv run mypy`
@@ -1321,7 +1321,7 @@ def _cell(row: tuple[object, ...]) -> StoredCell:
   def get_capillarity_job() -> CapillarityJob
   ```
 
-- [ ] **Step 1: Escrever os testes que falham.** `tests/use_cases/test_apresentar_capilaridade.py`:
+- [x] **Step 1: Escrever os testes que falham.** `tests/use_cases/test_apresentar_capilaridade.py`:
 
 ```python
 """Capillarity use case: validates first, reads once, 409 without stored cells."""
@@ -1381,11 +1381,11 @@ def test_validates_before_reading() -> None:
   - `test_capillarity_job_does_not_cache_an_error`: `_production_reader` levanta `ElectionError`. Duas chamadas levantam erro e o contador vale 2.
   - `test_clear_report_caches_drops_the_capillarity_cache`: chamar, depois `clear_report_caches()`, depois chamar de novo. O resultado é outro objeto.
 
-- [ ] **Step 2: Rodar e ver falhar.**
+- [x] **Step 2: Rodar e ver falhar.**
   Run: `uv run pytest tests/use_cases/test_apresentar_capilaridade.py tests/adapters/test_relatorios_capilaridade.py -q`
   Expected: `ModuleNotFoundError: No module named 'eleicoes.use_cases.apresentar_capilaridade'`.
 
-- [ ] **Step 3: Implementar.** `src/eleicoes/use_cases/apresentar_capilaridade.py`:
+- [x] **Step 3: Implementar.** `src/eleicoes/use_cases/apresentar_capilaridade.py`:
 
 ```python
 """Capillarity report from the stored municipal cells. No ballot is read."""
@@ -1455,7 +1455,7 @@ def _stored_capillarity(ano: int, turno: int, cargo: str) -> CapillarityReport:
 
   Adicionar o import `from eleicoes.domain.capilaridade_classe import CapillarityReport` e a linha `_stored_capillarity.cache_clear()` em `clear_report_caches()`.
 
-- [ ] **Step 4: Rodar até passar.**
+- [x] **Step 4: Rodar até passar.**
   Run: `uv run pytest tests/use_cases/test_apresentar_capilaridade.py tests/adapters/test_relatorios_capilaridade.py -q`
   Expected: `6 passed`.
   Run: `uv run ruff check src tests && uv run mypy`
@@ -1495,7 +1495,7 @@ def _stored_capillarity(ano: int, turno: int, cargo: str) -> CapillarityReport:
   Corpo da rota: `report = await asyncio.to_thread(build, ano, turno, cargo)`; `view = report.view(regiao, uf)`; `return CapilaridadeJson.from_domain(report, view)`.
   `_CAPILARIDADE = "Exige ano, turno e cargo. regiao (NO, NE, CO, SE, S) ou uf recorta; sem os dois, é o Brasil. Lê só as células municipais gravadas do relatório de poder; sem elas, responde 409."`
 
-- [ ] **Step 1: Escrever os testes que falham** em `tests/adapters/test_relatorios_capilaridade.py`. O app é `create_app(ports=_read_ports())` (importado de `tests.adapters.test_read_api`, como em `test_relatorios_agrupamentos.py`), com `application.dependency_overrides[get_capillarity_job] = lambda: job`, onde `job` chama `build_capillarity` com o fake `_Cells` da Task 6. Os dados de exemplo: 25 municípios no AC (`M{i} (AC)`, 13 e 22) e 25 em PE, mais Rio Branco `"1392"` com o partido 50 forte. Casos:
+- [x] **Step 1: Escrever os testes que falham** em `tests/adapters/test_relatorios_capilaridade.py`. O app é `create_app(ports=_read_ports())` (importado de `tests.adapters.test_read_api`, como em `test_relatorios_agrupamentos.py`), com `application.dependency_overrides[get_capillarity_job] = lambda: job`, onde `job` chama `build_capillarity` com o fake `_Cells` da Task 6. Os dados de exemplo: 25 municípios no AC (`M{i} (AC)`, 13 e 22) e 25 em PE, mais Rio Branco `"1392"` com o partido 50 forte. Casos:
   - `test_capilaridade_brasil_has_the_contract_fields`: 200. As chaves de topo são `{"ano","turno","cargo","recorte","municipios","ufs","sem_validos","votos_validos","exterior","limites","partidos","resumo","notas"}`. `recorte == {"tipo": "pais", "codigo": "BR", "nome": "Brasil"}`. Cada `partidos[i]` tem 7 `faixas` com as chaves na ordem do contrato. `[r["partido"] for r in resumo] == [p["partido"] for p in partidos]`. `limites["capitais_vezes"] == "1,75"`. `notas == list(NOTES)`.
   - `test_capilaridade_regional_label_and_reason_are_exact`: um partido que só tem voto no AC, no recorte Brasil, sai com `classe == "regional"`, `rotulo_classe == "Regional (Norte)"` e `motivo` começando por `"Norte deu "`.
   - `test_capilaridade_uf_scope_has_no_subdivisions_and_uf_labels`: `?uf=AC` dá `subdivisoes == []` e o espalhado sai `"Espalhado pelo estado"`.
@@ -1507,11 +1507,11 @@ def _stored_capillarity(ano: int, turno: int, cargo: str) -> CapillarityReport:
   - `test_format_times_rounds_half_up`: `format_times(Fraction(2175, 1000)) == "2,18"`, `format_times(Fraction(7, 4)) == "1,75"` e `format_times(Fraction(0)) == "0,00"`.
   - `test_motivo_uses_vez_below_two`: com `capitais.vezes = 7/4`, o texto tem `"1,75 vez o peso"`. Com 2, tem `"2,00 vezes o peso"`.
 
-- [ ] **Step 2: Rodar e ver falhar.**
+- [x] **Step 2: Rodar e ver falhar.**
   Run: `uv run pytest tests/adapters/test_relatorios_capilaridade.py -q`
   Expected: os testes da Task 6 passam e os novos falham com `ModuleNotFoundError: ... schemas_capilaridade` ou com `404`.
 
-- [ ] **Step 3: Implementar `schemas_capilaridade.py`.** Os modelos Pydantic são `RecorteJson`, `LimitesJson`, `ParteJson` (municipios, votos, parte, parte_texto, eleitorado, eleitorado_texto, vezes), `PresencaJson`, `SubdivisaoJson` (codigo, nome + campos de `ParteJson`), `FaixaJson`, `LugarJson`, `PartidoCapilaridadeJson`, `ResumoCapilaridadeJson` e `CapilaridadeJson`. Os campos e nomes são os do "Contrato JSON". Regras:
+- [x] **Step 3: Implementar `schemas_capilaridade.py`.** Os modelos Pydantic são `RecorteJson`, `LimitesJson`, `ParteJson` (municipios, votos, parte, parte_texto, eleitorado, eleitorado_texto, vezes), `PresencaJson`, `SubdivisaoJson` (codigo, nome + campos de `ParteJson`), `FaixaJson`, `LugarJson`, `PartidoCapilaridadeJson`, `ResumoCapilaridadeJson` e `CapilaridadeJson`. Os campos e nomes são os do "Contrato JSON". Regras:
   - Fração: `str(value)`. Percentual: `format_percent(value)`. Índice: `format_decimal(float(indice))` e `round_half_up(indice * 100)`. Use `format_decimal` só para o texto. A fração exata vai em `indice`.
   - `format_times(value)`: `scaled = round_half_up(value * 100)`, `whole, cents = divmod(scaled, 100)`, `return f"{format_integer(whole)},{cents:02d}"`.
   - `rotulo_classe` e `motivo` seguem as tabelas do contrato. `motivo` usa `vez` quando `format_times(...)` começa com `"1,"`, e `vezes` nos demais casos.
@@ -1544,7 +1544,7 @@ async def capilaridade(
 
   Em `errors.py`, importe `InvalidRecorteError` e `EmptyRecorteError` e adicione `(InvalidRecorteError, 422)` e `(EmptyRecorteError, 409)` em `_OWN_TEXT`.
 
-- [ ] **Step 4: Rodar a suíte toda.**
+- [x] **Step 4: Rodar a suíte toda.**
   Run: `uv run pytest -q`
   Expected: tudo passa, sem `failed` e sem `error`.
   Run: `uv run ruff check src tests && uv run ruff format --check src tests && uv run mypy`
@@ -1566,10 +1566,12 @@ async def capilaridade(
    - [ ] Subir a API local: `uv run uvicorn eleicoes.composition.api:app --port 8000`. O `_host_settings` de `composition/correspondencia.py` já troca `POSTGRES_HOST=postgres` por `127.0.0.1:$POSTGRES_PUBLISH_PORT` quando o nome do compose não resolve. O serviço `api` do `docker-compose.yml` usa o mesmo `eleicoes.composition.api:app`, mas na porta `${API_PORT:-15000}` e com a imagem reconstruída.
    - [ ] `time curl -s "http://localhost:8000/relatorios/dados/capilaridade?ano=2026&turno=1&cargo=deputadoFederal" -o /tmp/cap.json -w "%{http_code}\n"`
      Expected: `200`. A primeira chamada leva alguns segundos e a segunda menos de 1 s (cache).
-   - [ ] `python3 -c "import json,collections;d=json.load(open('/tmp/cap.json'));print(d['municipios'],collections.Counter(p['classe'] for p in d['partidos']))"`
+   - [x] `python3 -c "import json,collections;d=json.load(open('/tmp/cap.json'));print(d['municipios'],collections.Counter(p['classe'] for p in d['partidos']))"`
      Expected: `5571` e a contagem da linha deputadoFederal da tabela de calibração (`espalhado 9, regional 6, capitais 1, poucos_municipios 2, pouco_voto 10`). Repita para os 5 cargos. Diferença de no máximo 1 partido por classe vem de desempate. Qualquer diferença maior é bug: pare e investigue.
-   - [ ] `curl -s ".../capilaridade?ano=2026&turno=1&cargo=deputadoEstadual&uf=DF" -w "%{http_code}\n"` dá `409`. `cargo=presidente` dá `"exterior": 117`.
-   - [ ] Para PT 13 no presidente, `indice_texto` é `"0,1960"` ± 0,0005 (calibração: 0,196).
+   - [x] `curl -s ".../capilaridade?ano=2026&turno=1&cargo=deputadoEstadual&uf=DF" -w "%{http_code}\n"` dá `409`. `cargo=presidente` dá `"exterior": 117`.
+   - [x] Para PT 13 no presidente, `indice_texto` é `"0,1960"` ± 0,0005 (calibração: 0,196).
+
+   - Executado em 2026-10-22 sem subir a API: um script só de leitura chamou `build_capillarity` + `CapilaridadeJson.from_domain` com o `.env` real. As contagens por classe batem exatamente com a tabela de calibração nos 5 cargos; presidente tem `exterior` 117 e 5.571 municípios; PT 13 presidente `indice_texto` "0,1957"; deputadoEstadual `uf=DF` dá 409. Tempo do job (todos os recortes, sem cache): 3,3 a 7,4 s por cargo. Os passos de API e curl ficam para o orquestrador.
 
 ---
 
@@ -1616,10 +1618,10 @@ async def capilaridade(
   ```
   Os rótulos de `RECORTES` são "Brasil", "Região Norte"…"Região Sul" e `nomeUf(sigla)` (função já exportada por `eleicoes.ts`) para as 27 UFs de `UFS`, sem o exterior (`ZZ`). `lerCapilaridade` confere as 7 chaves de faixa na ordem e as classes conhecidas.
 
-- [ ] **Step 1:** Escrever `capilaridade.ts` (tipos e constantes), `ler-capilaridade.ts` e `buscarCapilaridade`. Confirme que `capilaridade.ts` não tem nenhuma linha `import` que não seja `import type`: `grep -n "^import" frontend/src/lib/capilaridade.ts` não deve imprimir nada além de `import type`. `buscarCapilaridade` monta `new URLSearchParams({ ano, turno, cargo, ...paramsRecorte(recorte) })` e chama `buscar("/relatorios/dados/capilaridade", params, lerCapilaridade)`.
-- [ ] **Step 2:** Rodar `cd frontend && pnpm exec tsc --noEmit`.
+- [x] **Step 1:** Escrever `capilaridade.ts` (tipos e constantes), `ler-capilaridade.ts` e `buscarCapilaridade`. Confirme que `capilaridade.ts` não tem nenhuma linha `import` que não seja `import type`: `grep -n "^import" frontend/src/lib/capilaridade.ts` não deve imprimir nada além de `import type`. `buscarCapilaridade` monta `new URLSearchParams({ ano, turno, cargo, ...paramsRecorte(recorte) })` e chama `buscar("/relatorios/dados/capilaridade", params, lerCapilaridade)`.
+- [x] **Step 2:** Rodar `cd frontend && pnpm exec tsc --noEmit`.
   Expected: sem saída (código 0).
-- [ ] **Step 3:** Rodar `pnpm exec eslint src/lib/capilaridade.ts src/lib/ler-capilaridade.ts src/lib/buscar-relatorios.ts src/lib/relatorios.ts`.
+- [x] **Step 3:** Rodar `pnpm exec eslint src/lib/capilaridade.ts src/lib/ler-capilaridade.ts src/lib/buscar-relatorios.ts src/lib/relatorios.ts`.
   Expected: sem saída.
 
 **If Task Fails:** se `exigir*` já foram exportados por um plano irmão, não duplique e só importe. Se `tsc` reclamar de `ConsultaRelatorio`, importe o tipo de `@/lib/eleicoes` com `import type`.
@@ -1666,7 +1668,7 @@ async def capilaridade(
     3. `"Teve pelo menos 5% dos votos em {presenca.municipios} de {municipios} municípios ({presenca.parte_texto})."`
     4. `"Índice de concentração: {indice_100} de 100. {motivo}"`
 
-- [ ] **Step 1:** Escrever `verificar-grafico-capilaridade.ts` com `node:assert/strict` e dados feitos à mão (3 partidos ranqueáveis, 1 `pouco_voto`). Casos:
+- [x] **Step 1:** Escrever `verificar-grafico-capilaridade.ts` com `node:assert/strict` e dados feitos à mão (3 partidos ranqueáveis, 1 `pouco_voto`). Casos:
   - ordem e exclusão do `pouco_voto`;
   - escala fixa (índice 50 dá metade da área útil);
   - `selecionado` marca só um;
@@ -1679,10 +1681,10 @@ async def capilaridade(
   - as quatro frases de `leituraCapilaridade` com texto exato para Brasil, região e UF;
   - o acréscimo "contando só as N UFs" com `ufs_com_voto = 12` e `ufs = 27`, e a ausência dele com `ufs_com_voto = 26` e `ufs = 26` (deputado estadual);
   - `resumoRanking` cita todos os valores.
-- [ ] **Step 2:** `cd frontend && node --experimental-strip-types src/lib/verificar-grafico-capilaridade.ts`
+- [x] **Step 2:** `cd frontend && node --experimental-strip-types src/lib/verificar-grafico-capilaridade.ts`
   Expected: falha com `ERR_MODULE_NOT_FOUND` (o módulo ainda não existe).
-- [ ] **Step 3:** Implementar `grafico-capilaridade.ts`.
-- [ ] **Step 4:** Rodar o script de novo.
+- [x] **Step 3:** Implementar `grafico-capilaridade.ts`.
+- [x] **Step 4:** Rodar o script de novo.
   Expected: imprime `ok`. Depois `pnpm exec tsc --noEmit` e `pnpm exec eslint src/lib/grafico-capilaridade.ts src/lib/verificar-grafico-capilaridade.ts`, ambos sem saída.
 
 **If Task Fails:** o Node exige o import com `.ts` e caminho relativo nos módulos `lib`. Um `ERR_MODULE_NOT_FOUND` com `@/lib/...` na mensagem quer dizer que algum módulo da cadeia importa em runtime de `relatorios.ts`, `eleicoes.ts` ou `ler-capilaridade.ts`. Mova a constante para `capilaridade.ts` ou troque por `import type`.
@@ -1712,8 +1714,8 @@ Desenho (copie a estrutura de `grafico-poder.tsx` e `grafico-perfis.tsx`):
   - as `notas` do backend.
 - **Dados:** recebe `ano`, `turno`, `cargo`, `recorte` e `partido` e chama `buscarCapilaridade`. Usa `partidoEscolhido` de `ler-capilaridade.ts` e chama `leituraCapilaridade(partido, dados.recorte, dados.ufs)`. Em erro, mostra `<ErroRelatorio detalhe>`. A ordem na página é: subtítulo (`"{cargo} · {recorte.nome} · {municipios} municípios"`), explicação, ranking, detalhe do partido escolhido (título `rotuloPartido`, as frases de `leituraCapilaridade`, os painéis de faixas, uma lista de `subdivisoes` com "parte / eleitorado / vezes", e duas listas curtas "Onde é mais forte" (`fortes`) e "De onde vêm mais votos" (`maiores`)) e, por fim, a tabela. O `href` de cada partido preserva `ano`, `turno`, `cargo`, `recorte` e `consultar=1` e troca `partido`.
 
-- [ ] **Step 1:** Implementar os 5 componentes.
-- [ ] **Step 2:** `cd frontend && pnpm exec tsc --noEmit && pnpm exec eslint src/components/relatorios/*capilaridade*.tsx`
+- [x] **Step 1:** Implementar os 5 componentes.
+- [x] **Step 2:** `cd frontend && pnpm exec tsc --noEmit && pnpm exec eslint src/components/relatorios/*capilaridade*.tsx`
   Expected: sem saída.
 
 ---
@@ -1730,10 +1732,10 @@ Desenho (copie a estrutura de `grafico-poder.tsx` e `grafico-perfis.tsx`):
 Página: copie `app/relatorios/perfis/page.tsx`. `metadata.title = "Capilaridade partidária"`, `maxDuration = 600`, `CHAVES_FILTRO = ["ano", "turno", "cargo", "recorte"]` e o título h1 "Capilaridade partidária". `searchParams: Promise<ConsultaCapilaridade>`. O cargo vem de `lerCargoPoder` (5 cargos), o recorte de `lerRecorte` (de `ler-capilaridade.ts`) e o partido é repassado cru. Sem `consultar=1`, mostra "Selecione os filtros e clique em Consultar."
 Filtro: copie `filtros-curtos.tsx` com Ano, Turno, Cargo (`CARGOS_PODER`) e Recorte (`RECORTES` de `ler-capilaridade.ts`). O botão Consultar monta `ano`, `turno`, `cargo`, `recorte` e `consultar=1`, sem `partido`, para voltar ao padrão D16.
 
-- [ ] **Step 1:** Implementar.
-- [ ] **Step 2:** `cd frontend && pnpm exec tsc --noEmit && pnpm exec eslint src/app/relatorios/capilaridade src/components/relatorios/filtros-capilaridade.tsx src/components/layout src/app/page.tsx`
+- [x] **Step 1:** Implementar.
+- [x] **Step 2:** `cd frontend && pnpm exec tsc --noEmit && pnpm exec eslint src/app/relatorios/capilaridade src/components/relatorios/filtros-capilaridade.tsx src/components/layout src/app/page.tsx`
   Expected: sem saída.
-- [ ] **Step 3:** `pnpm build`
+- [x] **Step 3:** `pnpm build`
   Expected: termina com a rota `/relatorios/capilaridade` listada e sem erro.
 
 ---

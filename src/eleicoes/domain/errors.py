@@ -337,3 +337,15 @@ def comando_relatorio_cadeiras() -> str:
 
 def comando_municipais_2024() -> str:
     return "make download-municipais && make import-municipais"
+
+
+class InvalidRecorteError(ElectionError):
+    def __init__(self) -> None:
+        super().__init__("Recorte inválido. Use regiao (NO, NE, CO, SE ou S) ou uf, não os dois.")
+
+
+class EmptyRecorteError(ElectionError):
+    def __init__(self, recorte: str, cargo: str) -> None:
+        self.recorte = recorte
+        self.cargo = cargo
+        super().__init__(f"Não há municípios gravados para {cargo} no recorte {recorte}.")

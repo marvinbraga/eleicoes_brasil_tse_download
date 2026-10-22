@@ -18,11 +18,13 @@ from eleicoes.adapters.orm.sessions import SyncSessionFactory
 from eleicoes.domain.classe_governador import ClassLine
 from eleicoes.domain.errors import ElectionError, InconsistentCellError, StoredReadError
 from eleicoes.domain.perfis import ProfileLine
+from eleicoes.domain.stored_grade import StoredCell
 
 _MUNICIPIO = "municipio"
 _PROFILE_WIDTH = 8
 _CLASS_WIDTH = 7
 _UF_WIDTH = 2
+_CELL_WIDTH = 6
 _CLASS_CARGOS = ("presidente", "governador")
 _PRESIDENTE = "presidente"
 _T = TypeVar("_T")
@@ -41,6 +43,9 @@ class PostgresStoredLines:
 
     def municipal_ufs(self, ano: int, turno: int) -> tuple[tuple[str, str], ...]:
         return self._guard(lambda: self._ufs(ano, turno))
+
+    def municipal_cells(self, ano: int, turno: int, cargo: str) -> tuple[StoredCell, ...]:
+        return self._guard(lambda: self._cells(ano, turno, cargo))
 
     def close(self) -> None:
         session = self._session
@@ -62,6 +67,11 @@ class PostgresStoredLines:
         with self._open().begin():
             fetched = self._open().execute(uf_statement(ano, turno)).all()
         return tuple(_uf_pair(_as_tuple(row)) for row in fetched)
+
+    def _cells(self, ano: int, turno: int, cargo: str) -> tuple[StoredCell, ...]:
+        with self._open().begin():
+            fetched = self._open().execute(municipal_statement(ano, turno, cargo)).all()
+        return tuple(_cell(_as_tuple(row)) for row in fetched)
 
     def _guard(self, work: Callable[[], _T]) -> _T:
         try:
@@ -134,6 +144,36 @@ def uf_statement(ano: int, turno: int) -> Executable:
         )
         .distinct()
         .order_by(PresidentGovernorLine.uf, PresidentGovernorLine.codigo)
+    )
+
+
+def municipal_statement(ano: int, turno: int, cargo: str) -> Executable:
+    return select(
+        PowerReportLine.codigo,
+        PowerReportLine.nome,
+        PowerReportLine.comparecimento,
+        PowerReportLine.partido,
+        PowerReportLine.votos_nominais,
+        PowerReportLine.votos_legenda,
+    ).where(
+        PowerReportLine.ano == ano,
+        PowerReportLine.turno == turno,
+        PowerReportLine.cargo == cargo,
+        PowerReportLine.nivel == _MUNICIPIO,
+    )
+
+
+def _cell(row: tuple[object, ...]) -> StoredCell:
+    if len(row) != _CELL_WIDTH:
+        raise InconsistentCellError()
+    return StoredCell(
+        _MUNICIPIO,
+        _text(row[0]),
+        _text(row[1]),
+        _count(row[2]),
+        _count(row[3]),
+        _count(row[4]),
+        _count(row[5]),
     )
 
 

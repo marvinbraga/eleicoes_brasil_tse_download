@@ -12,6 +12,7 @@ from eleicoes.adapters.postgres_perfis import PostgresStoredLines
 from eleicoes.domain.classe_governador import ClassLine
 from eleicoes.domain.errors import InconsistentCellError, StoredReadError
 from eleicoes.domain.perfis import ProfileLine
+from eleicoes.domain.stored_grade import StoredCell
 
 
 def test_profile_query_is_one_select_with_a_null_ballot() -> None:
@@ -128,3 +129,32 @@ def test_non_sequence_and_bool_counts_are_rejected() -> None:
     flagged.push(("1", "A", 10, 13, 4, 1, True, None))
     with pytest.raises(InconsistentCellError):
         PostgresStoredLines(lambda: flagged).profile_lines(2026, 1, "presidente")
+
+
+def test_municipal_cells_is_one_select_on_the_municipal_level_only() -> None:
+    session = ScriptedSession()
+    session.push(("1392", "RIO BRANCO (AC)", 100, 13, 10, 2))
+    reader = PostgresStoredLines(lambda: session)
+
+    found = reader.municipal_cells(2026, 1, "deputadoFederal")
+
+    assert found == (StoredCell("municipio", "1392", "RIO BRANCO (AC)", 100, 13, 10, 2),)
+    selects = [item for _begin, item in session.executed if isinstance(item, Select)]
+    assert len(selects) == 1
+    compiled = selects[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled).lower()
+    assert "analise.relatorio_poder_linha" in sql
+    assert "cedula" not in sql
+    assert "raw." not in sql
+    assert "boletim" not in sql
+    assert _bound(compiled.params) >= {"deputadoFederal", "municipio"}
+    reader.close()
+    assert session.closed == 1
+
+
+def test_municipal_cells_rejects_a_short_row() -> None:
+    session = ScriptedSession()
+    session.push(("1392", "RIO BRANCO (AC)", 100, 13, 10))
+    reader = PostgresStoredLines(lambda: session)
+    with pytest.raises(InconsistentCellError):
+        reader.municipal_cells(2026, 1, "senador")
