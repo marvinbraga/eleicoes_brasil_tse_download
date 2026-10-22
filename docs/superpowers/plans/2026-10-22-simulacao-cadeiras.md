@@ -177,7 +177,7 @@ cd frontend && node --experimental-strip-types src/lib/verificar-grafico-poder.t
 **Interfaces:**
 - Produces: `InvalidSeatRuleError(field)`, `UnknownPartyRegistryError(ano)`, `MissingSeatReportError(cargos)`; `VAGAS_CAMARA_2026`, `vagas_camara(uf)`, `vagas_assembleia(uf)`, `cargo_assembleia(uf)`, `ufs_com_vagas()`, `CARGOS_GRAVADOS` e as constantes `CARGO_*`.
 
-- [ ] **Step 1: Escrever o teste** `tests/domain/test_cadeiras.py`:
+- [x] **Step 1: Escrever o teste** `tests/domain/test_cadeiras.py`:
 
 ```python
 """Seats per UF in 2026."""
@@ -223,12 +223,12 @@ def test_abroad_has_no_seats() -> None:
         vagas_camara("ZZ")
 ```
 
-- [ ] **Step 2: Rodar e ver falhar**
+- [x] **Step 2: Rodar e ver falhar**
 
 Run: `uv run pytest tests/domain/test_cadeiras.py -q`
 Expected: `ModuleNotFoundError: No module named 'eleicoes.domain.cadeiras'` (erro de coleta).
 
-- [ ] **Step 3: Acrescentar ao fim de `src/eleicoes/domain/errors.py`:**
+- [x] **Step 3: Acrescentar ao fim de `src/eleicoes/domain/errors.py`:**
 
 ```python
 class InvalidSeatRuleError(ElectionError):
@@ -253,7 +253,7 @@ class MissingSeatReportError(ElectionError):
         )
 ```
 
-- [ ] **Step 4: Criar `src/eleicoes/domain/cadeiras.py`:**
+- [x] **Step 4: Criar `src/eleicoes/domain/cadeiras.py`:**
 
 ```python
 """Seats per UF in 2026 and the cargo that fills each house.
@@ -340,7 +340,7 @@ def ufs_com_vagas() -> tuple[str, ...]:
     return tuple(sorted(VAGAS_CAMARA_2026))
 ```
 
-- [ ] **Step 5: Rodar até passar**
+- [x] **Step 5: Rodar até passar**
 
 Run: `uv run pytest tests/domain/test_cadeiras.py -q && uv run ruff check src/eleicoes/domain tests/domain/test_cadeiras.py`
 Expected: `8 passed`, depois `All checks passed!`.
@@ -360,7 +360,7 @@ Expected: `8 passed`, depois `All checks passed!`.
 **Interfaces:**
 - Produces: `Federacao(codigo, sigla, nome, partidos)`, `RegistroPartidario(ano, partidos, federacoes)` com `.legenda(partido) -> str` e `.federacao_de(partido)`, `REGISTRO_2026`, `REGISTROS`, `registro_partidario(ano)`.
 
-- [ ] **Step 1: Teste** `tests/domain/test_federacoes.py`:
+- [x] **Step 1: Teste** `tests/domain/test_federacoes.py`:
 
 ```python
 """Party registry: a federation is one proportional list."""
@@ -439,9 +439,9 @@ def test_party_numbers_stay_in_the_two_digit_range() -> None:
         RegistroPartidario(2026, frozenset({9}), ())
 ```
 
-- [ ] **Step 2:** `uv run pytest tests/domain/test_federacoes.py -q` → falha com `ModuleNotFoundError: ... eleicoes.domain.federacoes`.
+- [x] **Step 2:** `uv run pytest tests/domain/test_federacoes.py -q` → falha com `ModuleNotFoundError: ... eleicoes.domain.federacoes`.
 
-- [ ] **Step 3: Criar `src/eleicoes/domain/federacoes.py`:**
+- [x] **Step 3: Criar `src/eleicoes/domain/federacoes.py`:**
 
 ```python
 """Partidos e federações de cada eleição geral. Na proporcional, a federação é uma lista só.
@@ -580,7 +580,7 @@ def registro_partidario(ano: int) -> RegistroPartidario:
     return found
 ```
 
-- [ ] **Step 4:** `uv run pytest tests/domain/test_federacoes.py -q` → `11 passed`.
+- [x] **Step 4:** `uv run pytest tests/domain/test_federacoes.py -q` → `11 passed`.
 
 **If Task Fails:** um código de federação só com dígitos colide com o código de partido isolado. Por isso `Federacao` recusa `codigo.isdigit()`.
 
@@ -599,7 +599,7 @@ def registro_partidario(ano: int) -> RegistroPartidario:
 
 Os casos foram calculados à mão. Os comentários no teste mostram a conta. Exemplo da fase 3: 700 válidos e 3 vagas dão QE 233 (700/3 = 233,3). A tem QP 1 e elege 1001. Na fase 2 ninguém é apto: o 1002 de A tem 10 votos, menos que 20% de 233 = 46,6; B e C ficam abaixo de 80% do QE = 186,4. Na fase 3, as médias são A 410/2 = 205, B 150 e C 140, e A leva o 1002 com 10 votos. Depois são A 410/3 = 136,7, B 150 e C 140, e B leva.
 
-- [ ] **Step 1: Teste** `tests/domain/test_proporcional.py`:
+- [x] **Step 1: Teste** `tests/domain/test_proporcional.py`:
 
 ```python
 """Proportional seats. Every expected number was worked out by hand."""
@@ -785,9 +785,9 @@ def test_bad_input_is_rejected(build: Callable[[], object]) -> None:
         build()
 ```
 
-- [ ] **Step 2:** `uv run pytest tests/domain/test_proporcional.py -q` → `ModuleNotFoundError`.
+- [x] **Step 2:** `uv run pytest tests/domain/test_proporcional.py -q` → `ModuleNotFoundError`.
 
-- [ ] **Step 3: Criar `src/eleicoes/domain/proporcional.py`:**
+- [x] **Step 3: Criar `src/eleicoes/domain/proporcional.py`:**
 
 ```python
 """Proportional seats: Código Eleitoral arts. 106-109 after ADIs 7228, 7263 and 7325.
@@ -1018,7 +1018,7 @@ def _require_count(value: int, field: str) -> None:
         raise InvalidSeatRuleError(field)
 ```
 
-- [ ] **Step 4:** `uv run pytest tests/domain/test_proporcional.py -q` → `19 passed`. Depois `uv run mypy` → `Success`.
+- [x] **Step 4:** `uv run pytest tests/domain/test_proporcional.py -q` → `19 passed`. Depois `uv run mypy` → `Success`.
 
 **If Task Fails:**
 - Falha em `test_average_divisor...`: o divisor está usando as vagas preenchidas em vez do QP (D10).
@@ -1037,7 +1037,7 @@ def _require_count(value: int, field: str) -> None:
 **Interfaces:**
 - Produces: `VotoCandidato(numero, partido, votos)`, `ResultadoSenado(uf, votos_validos, eleitos, empate)`, `ResultadoGoverno(uf, votos_validos, situacao, candidatos, empate)` com `.eleito` e `.finalistas`, `eleger_senado(uf, votos, vagas=2)`, `apurar_governo(uf, votos)`, `SITUACAO_*`, `VAGAS_SENADO_2026`.
 
-- [ ] **Step 1: Teste** `tests/domain/test_majoritario.py`:
+- [x] **Step 1: Teste** `tests/domain/test_majoritario.py`:
 
 ```python
 """Senate and governor from first-round votes."""
@@ -1097,9 +1097,9 @@ def test_repeated_number_is_rejected() -> None:
         VotoCandidato(222, 22, -1)
 ```
 
-- [ ] **Step 2:** `uv run pytest tests/domain/test_majoritario.py -q` → `ModuleNotFoundError`.
+- [x] **Step 2:** `uv run pytest tests/domain/test_majoritario.py -q` → `ModuleNotFoundError`.
 
-- [ ] **Step 3: Criar `src/eleicoes/domain/majoritario.py`:**
+- [x] **Step 3: Criar `src/eleicoes/domain/majoritario.py`:**
 
 ```python
 """Senate and governor races from first-round nominal votes.
@@ -1206,7 +1206,7 @@ def _tie_at(ordered: tuple[VotoCandidato, ...], cut: int) -> bool:
     return ordered[cut - 1].votos == ordered[cut].votos
 ```
 
-- [ ] **Step 4:** `uv run pytest tests/domain/test_majoritario.py -q` → `5 passed`.
+- [x] **Step 4:** `uv run pytest tests/domain/test_majoritario.py -q` → `5 passed`.
 
 **If Task Fails:** com exatamente 50%, o governador **não** se elege (`2·50 > 100` é falso). O teste `metade` cobre esse caso.
 
@@ -1226,7 +1226,7 @@ def _tie_at(ordered: tuple[VotoCandidato, ...], cut: int) -> bool:
 
 O fixture do primeiro teste também mostra um efeito real. No AC (8 vagas, QE 100), a Fe Brasil soma 410 votos e tem QP 4, mas só 2 candidatos. A União Progressista leva uma vaga por média (100/2 = 50). Duas vagas ficam sem candidato.
 
-- [ ] **Step 1: Teste** `tests/domain/test_simulacao_cadeiras.py`:
+- [x] **Step 1: Teste** `tests/domain/test_simulacao_cadeiras.py`:
 
 ```python
 """Whole simulation from stored votes. Two small UFs keep the numbers readable."""
@@ -1321,9 +1321,9 @@ def test_stored_vote_rejects_bad_rows(tipo: str, numero: int, votos: int) -> Non
         VotoApurado("deputadoFederal", "AC", tipo, numero, votos)
 ```
 
-- [ ] **Step 2:** `uv run pytest tests/domain/test_simulacao_cadeiras.py -q` → `ModuleNotFoundError`.
+- [x] **Step 2:** `uv run pytest tests/domain/test_simulacao_cadeiras.py -q` → `ModuleNotFoundError`.
 
-- [ ] **Step 3: Criar `src/eleicoes/domain/simulacao_cadeiras.py`:**
+- [x] **Step 3: Criar `src/eleicoes/domain/simulacao_cadeiras.py`:**
 
 ```python
 """Seat estimate from stored first-round votes per candidate number. Pure; no IO.
@@ -1639,7 +1639,7 @@ NOTAS: Final[tuple[str, ...]] = (
 )
 ```
 
-- [ ] **Step 4: Verificar o bloco do domínio**
+- [x] **Step 4: Verificar o bloco do domínio**
 
 Run: `uv run pytest tests/domain -q && uv run ruff format src/eleicoes/domain/{cadeiras,federacoes,proporcional,majoritario,simulacao_cadeiras}.py tests/domain/test_{cadeiras,federacoes,proporcional,majoritario,simulacao_cadeiras}.py && uv run ruff check . && uv run mypy`
 Expected: todos os testes de `tests/domain` passam; `ruff format` diz `10 files left unchanged`; `All checks passed!`; `Success: no issues found`.
@@ -1664,7 +1664,7 @@ Expected: todos os testes de `tests/domain` passam; `ruff format` diz `10 files 
 
 **Prerequisites:** Task 5. `migrate.py` **não** muda: `BASELINE_TABLES` descreve só a base 0001.
 
-- [ ] **Step 1: Ajustar o teste de migração** (diff exato):
+- [x] **Step 1: Ajustar o teste de migração** (diff exato):
 
 ```diff
 --- a/tests/adapters/test_orm_migrate.py
@@ -1705,9 +1705,9 @@ Expected: todos os testes de `tests/domain` passam; `ruff format` diz `10 files 
 +    assert "relatorio_poder" not in sql
 ```
 
-- [ ] **Step 2:** `uv run pytest tests/adapters/test_orm_migrate.py -q` → 3 falhas: `head_revision() == "0003"` e as duas de `0004` (o `alembic` não acha a revisão `0004`).
+- [x] **Step 2:** `uv run pytest tests/adapters/test_orm_migrate.py -q` → 3 falhas: `head_revision() == "0003"` e as duas de `0004` (o `alembic` não acha a revisão `0004`).
 
-- [ ] **Step 3: Criar a migração:**
+- [x] **Step 3: Criar a migração:**
 
 ```python
 """Votes per candidate number for the seat estimate: analise.relatorio_cadeiras(_voto).
@@ -1762,7 +1762,7 @@ def downgrade() -> None:
     op.execute("DROP TABLE IF EXISTS analise.relatorio_cadeiras")
 ```
 
-- [ ] **Step 4: Acrescentar os modelos** (diff exato; os imports `DateTime`, `ForeignKeyConstraint`, `Integer` e `Text` já existem):
+- [x] **Step 4: Acrescentar os modelos** (diff exato; os imports `DateTime`, `ForeignKeyConstraint`, `Integer` e `Text` já existem):
 
 ```diff
 --- a/src/eleicoes/adapters/orm/models.py
@@ -1806,8 +1806,8 @@ def downgrade() -> None:
 +    votos: Mapped[int] = mapped_column(Integer, nullable=False)
 ```
 
-- [ ] **Step 5:** `uv run pytest tests/adapters/test_orm_migrate.py -q` → todos passam. Inclui `test_autogenerate_ignores_unmapped_tables_and_columns`, que confirma que modelo e migração batem.
-- [ ] **Step 6:** `uv run alembic upgrade 0003:0004 --sql | grep -c "CREATE TABLE"` → `2`. Só gera SQL; não toca no banco.
+- [x] **Step 5:** `uv run pytest tests/adapters/test_orm_migrate.py -q` → todos passam. Inclui `test_autogenerate_ignores_unmapped_tables_and_columns`, que confirma que modelo e migração batem.
+- [x] **Step 6:** `uv run alembic upgrade 0003:0004 --sql | grep -c "CREATE TABLE"` → `2`. Só gera SQL; não toca no banco.
 
 **If Task Fails:** se o autogenerate acusar diferença, compare os nomes de coluna do modelo com o DDL. Os `CHECK` existem só no DDL e o autogenerate os ignora.
 
@@ -1826,7 +1826,7 @@ def downgrade() -> None:
 **Interfaces:**
 - Produces: `StoredSeatVotes(cargo, votos, gerado_em)`, `CandidateVoteSource`, `SeatVoteStore` (`load`, `generated_at`, `save`, `close`), `AsyncSeatVoteStore` (`load`), `PostgresSeatVoteStore(sessions, schema=None)`, `read_seat_votes`, `write_seat_votes`, `seat_header`, `AsyncPostgresSeatVoteStore(session)`.
 
-- [ ] **Step 1: Teste:**
+- [x] **Step 1: Teste:**
 
 ```python
 """Seat votes through the ORM: SQLite for the round trip, a scripted session for Postgres."""
@@ -1921,9 +1921,9 @@ def test_async_store_reads_what_the_sync_store_wrote() -> None:
     assert loaded[0].gerado_em <= datetime.now(UTC)
 ```
 
-- [ ] **Step 2:** `uv run pytest tests/adapters/test_postgres_relatorio_cadeiras.py -q` → `ModuleNotFoundError`.
+- [x] **Step 2:** `uv run pytest tests/adapters/test_postgres_relatorio_cadeiras.py -q` → `ModuleNotFoundError`.
 
-- [ ] **Step 3: Porta** `src/eleicoes/ports/relatorio_cadeiras.py`:
+- [x] **Step 3: Porta** `src/eleicoes/ports/relatorio_cadeiras.py`:
 
 ```python
 """Ports for the stored votes per candidate number behind the seat estimate."""
@@ -1971,7 +1971,7 @@ class AsyncSeatVoteStore(Protocol):
     async def load(self, ano: int, turno: int) -> tuple[StoredSeatVotes, ...]: ...
 ```
 
-- [ ] **Step 4: Store síncrono** `src/eleicoes/adapters/postgres_relatorio_cadeiras.py`:
+- [x] **Step 4: Store síncrono** `src/eleicoes/adapters/postgres_relatorio_cadeiras.py`:
 
 ```python
 """Stores the votes per candidate number behind the seat estimate. Seats are not stored."""
@@ -2182,7 +2182,7 @@ def _vote(line: SeatReportVote) -> VotoApurado:
     return VotoApurado(cargo, uf, tipo, numero, votos)
 ```
 
-- [ ] **Step 5: Store assíncrono** `src/eleicoes/adapters/postgres_relatorio_cadeiras_async.py`:
+- [x] **Step 5: Store assíncrono** `src/eleicoes/adapters/postgres_relatorio_cadeiras_async.py`:
 
 ```python
 """Async read of the stored seat votes. Same ORM statements as the sync store, no DDL."""
@@ -2216,7 +2216,7 @@ class AsyncPostgresSeatVoteStore:
             raise ElectionError(_FAILED) from exc
 ```
 
-- [ ] **Step 6:** `uv run pytest tests/adapters/test_postgres_relatorio_cadeiras.py -q` → `7 passed`; `uv run mypy` → `Success`.
+- [x] **Step 6:** `uv run pytest tests/adapters/test_postgres_relatorio_cadeiras.py -q` → `7 passed`; `uv run mypy` → `Success`.
 
 **If Task Fails:** o SQLite não tem `timestamptz`, e `require_clock` põe UTC. Se `gerado_em.tzinfo` vier `None`, a leitura não passou por `require_clock`.
 
@@ -2230,7 +2230,7 @@ class AsyncPostgresSeatVoteStore:
 
 **Prerequisites:** Task 8. A porta `CandidateVoteSource` fica separada de `BoletimReader` para não obrigar os fakes existentes a ganhar um método.
 
-- [ ] **Step 1: Teste:**
+- [x] **Step 1: Teste:**
 
 ```python
 """Candidate vote scan against a fake cursor. No database."""
@@ -2319,9 +2319,9 @@ def test_blank_cargo_is_refused_before_the_query() -> None:
     assert connection.statements == []
 ```
 
-- [ ] **Step 2:** falha com `ModuleNotFoundError`.
+- [x] **Step 2:** falha com `ModuleNotFoundError`.
 
-- [ ] **Step 3: Criar o adaptador:**
+- [x] **Step 3: Criar o adaptador:**
 
 ```python
 """Sums raw.boletim per UF and candidate number, one sequential scan per cargo."""
@@ -2389,7 +2389,7 @@ def _integer(value: object) -> int:
     return value
 ```
 
-- [ ] **Step 4:** `uv run pytest tests/adapters/test_postgres_votos_candidato.py -q` → `5 passed`.
+- [x] **Step 4:** `uv run pytest tests/adapters/test_postgres_votos_candidato.py -q` → `5 passed`.
 
 ---
 
@@ -2406,7 +2406,7 @@ def _integer(value: object) -> int:
 **Interfaces:**
 - Produces: `RecordSeatVotes(source, store, announce=None).execute(ano, turno, cargos=CARGOS_GRAVADOS, *, atualizar=False) -> tuple[RecordedCargo, ...]`, `summary(simulacao)`, `main(argv=None, *, source=None, store=None) -> int`, `build_candidate_votes(env=None)`, `build_seat_vote_store(env=None)`.
 
-- [ ] **Step 1: Testes:**
+- [x] **Step 1: Testes:**
 
 ```python
 """Recording the seat votes: one scan per cargo, reuse unless --atualizar."""
@@ -2549,9 +2549,9 @@ def test_builders_read_the_process_environment(monkeypatch: pytest.MonkeyPatch) 
     assert build_candidate_votes() is not None
 ```
 
-- [ ] **Step 2:** os dois falham com `ModuleNotFoundError`.
+- [x] **Step 2:** os dois falham com `ModuleNotFoundError`.
 
-- [ ] **Step 3: Caso de uso** `src/eleicoes/use_cases/gravar_cadeiras.py`:
+- [x] **Step 3: Caso de uso** `src/eleicoes/use_cases/gravar_cadeiras.py`:
 
 ```python
 """Sum the votes per candidate number once per cargo and store them for the seat estimate.
@@ -2743,7 +2743,7 @@ def _production_store() -> SeatVoteStore:
     return build_seat_vote_store()
 ```
 
-- [ ] **Step 4: Wiring** `src/eleicoes/composition/cadeiras.py`:
+- [x] **Step 4: Wiring** `src/eleicoes/composition/cadeiras.py`:
 
 ```python
 """Wires the candidate-vote scan and the stored seat votes."""
@@ -2777,7 +2777,7 @@ def _settings(env: Mapping[str, str] | None) -> Mapping[str, str]:
     return os.environ
 ```
 
-- [ ] **Step 5: Script** `scripts/relatorio_cadeiras.py`:
+- [x] **Step 5: Script** `scripts/relatorio_cadeiras.py`:
 
 ```python
 """Grava os votos por candidato que a simulação de cadeiras usa.
@@ -2808,7 +2808,7 @@ if __name__ == "__main__":
     raise SystemExit(main())
 ```
 
-- [ ] **Step 6:** `uv run pytest tests/use_cases/test_gravar_cadeiras.py tests/composition/test_cadeiras_wiring.py -q` → `7 passed`. Depois `uv run python scripts/relatorio_cadeiras.py --help` → mostra `--ano`, `--turno`, `--cargo {governador,senador,deputadoFederal,deputadoEstadual,deputadoDistrital}` e `--atualizar`, sem tocar no banco.
+- [x] **Step 6:** `uv run pytest tests/use_cases/test_gravar_cadeiras.py tests/composition/test_cadeiras_wiring.py -q` → `7 passed`. Depois `uv run python scripts/relatorio_cadeiras.py --help` → mostra `--ano`, `--turno`, `--cargo {governador,senador,deputadoFederal,deputadoEstadual,deputadoDistrital}` e `--atualizar`, sem tocar no banco.
 
 ---
 
@@ -2834,7 +2834,7 @@ if __name__ == "__main__":
 **Interfaces:**
 - Produces: `SimulacaoGravada(simulacao, gerado_em)`, `stored_simulation(store, ano, turno, registro=None)`, `CadeirasJson.from_domain(gravada)`, `get_seat_store`, `ReadPorts.seat_store` (default `None`) e a rota `GET /relatorios/dados/cadeiras`.
 
-- [ ] **Step 1: Testes:**
+- [x] **Step 1: Testes:**
 
 ```python
 """The API use case: stored votes in, simulation out, 409 when a cargo is missing."""
@@ -3014,9 +3014,9 @@ def test_ports_without_a_seat_store_hide_the_internal_error() -> None:
      assert paths["/votos/cargos"]["get"]["summary"] == "Totais do cargo"
 ```
 
-- [ ] **Step 2:** os testes novos falham com `ModuleNotFoundError`; `test_health_and_openapi_advertise_the_read_routes` falha porque a rota não existe.
+- [x] **Step 2:** os testes novos falham com `ModuleNotFoundError`; `test_health_and_openapi_advertise_the_read_routes` falha porque a rota não existe.
 
-- [ ] **Step 3: Caso de uso** `src/eleicoes/use_cases/simular_cadeiras.py`:
+- [x] **Step 3: Caso de uso** `src/eleicoes/use_cases/simular_cadeiras.py`:
 
 ```python
 """Seat estimate for the API: stored votes in, pure simulation out. Never scans boletins."""
@@ -3057,7 +3057,7 @@ async def stored_simulation(
     return SimulacaoGravada(simular_cadeiras(year, turn, votos, rules), oldest)
 ```
 
-- [ ] **Step 4: Esquemas** `src/eleicoes/adapters/http/schemas_cadeiras.py`:
+- [x] **Step 4: Esquemas** `src/eleicoes/adapters/http/schemas_cadeiras.py`:
 
 ```python
 """JSON of the seat estimate. The scoreboard (placar) reads `partidos`."""
@@ -3397,7 +3397,7 @@ def _parties(counts: dict[int, int]) -> list[PartidoCadeirasJson]:
     return [PartidoCadeirasJson(partido=partido, cadeiras=valor) for partido, valor in ordered]
 ```
 
-- [ ] **Step 5: Encaixe HTTP** (diffs exatos):
+- [x] **Step 5: Encaixe HTTP** (diffs exatos):
 
 ```diff
 --- a/src/eleicoes/adapters/http/bundle.py
@@ -3543,7 +3543,7 @@ def _parties(counts: dict[int, int]) -> list[PartidoCadeirasJson]:
      summary="Relatório de poder em HTML",
 ```
 
-- [ ] **Step 6: Suíte inteira**
+- [x] **Step 6: Suíte inteira**
 
 Run: `uv run ruff format src/eleicoes/adapters/orm/migrations/versions/r0004_relatorio_cadeiras.py src/eleicoes/ports/relatorio_cadeiras.py src/eleicoes/adapters/postgres_relatorio_cadeiras.py src/eleicoes/adapters/postgres_relatorio_cadeiras_async.py src/eleicoes/adapters/postgres_votos_candidato.py src/eleicoes/use_cases/gravar_cadeiras.py src/eleicoes/use_cases/simular_cadeiras.py src/eleicoes/composition/cadeiras.py src/eleicoes/adapters/http/schemas_cadeiras.py scripts/relatorio_cadeiras.py tests/adapters/test_postgres_relatorio_cadeiras.py tests/adapters/test_postgres_votos_candidato.py tests/adapters/test_read_api_cadeiras.py tests/use_cases/test_gravar_cadeiras.py tests/use_cases/test_simular_cadeiras.py tests/composition/test_cadeiras_wiring.py && uv run pytest -q && uv run ruff check . && uv run mypy`
 Expected: N + 78 passed (N anotado no início; 956 se nenhum outro plano rodou antes), sem falhas, `Required test coverage of 85% reached`, `All checks passed!`, `Success: no issues found`.
@@ -3572,7 +3572,7 @@ Expected: N + 78 passed (N anotado no início; 956 se nenhum outro plano rodou a
   - A forma da porta foi conferida campo a campo com a "Fase B" do plano 1 em 2026-10-22 e é idêntica. Lá, o exemplo de `sigla` passou a ser `"fe-brasil"`.
   - `totais.camara` e `totais.assembleias` são as vagas simuladas; `totais.senado`, os eleitos; `totais.governadores`, as UFs com resultado.
 
-- [ ] **Step 1: Teste:**
+- [x] **Step 1: Teste:**
 
 ```python
 """The scoreboard port: rows per party and federation, per UF and for Brazil."""
@@ -3640,9 +3640,9 @@ def test_year_without_registry_is_none_for_the_scoreboard() -> None:
     assert asyncio.run(StoredSeatEstimates(_Store(CARGOS_GRAVADOS)).load(2022, 1)) is None
 ```
 
-- [ ] **Step 2:** `uv run pytest tests/use_cases/test_estimativa_cadeiras.py -q` → `ModuleNotFoundError`.
+- [x] **Step 2:** `uv run pytest tests/use_cases/test_estimativa_cadeiras.py -q` → `ModuleNotFoundError`.
 
-- [ ] **Step 3: Porta** `src/eleicoes/ports/cadeiras.py`:
+- [x] **Step 3: Porta** `src/eleicoes/ports/cadeiras.py`:
 
 ```python
 """Port the força partidária scoreboard (plano 1) reads. Plano 2 implements it.
@@ -3695,7 +3695,7 @@ class AsyncEstimativaCadeiras(Protocol):
     async def load(self, ano: int, turno: int) -> EstimativaCadeiras | None: ...
 ```
 
-- [ ] **Step 4: Adaptador** `src/eleicoes/use_cases/estimativa_cadeiras.py`:
+- [x] **Step 4: Adaptador** `src/eleicoes/use_cases/estimativa_cadeiras.py`:
 
 ```python
 """Adapts the seat simulation to the scoreboard port: one row per (chave, uf), plus BR.
@@ -3822,7 +3822,7 @@ def _linha(
     )
 ```
 
-- [ ] **Step 5:** `uv run ruff format src/eleicoes/ports/cadeiras.py src/eleicoes/use_cases/estimativa_cadeiras.py tests/use_cases/test_estimativa_cadeiras.py && uv run pytest -q && uv run ruff check . && uv run mypy` → N + 81 passed, sem falhas; limpo. São 81 porque o teste `test_year_without_registry_is_none_for_the_scoreboard` foi acrescentado depois do protótipo (alinhado em 2026-10-22).
+- [x] **Step 5:** `uv run ruff format src/eleicoes/ports/cadeiras.py src/eleicoes/use_cases/estimativa_cadeiras.py tests/use_cases/test_estimativa_cadeiras.py && uv run pytest -q && uv run ruff check . && uv run mypy` → N + 81 passed, sem falhas; limpo. São 81 porque o teste `test_year_without_registry_is_none_for_the_scoreboard` foi acrescentado depois do protótipo (alinhado em 2026-10-22).
 
 **If Task Fails:** se o plano 1 já tiver criado `ports/cadeiras.py`, não sobrescreva. Compare com o Step 3. Se a forma for igual, só crie o adaptador. Se divergir, pare e avise.
 
@@ -3880,7 +3880,7 @@ Governadores eleitos no 1º turno: N de 27 UFs.
 - Modify: `frontend/src/lib/relatorios.ts`. Os tipos entram logo antes de `const ROTULOS_CLASSE` (linha 134 hoje); `lerCadeiras` e as funções auxiliares entram logo antes de `function lerComposicao(` (linha 226 hoje). Os helpers `exigir*` já existem no arquivo.
 - Modify: `frontend/src/lib/buscar-relatorios.ts`
 
-- [ ] **Step 1: Tipos** (inserir antes de `const ROTULOS_CLASSE`):
+- [x] **Step 1: Tipos** (inserir antes de `const ROTULOS_CLASSE`):
 
 ```ts
 export type LegendaCadeiras = {
@@ -3997,7 +3997,7 @@ export type SimulacaoCadeiras = {
 };
 ```
 
-- [ ] **Step 2: Leitura** (inserir antes de `function lerComposicao(`):
+- [x] **Step 2: Leitura** (inserir antes de `function lerComposicao(`):
 
 ```ts
 export function lerCadeiras(valor: unknown): SimulacaoCadeiras {
@@ -4160,7 +4160,7 @@ function lerForcaPartido(valor: unknown): ForcaPartido {
 }
 ```
 
-- [ ] **Step 3: Busca** (diff exato):
+- [x] **Step 3: Busca** (diff exato):
 
 ```diff
 --- a/frontend/src/lib/buscar-relatorios.ts
@@ -4197,7 +4197,7 @@ function lerForcaPartido(valor: unknown): ForcaPartido {
    params: URLSearchParams,
 ```
 
-- [ ] **Step 4:** `cd frontend && pnpm exec tsc --noEmit && pnpm exec eslint src/lib/relatorios.ts src/lib/buscar-relatorios.ts` → sem saída.
+- [x] **Step 4:** `cd frontend && pnpm exec tsc --noEmit && pnpm exec eslint src/lib/relatorios.ts src/lib/buscar-relatorios.ts` → sem saída.
 
 ---
 
@@ -4213,7 +4213,7 @@ function lerForcaPartido(valor: unknown): ForcaPartido {
 - Consumes: `MEDIDAS_PADRAO`, `ItemBarra`, `MedidasBarras` de `./grafico-poder.ts`; `larguraTexto`; `rotuloPartido`; `formatarInteiro`.
 - Produces: `MEDIDAS_CADEIRAS`, `rotuloFase`, `rotuloSituacao`, `rotuloLegenda`, `rotuloCabe`, `cadeiras`, `itensCasa`, `itensSenado`, `frasesCadeiras`.
 
-- [ ] **Step 1: Script de verificação:**
+- [x] **Step 1: Script de verificação:**
 
 ```ts
 import assert from "node:assert/strict";
@@ -4305,9 +4305,9 @@ assert.deepEqual(frasesCadeiras(simulacao), [
 console.log("ok");
 ```
 
-- [ ] **Step 2:** `cd frontend && node --experimental-strip-types src/lib/verificar-grafico-cadeiras.ts` → `ERR_MODULE_NOT_FOUND` para `grafico-cadeiras.ts`.
+- [x] **Step 2:** `cd frontend && node --experimental-strip-types src/lib/verificar-grafico-cadeiras.ts` → `ERR_MODULE_NOT_FOUND` para `grafico-cadeiras.ts`.
 
-- [ ] **Step 3: Módulo:**
+- [x] **Step 3: Módulo:**
 
 ```ts
 import { formatarInteiro } from "./fracao.ts";
@@ -4458,7 +4458,7 @@ function juntar(itens: readonly string[]): string {
 }
 ```
 
-- [ ] **Step 4:** `node --experimental-strip-types src/lib/verificar-grafico-cadeiras.ts && node --experimental-strip-types src/lib/verificar-grafico-poder.ts && pnpm exec tsc --noEmit && pnpm exec eslint src/lib/grafico-cadeiras.ts src/lib/verificar-grafico-cadeiras.ts` → `ok`, `ok`, sem saída.
+- [x] **Step 4:** `node --experimental-strip-types src/lib/verificar-grafico-cadeiras.ts && node --experimental-strip-types src/lib/verificar-grafico-poder.ts && pnpm exec tsc --noEmit && pnpm exec eslint src/lib/grafico-cadeiras.ts src/lib/verificar-grafico-cadeiras.ts` → `ok`, `ok`, sem saída.
 
 ---
 
@@ -4475,7 +4475,7 @@ function juntar(itens: readonly string[]): string {
 
 **Posição na navegação (alinhado em 2026-10-22):** "Cadeiras" é a 2ª entrada do bloco dos seis planos, entre "Classe do governador" e "Mapa". Se "Força partidária" (plano 1) já existir, fica depois dela. Os diffs abaixo assumem que este plano é o primeiro a integrar (ordem 2 → 6 → 1).
 
-- [ ] **Step 1: `GraficoPoder` com margem opcional, sidebar e breadcrumb** (diffs exatos):
+- [x] **Step 1: `GraficoPoder` com margem opcional, sidebar e breadcrumb** (diffs exatos):
 
 ```diff
 --- a/frontend/src/components/relatorios/grafico-poder.tsx
@@ -4531,7 +4531,7 @@ function juntar(itens: readonly string[]): string {
  
 ```
 
-- [ ] **Step 2: Explicação** `explicacao-cadeiras.tsx`:
+- [x] **Step 2: Explicação** `explicacao-cadeiras.tsx`:
 
 ```tsx
 export function ExplicacaoCadeiras() {
@@ -4579,7 +4579,7 @@ export function ExplicacaoCadeiras() {
 }
 ```
 
-- [ ] **Step 3: Tabelas** `tabela-cadeiras.tsx`:
+- [x] **Step 3: Tabelas** `tabela-cadeiras.tsx`:
 
 ```tsx
 import {
@@ -4795,7 +4795,7 @@ export function TabelaGoverno({ governo }: { governo: GovernoCadeiras }) {
 }
 ```
 
-- [ ] **Step 4: Dados** `dados-cadeiras.tsx`:
+- [x] **Step 4: Dados** `dados-cadeiras.tsx`:
 
 ```tsx
 import { ErroRelatorio } from "@/components/relatorios/erro-relatorio";
@@ -4910,7 +4910,7 @@ export async function DadosCadeiras({ ano, turno }: DadosCadeirasProps) {
 }
 ```
 
-- [ ] **Step 5: Página** `frontend/src/app/relatorios/cadeiras/page.tsx`:
+- [x] **Step 5: Página** `frontend/src/app/relatorios/cadeiras/page.tsx`:
 
 ```tsx
 import type { Metadata } from "next";
@@ -4975,7 +4975,7 @@ async function DadosComConsulta({
 }
 ```
 
-- [ ] **Step 6:** `cd frontend && pnpm exec tsc --noEmit && pnpm lint && node --experimental-strip-types src/lib/verificar-grafico-cadeiras.ts` → limpo e `ok`.
+- [x] **Step 6:** `cd frontend && pnpm exec tsc --noEmit && pnpm lint && node --experimental-strip-types src/lib/verificar-grafico-cadeiras.ts` → limpo e `ok`.
 
 ---
 
