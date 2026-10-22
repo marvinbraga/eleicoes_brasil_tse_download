@@ -29,6 +29,7 @@ const TRILHAS: Record<string, Trilha> = {
     pagina: "Classe do governador",
     relatorios: true,
   },
+  "/relatorios/forca": { pagina: "Força partidária", relatorios: true },
   "/relatorios/cadeiras": { pagina: "Simulação de cadeiras", relatorios: true },
   "/relatorios/municipais-2024": { pagina: "Municipais 2024", relatorios: true },
   "/mapa": { pagina: "Mapa", relatorios: false },

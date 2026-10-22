@@ -1,4 +1,5 @@
 import { urlApi } from "@/lib/eleicoes";
+import { lerPlacarForca, RespostaForcaInvalidaError, type PlacarForca } from "@/lib/forca";
 import { lerMunicipais2024, type RelatorioMunicipais } from "@/lib/municipais-2024";
 import {
   lerCadeiras,
@@ -68,6 +69,15 @@ export function buscarClasseGovernador(
 ): Promise<Resultado<RelatorioClasseGovernador>> {
   const params = new URLSearchParams({ ano, turno });
   return buscar("/relatorios/dados/classe-governador", params, lerClasseGovernador);
+}
+
+export function buscarForca(
+  ano: string,
+  turno: string,
+  cargo: string,
+): Promise<Resultado<PlacarForca>> {
+  const params = new URLSearchParams({ ano, turno, cargo_referencia: cargo });
+  return buscar("/relatorios/dados/forca", params, lerPlacarForca);
 }
 
 export function buscarCadeiras(
@@ -181,7 +191,7 @@ function consultaInterrompida(erro: unknown): boolean {
 }
 
 function mensagemDeErro(erro: unknown): string {
-  if (erro instanceof RespostaInvalidaError) {
+  if (erro instanceof RespostaInvalidaError || erro instanceof RespostaForcaInvalidaError) {
     return erro.message;
   }
   if (erro instanceof Error && erro.message.trim().length > 0) {

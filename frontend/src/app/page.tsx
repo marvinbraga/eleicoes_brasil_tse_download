@@ -29,6 +29,11 @@ const DESTINOS = [
     descricao: "A classe do governador lida pela mistura de presidente.",
   },
   {
+    href: "/relatorios/forca",
+    titulo: "Força partidária",
+    descricao: "Placar por partido em três esferas, a partir dos relatórios de poder gravados.",
+  },
+  {
     href: "/relatorios/cadeiras",
     titulo: "Simulação de cadeiras",
     descricao:
