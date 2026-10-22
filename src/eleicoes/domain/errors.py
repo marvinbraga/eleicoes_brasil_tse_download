@@ -258,3 +258,33 @@ class SchemaOutdatedError(ElectionError):
         self.expected = expected
         found = ", ".join(current) or "none"
         super().__init__(f"database schema revision {found} is not {expected}")
+
+
+class InvalidSeatRuleError(ElectionError):
+    def __init__(self, field: str) -> None:
+        self.field = field
+        super().__init__(f"invalid seat simulation input: {field}")
+
+
+class UnknownPartyRegistryError(ElectionError):
+    def __init__(self, ano: int) -> None:
+        self.ano = ano
+        super().__init__(f"Não há partidos e federações cadastrados para {ano}.")
+
+
+class UnsupportedSeatTurnError(ElectionError):
+    def __init__(self, turno: int) -> None:
+        self.turno = turno
+        super().__init__(
+            f"A simulação de cadeiras usa só os votos do 1º turno; o turno {turno} não se aplica."
+        )
+
+
+class MissingSeatReportError(ElectionError):
+    def __init__(self, cargos: tuple[str, ...]) -> None:
+        self.cargos = cargos
+        listed = ", ".join(cargos)
+        super().__init__(
+            f"Os votos por candidato de {listed} ainda não foram gravados. "
+            "Gere com: uv run python scripts/relatorio_cadeiras.py"
+        )
