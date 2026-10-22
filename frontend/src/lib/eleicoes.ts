@@ -150,7 +150,7 @@ export function ufDeConsulta(uf: UfFiltro): Uf {
 }
 
 export function lerCargoPoder(valor: ValorConsulta): CargoPoder {
-  return escolher(valor, VALORES_CARGO_PODER, "deputadoFederal");
+  return escolher(valor, VALORES_CARGO_PODER, "presidente");
 }
 
 export function lerCargoPerfil(valor: ValorConsulta): CargoPerfil {

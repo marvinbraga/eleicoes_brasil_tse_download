@@ -48,9 +48,8 @@ export function GraficoAcertoUf({ porUf, acerto, base, baseLider }: EntradaGrafi
                 height={ALTURA_LINHA}
                 fill="transparent"
                 className="hover:fill-muted/60"
-                data-dica-uf={ponto.uf}
-                data-dica-acerto={ponto.acertoTexto}
-                data-dica-municipios={formatarInteiro(ponto.municipios)}
+                data-dica-titulo={ponto.uf}
+                data-dica-linhas={`${ponto.acertoTexto}\n${formatarInteiro(ponto.municipios)} ${ponto.municipios === 1 ? "município" : "municípios"}`}
               />
             ))}
             <g pointerEvents="none">
@@ -131,7 +130,7 @@ export function GraficoAcertoUf({ porUf, acerto, base, baseLider }: EntradaGrafi
       <figcaption className="text-sm text-muted-foreground">
         <p>
           Cada ponto é uma UF, do maior acerto para o menor. O tamanho acompanha o número de
-          municípios. As linhas marcam o acerto geral e as duas linhas de base.
+          municípios. As linhas marcam o acerto geral e os dois chutes simples do resumo.
         </p>
         <p className="mt-2 inline-flex flex-wrap items-center gap-x-4 gap-y-1">
           <TamanhoLegenda raio={RAIO_MIN} municipios={layout.menorMunicipios} />

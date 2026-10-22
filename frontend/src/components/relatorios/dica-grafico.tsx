@@ -3,9 +3,8 @@
 import { useState, type PointerEvent, type ReactNode } from "react";
 
 type Dica = {
-  uf: string;
-  acerto: string;
-  municipios: string;
+  titulo: string;
+  linhas: string[];
   x: number;
   y: number;
   aEsquerda: boolean;
@@ -15,7 +14,7 @@ export function DicaGrafico({ children }: { children: ReactNode }) {
   const [dica, setDica] = useState<Dica | null>(null);
 
   function mostrar(evento: PointerEvent<HTMLDivElement>) {
-    const alvo = evento.target instanceof Element ? evento.target.closest("[data-dica-uf]") : null;
+    const alvo = evento.target instanceof Element ? evento.target.closest("[data-dica-titulo]") : null;
     if (alvo === null) {
       setDica(null);
       return;
@@ -23,9 +22,8 @@ export function DicaGrafico({ children }: { children: ReactNode }) {
     const caixa = evento.currentTarget.getBoundingClientRect();
     const x = evento.clientX - caixa.left;
     setDica({
-      uf: alvo.getAttribute("data-dica-uf") ?? "",
-      acerto: alvo.getAttribute("data-dica-acerto") ?? "",
-      municipios: alvo.getAttribute("data-dica-municipios") ?? "",
+      titulo: alvo.getAttribute("data-dica-titulo") ?? "",
+      linhas: (alvo.getAttribute("data-dica-linhas") ?? "").split("\n").filter(Boolean),
       x,
       y: evento.clientY - caixa.top,
       aEsquerda: x > caixa.width / 2,
@@ -48,11 +46,12 @@ export function DicaGrafico({ children }: { children: ReactNode }) {
             ...(dica.aEsquerda ? { right: `calc(100% - ${dica.x - 12}px)` } : { left: dica.x + 12 }),
           }}
         >
-          <div className="font-semibold">{dica.uf}</div>
-          <div className="tabular-nums">{dica.acerto}</div>
-          <div className="tabular-nums">
-            {dica.municipios} {dica.municipios === "1" ? "município" : "municípios"}
-          </div>
+          <div className="font-semibold">{dica.titulo}</div>
+          {dica.linhas.map((linha) => (
+            <div key={linha} className="tabular-nums">
+              {linha}
+            </div>
+          ))}
         </div>
       ) : null}
     </div>
