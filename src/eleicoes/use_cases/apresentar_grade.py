@@ -15,7 +15,9 @@ from eleicoes.domain.errors import ElectionError
 from eleicoes.domain.grade import GradeDePoder
 from eleicoes.domain.report import EXIT_FAILURE, EXIT_SUCCESS
 from eleicoes.ports.relatorio_poder import RelatorioPoderStore
+from eleicoes.use_cases.failure import failure_line
 
+_FAILURE: Final = "Não foi possível apresentar os relatórios."
 _LEVELS: Final[tuple[str, ...]] = ("municipio", "uf", "regiao", "pais")
 _LABELS: Final[dict[str, str]] = {
     "municipio": "Por município",
@@ -99,8 +101,8 @@ def main(
     destino = _destino(args.ano, args.turno, args.uf, args.cargo, args.destino)
     try:
         text = _present(args, destino, presenter, store)
-    except ElectionError:
-        print("Não foi possível apresentar os relatórios.", file=sys.stderr)
+    except ElectionError as exc:
+        print(failure_line(_FAILURE, exc), file=sys.stderr)
         return EXIT_FAILURE
     print(text)
     return EXIT_SUCCESS

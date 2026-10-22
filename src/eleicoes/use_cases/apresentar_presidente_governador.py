@@ -8,6 +8,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Final
 
 from dotenv import load_dotenv
 
@@ -22,11 +23,14 @@ from eleicoes.ports.relatorio_presidente_governador import (
     RelatorioPresidenteGovernadorStore,
     StoredCrossReport,
 )
+from eleicoes.use_cases.failure import failure_line
 from eleicoes.use_cases.presidente_governador import collect_places
 
 Collect = Callable[[int, int], tuple[MunicipalPlace, ...]]
 Render = Callable[[CrossReportView], str]
 OpenReport = Callable[[Path], bool]
+
+_FAILURE: Final = "Não foi possível apresentar os relatórios."
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,8 +109,8 @@ def main(
     args = _parser().parse_args(argv)
     try:
         text = _present(args, reader, names, store, render, open_report)
-    except ElectionError:
-        print("Não foi possível apresentar os relatórios.", file=sys.stderr)
+    except ElectionError as exc:
+        print(failure_line(_FAILURE, exc), file=sys.stderr)
         return EXIT_FAILURE
     print(text)
     return EXIT_SUCCESS

@@ -14,6 +14,8 @@ from eleicoes.use_cases.apresentar_grade import PresentPartyGrades, _parser, mai
 from eleicoes.use_cases.apresentar_relatorio_poder import PresentedPowerReport, PresentPowerReport
 from eleicoes.use_cases.grade import BuildPartyShareGrid
 
+_REASON = "Não foi possível apresentar os relatórios. Motivo: "
+
 _KEY = (2026, 1, "deputadoFederal")
 _MOMENT = datetime(2026, 10, 8, 17, 30, tzinfo=timezone(timedelta(hours=3)))
 _LEVELS = ("municipio", "uf", "regiao", "pais")
@@ -181,7 +183,7 @@ def test_database_failure_stays_a_portuguese_message_without_traceback(
     code = main(_args(destino), presenter=_presenter([], {"html": "x"}), store=store)
     captured = capsys.readouterr()
     assert code == 1
-    assert captured.err == "Não foi possível apresentar os relatórios.\n"
+    assert captured.err == f"{_REASON}database unavailable\n"
     assert captured.out == ""
     assert "Traceback" not in captured.err
     assert store.closed is True
@@ -208,7 +210,7 @@ def test_inconsistent_turnout_stays_a_portuguese_message(
     )
     captured = capsys.readouterr()
     assert code == 1
-    assert captured.err == "Não foi possível apresentar os relatórios.\n"
+    assert captured.err == f"{_REASON}invalid stored power report: comparecimento\n"
     assert "Traceback" not in captured.err
     assert store.closed is True
     assert not destino.exists()
@@ -433,3 +435,30 @@ def _args(destino: Path) -> list[str]:
         "--destino",
         str(destino),
     ]
+
+
+class _ChainedStore(BrokenStore):
+    def load(self, _ano: int, _turno: int, _cargo: str) -> StoredReport | None:
+        cause = RuntimeError(
+            'null value in column "html" of relation "relatorio_poder"\n'
+            "DETAIL:  Failing row contains (2026, 1, deputadoFederal)."
+        )
+        raise ElectionError("power report store failed") from cause
+
+
+def test_database_failure_names_the_reason_and_the_first_line_of_its_cause(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    store = _ChainedStore()
+    destino = tmp_path / "grade.html"
+    code = main(_args(destino), presenter=_presenter([], {"html": "x"}), store=store)
+    captured = capsys.readouterr()
+    assert code == 1
+    assert captured.err == (
+        f"{_REASON}power report store failed "
+        '(null value in column "html" of relation "relatorio_poder")\n'
+    )
+    assert "DETAIL" not in captured.err
+    assert "Traceback" not in captured.err
+    assert store.closed is True

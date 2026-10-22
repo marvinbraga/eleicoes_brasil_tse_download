@@ -27,6 +27,8 @@ from eleicoes.use_cases.apresentar_presidente_governador import (
 )
 from eleicoes.use_cases.presidente_governador import collect_places
 
+_REASON = "Não foi possível apresentar os relatórios. Motivo: "
+
 _MOMENT = datetime(2026, 10, 8, 18, 5, tzinfo=timezone(timedelta(hours=-3)))
 
 
@@ -286,7 +288,7 @@ def test_failure_is_a_portuguese_message_without_traceback(
     )
     captured = capsys.readouterr()
     assert code == 1
-    assert captured.err == "Não foi possível apresentar os relatórios.\n"
+    assert captured.err == f"{_REASON}invalid UF: XX\n"
     assert captured.out == ""
     assert "Traceback" not in captured.err
     assert not destino.exists()
@@ -301,7 +303,7 @@ def test_database_failure_stays_portuguese(
     code = main(["--destino", str(destino)], reader=_Reader(), names=_Names({}), store=store)
     captured = capsys.readouterr()
     assert code == 1
-    assert captured.err == "Não foi possível apresentar os relatórios.\n"
+    assert captured.err == f"{_REASON}database unavailable\n"
     assert store.closed is True
     assert not destino.exists()
 
@@ -490,3 +492,22 @@ def _prime(reader: _Reader, nominal: int) -> None:
     reader.ufs = {"presidente": ("AC",), "governador": ("AC",)}
     reader.rows[("AC", "presidente")] = (PoderPartido(10, None, 13, nominal, 0, nominal),)
     reader.rows[("AC", "governador")] = (PoderPartido(10, None, 13, 1, 0, 1),)
+
+
+class _Chained(_Broken):
+    def load(self, _ano: int, _turno: int) -> StoredCrossReport | None:
+        cause = RuntimeError('null value in column "html"\nDETAIL:  row')
+        raise ElectionError("cross report store failed") from cause
+
+
+def test_database_failure_names_the_chained_cause(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    store = _Chained()
+    destino = tmp_path / "cruzado.html"
+    code = main(["--destino", str(destino)], reader=_Reader(), names=_Names({}), store=store)
+    captured = capsys.readouterr()
+    assert code == 1
+    assert captured.err == (f'{_REASON}cross report store failed (null value in column "html")\n')
+    assert store.closed is True

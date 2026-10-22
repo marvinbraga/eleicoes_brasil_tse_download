@@ -10,6 +10,8 @@ from eleicoes.domain.grade import LugarVotos
 from eleicoes.use_cases.apresentar_grade import PresentPartyGrades, _production_store, main
 from eleicoes.use_cases.grade import BuildPartyShareGrid
 
+_REASON = "Não foi possível apresentar os relatórios. Motivo: "
+
 _LEVELS = ("municipio", "uf", "regiao", "pais")
 
 
@@ -155,7 +157,7 @@ def test_invalid_uf_is_a_portuguese_failure(
     code = main(["--uf", "XX", "--sem-navegador", "--destino", "relatorios/nao-grava.html"])
     captured = capsys.readouterr()
     assert code == 1
-    assert captured.err == "Não foi possível apresentar os relatórios.\n"
+    assert captured.err == f"{_REASON}invalid UF: XX\n"
     assert not Path("relatorios/nao-grava.html").exists()
     assert store.saves == 0
     assert store.closed is True
