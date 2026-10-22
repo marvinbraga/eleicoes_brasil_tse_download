@@ -17,6 +17,7 @@ from eleicoes.adapters.postgres_relatorio_poder_async import AsyncPostgresPowerR
 from eleicoes.adapters.postgres_relatorio_presidente_governador_async import (
     AsyncPostgresPresidentGovernorStore,
 )
+from eleicoes.domain.capilaridade_classe import CapillarityReport
 from eleicoes.domain.classe_governador import ClassReport
 from eleicoes.domain.errors import ElectionError
 from eleicoes.domain.perfis import ProfileReport, parse_group_span, require_profile_cargo
@@ -154,6 +155,7 @@ def get_class_job() -> ClassJob:
 def clear_report_caches() -> None:
     _built_profile.cache_clear()
     _stored_class.cache_clear()
+    _stored_capillarity.cache_clear()
 
 
 def _stored_profile(ano: int, turno: int, cargo: str, grupos: str) -> ProfileReport:
@@ -193,5 +195,25 @@ def _stored_class(ano: int, turno: int) -> ClassReport:
     reader = _production_reader()
     try:
         return build_governor_class(reader, _production_model(), ano, turno)
+    finally:
+        reader.close()
+
+
+# Capillarity: one report per (ano, turno, cargo) holds every scope.
+CapillarityJob: TypeAlias = Callable[[int, int, str], CapillarityReport]
+_CAPILLARITY_REPORTS: Final = 16
+
+
+def get_capillarity_job() -> CapillarityJob:
+    return _stored_capillarity
+
+
+@lru_cache(maxsize=_CAPILLARITY_REPORTS)
+def _stored_capillarity(ano: int, turno: int, cargo: str) -> CapillarityReport:
+    from eleicoes.use_cases.apresentar_capilaridade import _production_reader, build_capillarity
+
+    reader = _production_reader()
+    try:
+        return build_capillarity(reader, ano, turno, cargo)
     finally:
         reader.close()
