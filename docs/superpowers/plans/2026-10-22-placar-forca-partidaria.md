@@ -162,7 +162,7 @@ Quem integra depois insere a sua entrada na posição dela, mesmo que alguma das
   def resumo_municipal(lista: Iterable[Cidade]) -> tuple[BaseMunicipal, dict[str, Municipal]]
   ```
 
-- [ ] **Step 1: Escrever os testes que falham** em `tests/domain/test_forca.py`:
+- [x] **Step 1: Escrever os testes que falham** em `tests/domain/test_forca.py`:
 
 ```python
 """Party strength scoreboard. Hand-built cells; no database."""
@@ -257,12 +257,12 @@ def test_party_without_votes_in_valid_cities_is_left_out() -> None:
     assert "65" not in por_chave
 ```
 
-- [ ] **Step 2: Rodar e ver falhar**
+- [x] **Step 2: Rodar e ver falhar**
 
 Run: `uv run pytest tests/domain/test_forca.py -q`
 Expected: `ModuleNotFoundError: No module named 'eleicoes.domain.forca'` (erro de coleta).
 
-- [ ] **Step 3: Implementar a primeira parte de `src/eleicoes/domain/forca.py`**
+- [x] **Step 3: Implementar a primeira parte de `src/eleicoes/domain/forca.py`**
 
 ```python
 """Party strength scoreboard from stored power cells. Counts stay integers; the page divides."""
@@ -418,12 +418,12 @@ class _Contagem:
         return Municipal(self._lidera.get(chave, 0), self._liderados.get(chave, 0), presenca)
 ```
 
-- [ ] **Step 4: Rodar até passar**
+- [x] **Step 4: Rodar até passar**
 
 Run: `uv run pytest tests/domain/test_forca.py -q && uv run ruff check src/eleicoes/domain/forca.py tests/domain/test_forca.py && uv run mypy`
 Expected: `6 passed`; ruff `All checks passed!`; mypy `Success: no issues found`.
 
-- [ ] **Step 5: Sem commit** (só se o usuário pedir, com jarvis:commit).
+- [x] **Step 5: Sem commit** (só se o usuário pedir, com jarvis:commit).
 
 **If Task Fails:**
 1. Erro de importação: confira o nome do módulo e `InvalidCargoError` em `src/eleicoes/domain/errors.py:166`.
@@ -475,7 +475,7 @@ Regras que a assinatura não fixa:
 - UFs do placar: os códigos de nível `uf` de todas as fontes, mais as UFs das cidades, sem ZZ, em ordem alfabética. O nome vem de `uf_name`. O país se chama `"Brasil"`.
 - `faltando`: os cargos com fonte `None`, sem repetição, na ordem de `CARGOS_REFERENCIA`.
 
-- [ ] **Step 1: Acrescentar os testes que falham**
+- [x] **Step 1: Acrescentar os testes que falham**
 
 ```python
 from eleicoes.domain.forca import (  # junte ao import do topo
@@ -569,12 +569,12 @@ def test_missing_sources_become_dashes_and_are_listed_in_office_order() -> None:
 
 Depois de juntar os nomes ao import do topo, rode `uv run ruff check --fix tests/domain/test_forca.py` para ordenar o bloco (I001).
 
-- [ ] **Step 2: Rodar e ver falhar**
+- [x] **Step 2: Rodar e ver falhar**
 
 Run: `uv run pytest tests/domain/test_forca.py -q`
 Expected: `ImportError: cannot import name 'BaseRecorte'`.
 
-- [ ] **Step 3: Implementar no fim de `forca.py`**
+- [x] **Step 3: Implementar no fim de `forca.py`**
 
 ```python
 from collections import Counter  # junte aos imports do topo
@@ -865,12 +865,12 @@ def _faltando(cargo: str, fontes: FontesForca) -> tuple[str, ...]:
 
 Nota: no recorte do país, `lideres_estaduais` é `None` só quando a fonte estadual falta. Quando a fonte existe sem nenhuma UF válida, `lideres_estaduais` é `{}` e `ufs_deputado_estadual` é 0, então o partido presente recebe 0 em "UFs em 1º" e "—" no % estadual. Os imports `Counter` e `uf_name` vão para o topo do arquivo, junto dos da Task 1; as linhas com `# junte aos imports` não ficam no meio do módulo.
 
-- [ ] **Step 4: Rodar até passar**
+- [x] **Step 4: Rodar até passar**
 
 Run: `uv run pytest tests/domain/test_forca.py -q && uv run ruff check src/eleicoes/domain/forca.py tests/domain/test_forca.py && uv run mypy`
 Expected: `10 passed`; ruff limpo; mypy `Success`.
 
-- [ ] **Step 5: Sem commit.**
+- [x] **Step 5: Sem commit.**
 
 **If Task Fails:**
 1. `AM` com presidente 0 em vez de `None`: `_at` precisa devolver `None` quando o lugar falta, e `_valor` tem de respeitar esse `None`.
@@ -899,7 +899,7 @@ Expected: `10 passed`; ruff limpo; mypy `Success`.
   ```
 - `test_http_errors.py` e `test_relatorios_agrupamentos.py` usam `cast(AsyncRelatorioPoderStore, unused)` e não mudam.
 
-- [ ] **Step 1: Escrever o teste que falha** em `tests/adapters/test_postgres_relatorio_poder.py`:
+- [x] **Step 1: Escrever o teste que falha** em `tests/adapters/test_postgres_relatorio_poder.py`:
 
 ```python
 from eleicoes.adapters.postgres_relatorio_poder import read_power_levels  # junte aos imports
@@ -926,12 +926,12 @@ def test_read_power_levels_keeps_only_the_requested_levels() -> None:
     store.close()
 ```
 
-- [ ] **Step 2: Rodar e ver falhar**
+- [x] **Step 2: Rodar e ver falhar**
 
 Run: `uv run pytest tests/adapters/test_postgres_relatorio_poder.py -q -k levels`
 Expected: `ImportError: cannot import name 'read_power_levels'`.
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 Em `postgres_relatorio_poder.py`, logo depois de `read_power`:
 
@@ -998,19 +998,19 @@ Em `tests/adapters/test_read_api.py`, no `_PowerStore.__init__`, acrescente `sel
         niveis: tuple[str, ...],
     ) -> StoredReport | None:
         self.level_calls.append((cargo, niveis))
-        found = self.by_cargo[cargo] if cargo in self.by_cargo else self.stored
+        found = self.by_cargo.get(cargo, self.stored)  # ruff SIM401 (ajustado na execução)
         if found is None:
             return None
         kept = tuple(cell for cell in found.cells if cell.nivel in niveis)
         return StoredReport(kept, found.gerado_em)
 ```
 
-- [ ] **Step 4: Rodar até passar**
+- [x] **Step 4: Rodar até passar**
 
 Run: `uv run pytest tests/adapters/test_postgres_relatorio_poder.py tests/adapters/test_read_api.py -q && uv run ruff check . && uv run mypy`
 Expected: todos passam; ruff e mypy limpos.
 
-- [ ] **Step 5: Sem commit.**
+- [x] **Step 5: Sem commit.**
 
 **If Task Fails:**
 1. Erro do mypy "Argument power_store has incompatible type": falta `load_levels` em algum fake. Rode `grep -rn "power_store=" tests` e confira cada um.
@@ -1045,7 +1045,7 @@ Plano de leitura (sempre nesta ordem; níveis em ordem fixa):
 - `governador` ou `senador`, quando é a referência: `("municipio",)`.
 - Um relatório `None`, ou com `cells == ()`, vira fonte `None`.
 
-- [ ] **Step 1: Escrever os testes que falham**
+- [x] **Step 1: Escrever os testes que falham**
 
 ```python
 """Strength scoreboard use case. An in-memory store stands in for Postgres."""
@@ -1162,12 +1162,12 @@ def test_bad_input_fails_before_any_read() -> None:
 
 (`InvalidElectionYearError` está em `src/eleicoes/domain/errors.py:8`.)
 
-- [ ] **Step 2: Rodar e ver falhar**
+- [x] **Step 2: Rodar e ver falhar**
 
 Run: `uv run pytest tests/use_cases/test_placar_forca.py -q`
 Expected: `ImportError: cannot import name 'MissingStrengthSourcesError'`.
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 Em `domain/errors.py`, antes de `MissingPowerReportError`:
 
@@ -1259,12 +1259,12 @@ def _niveis(cargo: str, niveis: tuple[str, ...], referencia: str) -> tuple[str, 
 
 Em `adapters/http/errors.py`, importe `MissingStrengthSourcesError` e acrescente `(MissingStrengthSourcesError, 409),` logo depois de `(MissingPowerReportError, 409),`.
 
-- [ ] **Step 4: Rodar até passar**
+- [x] **Step 4: Rodar até passar**
 
 Run: `uv run pytest tests/use_cases/test_placar_forca.py tests/adapters/test_read_api.py tests/adapters/test_http_errors.py -q && uv run ruff check . && uv run mypy`
 Expected: todos passam; ruff e mypy limpos.
 
-- [ ] **Step 5: Sem commit.**
+- [x] **Step 5: Sem commit.**
 
 **If Task Fails:**
 1. O teste `_MISSING_POWER` quebrou: o texto de `MissingPowerReportError` mudou. Compare com `tests/adapters/test_read_api.py:500`.
@@ -1301,7 +1301,7 @@ Expected: todos passam; ruff e mypy limpos.
   ```
   (Os números do PL 22 são os reais de 2026-10-22. No JSON de verdade, `presenca` sempre traz os 5 limiares; o exemplo mostra só o de 5%, e `ufs` foi cortado.)
 
-- [ ] **Step 1: Escrever os testes que falham** em `tests/adapters/test_read_api.py`. Acrescente `"/relatorios/dados/forca"` ao conjunto `expected` de `test_health_and_openapi_advertise_the_read_routes` e inclua:
+- [x] **Step 1: Escrever os testes que falham** em `tests/adapters/test_read_api.py`. Acrescente `"/relatorios/dados/forca"` ao conjunto `expected` de `test_health_and_openapi_advertise_the_read_routes` e inclua:
 
 ```python
 _FORCA = "/relatorios/dados/forca?ano=2026&turno=1"
@@ -1371,12 +1371,12 @@ def test_forca_rejects_an_unknown_reference_office() -> None:
 
 (Antes de fixar a última asserção, confira como `invalid cargo` vira detalhe: `uv run pytest tests/adapters/test_http_errors.py -q -k cargo`, e veja `adapters/http/errors.py:39`.)
 
-- [ ] **Step 2: Rodar e ver falhar**
+- [x] **Step 2: Rodar e ver falhar**
 
 Run: `uv run pytest tests/adapters/test_read_api.py -q -k forca`
 Expected: `404` em vez de `200` (`assert 404 == 200`).
 
-- [ ] **Step 3: Implementar.** No fim de `schemas_relatorios.py`:
+- [x] **Step 3: Implementar.** No fim de `schemas_relatorios.py`:
 
 ```python
 from eleicoes.domain.errors import comando_relatorio_poder  # junte aos imports
@@ -1537,12 +1537,12 @@ async def forca(
     return ForcaJson.from_domain(placar)
 ```
 
-- [ ] **Step 4: Rodar até passar**
+- [x] **Step 4: Rodar até passar**
 
 Run: `uv run pytest -q && uv run ruff check . && uv run mypy`
 Expected: a suíte inteira passa; ruff e mypy limpos.
 
-- [ ] **Step 5: Sem commit.**
+- [x] **Step 5: Sem commit.**
 
 **If Task Fails:**
 1. Import circular entre `schemas_relatorios` e `domain.forca`: o domínio não importa adaptadores; confira os imports.
@@ -1556,6 +1556,15 @@ Expected: a suíte inteira passa; ruff e mypy limpos.
 1. **REQUIRED SUB-SKILL:** Use jarvis:codereview e dispare todos os revisores em paralelo sobre o diff das Tasks 1 a 5.
 2. **Handle findings by severity:** siga as regras de severidade de jarvis:codereview.
 3. **Proceed only when:** não restar nenhum achado Critical, High ou Medium.
+
+- [x] **Executada em 2026-10-22.** Oito revisores. Achados corrigidos:
+  - **(High, testes)** Nenhum teste distinguia a fonte municipal da referência da fonte de deputado estadual. Entrou `test_municipal_columns_come_from_the_reference_office_only`.
+  - **(Medium, testes)** Faltavam três testes, todos acrescentados: fonte estadual ausente (`test_missing_state_source_leaves_every_state_column_empty`), o bloco `base` inteiro e as contagens de `presenca` no teste HTTP, e `level_calls` verificado.
+  - **(Medium, desempenho)** `Cidade.validos` era somado de novo para cada partido. Agora é calculado uma vez por cidade: `_Contagem.adicionar(cidade, validos)`. O domínio caiu de 0,85 s para 0,50 s no benchmark sintético de 162 mil células.
+  - **(Medium, desempenho)** `read_power_levels` agora lê colunas, sem montar entidades ORM (`_CELL_COLUMNS` e `_row_cell`), cerca de 3 a 6 vezes mais rápido no SQLite.
+  - **(Medium, desempenho e código)** `placar_forca` agora roda em `asyncio.to_thread` dentro do caso de uso. O cache em memória ficou de fora, por causa de F2.
+  - **(Low)** Constantes subiram para o topo do módulo. O `100` virou `_SEM_PARTIDO`. A regra F3 ficou num só lugar (`_validos_da_celula`). Entrou um teste do `load_levels` assíncrono. Um teste fixa o país com fonte estadual sem UF válida: 0 UFs e "—" no %, como na nota da Task 2.
+  - O contrato JSON da Task 5 não mudou.
 
 ---
 
@@ -1600,7 +1609,7 @@ Regras:
 - `tipo` fora de `"partido"` ou `"federacao"` lança erro.
 - `buscarForca` chama `/relatorios/dados/forca` com `{ ano, turno, cargo_referencia: cargo }`, reusando `buscar(...)`. Em `mensagemDeErro`, trate `RespostaForcaInvalidaError` como `RespostaInvalidaError`, para mostrar a mensagem dele.
 
-- [ ] **Step 1: Escrever o script que falha** (`verificar-forca.ts`):
+- [x] **Step 1: Escrever o script que falha** (`verificar-forca.ts`):
 
 ```ts
 import assert from "node:assert/strict";
@@ -1638,19 +1647,19 @@ assert.throws(() => lerPlacarForca({ ...json, pais: { ...recorte, unidades: [{ .
 console.log("ok");
 ```
 
-- [ ] **Step 2: Rodar e ver falhar**
+- [x] **Step 2: Rodar e ver falhar**
 
 Run: `cd frontend && node --experimental-strip-types src/lib/verificar-forca.ts`
 Expected: `ERR_MODULE_NOT_FOUND` para `forca.ts`.
 
-- [ ] **Step 3: Implementar `forca.ts`** com os tipos acima e funções `exigirRegistro`, `exigirLista`, `exigirInteiro`, `exigirInteiroOuNulo`, `exigirTexto` e `exigirTextoOuNulo` locais, no mesmo padrão de `relatorios.ts:347-391`, lançando `RespostaForcaInvalidaError` com a mensagem `"A API devolveu um JSON que não confere com o placar de força."`. Depois, `buscarForca` em `buscar-relatorios.ts`.
+- [x] **Step 3: Implementar `forca.ts`** com os tipos acima e funções `exigirRegistro`, `exigirLista`, `exigirInteiro`, `exigirInteiroOuNulo`, `exigirTexto` e `exigirTextoOuNulo` locais, no mesmo padrão de `relatorios.ts:347-391`, lançando `RespostaForcaInvalidaError` com a mensagem `"A API devolveu um JSON que não confere com o placar de força."`. Depois, `buscarForca` em `buscar-relatorios.ts`.
 
-- [ ] **Step 4: Rodar até passar**
+- [x] **Step 4: Rodar até passar**
 
 Run: `cd frontend && node --experimental-strip-types src/lib/verificar-forca.ts && pnpm exec tsc --noEmit && pnpm exec eslint src/lib/forca.ts src/lib/verificar-forca.ts src/lib/buscar-relatorios.ts`
 Expected: `ok`; tsc e eslint sem saída.
 
-- [ ] **Step 5: Sem commit.**
+- [x] **Step 5: Sem commit.**
 
 **If Task Fails:**
 1. O Node acusa `@/lib/...`: `forca.ts` não pode importar com alias.
@@ -1701,7 +1710,7 @@ Regras (os textos são exatos):
 - `ordenarPlacar`: compara com `compararNumero(a.valores[c].ordem, b.valores[c].ordem, direcao)`, que deixa nulos por último; o empate vai para o menor `partidos[0]`. `"unidade"` usa `compararTexto(rotulo)`.
 - Cada `explicacao` é uma frase em português simples, repetida em `explicacao-forca.tsx` (Task 11). Exemplo para `presenca`: `"Quantos municípios deram ao partido pelo menos o limiar escolhido dos votos válidos do cargo de referência."`
 
-- [ ] **Step 1: Escrever o script que falha.** O fixture é a saída do domínio Python da Task 2 (`placar_forca(2026, 1, "deputadoEstadual", FontesForca(PRES, FED, EST, EST))`) no formato de `ForcaJson`. Ele foi gerado a partir do código deste plano; cole-o no script como `const PLACAR = lerPlacarForca(JSON.parse(String.raw`…`));`, importando `lerPlacarForca` de `./forca.ts`:
+- [x] **Step 1: Escrever o script que falha.** O fixture é a saída do domínio Python da Task 2 (`placar_forca(2026, 1, "deputadoEstadual", FontesForca(PRES, FED, EST, EST))`) no formato de `ForcaJson`. Ele foi gerado a partir do código deste plano; cole-o no script como `const PLACAR = lerPlacarForca(JSON.parse(String.raw`…`));`, importando `lerPlacarForca` de `./forca.ts`:
 
 ```json
 {"ano":2026,"turno":1,"cargo_referencia":"deputadoEstadual","limiares":[1,2,5,10,20],"faltando":[],"pais":{"codigo":"BR","nome":"Brasil","base":{"validos_presidente":100,"validos_deputado_federal":100,"validos_deputado_estadual":80,"ufs_deputado_estadual":2,"municipal":{"municipios":3,"validos":300,"empates":1}},"unidades":[{"chave":"13","tipo":"partido","nome":null,"partidos":[13],"presidente":60,"deputado_federal":30,"deputado_estadual":30,"ufs_lider_estadual":0,"municipal":{"lidera":1,"validos_liderados":100,"presenca":[{"limiar":1,"municipios":3},{"limiar":2,"municipios":3},{"limiar":5,"municipios":3},{"limiar":10,"municipios":2},{"limiar":20,"municipios":2}]}},{"chave":"22","tipo":"partido","nome":null,"partidos":[22],"presidente":40,"deputado_federal":50,"deputado_estadual":50,"ufs_lider_estadual":1,"municipal":{"lidera":1,"validos_liderados":100,"presenca":[{"limiar":1,"municipios":3},{"limiar":2,"municipios":3},{"limiar":5,"municipios":3},{"limiar":10,"municipios":3},{"limiar":20,"municipios":3}]}},{"chave":"65","tipo":"partido","nome":null,"partidos":[65],"presidente":null,"deputado_federal":20,"deputado_estadual":0,"ufs_lider_estadual":0,"municipal":{"lidera":0,"validos_liderados":0,"presenca":[{"limiar":1,"municipios":0},{"limiar":2,"municipios":0},{"limiar":5,"municipios":0},{"limiar":10,"municipios":0},{"limiar":20,"municipios":0}]}}]},"ufs":[{"codigo":"AC","nome":"Acre","base":{"validos_presidente":30,"validos_deputado_federal":10,"validos_deputado_estadual":40,"ufs_deputado_estadual":1,"municipal":{"municipios":2,"validos":200,"empates":0}},"unidades":[{"chave":"13","tipo":"partido","nome":null,"partidos":[13],"presidente":10,"deputado_federal":5,"deputado_estadual":10,"ufs_lider_estadual":0,"municipal":{"lidera":1,"validos_liderados":100,"presenca":[{"limiar":1,"municipios":2},{"limiar":2,"municipios":2},{"limiar":5,"municipios":2},{"limiar":10,"municipios":1},{"limiar":20,"municipios":1}]}},{"chave":"22","tipo":"partido","nome":null,"partidos":[22],"presidente":20,"deputado_federal":5,"deputado_estadual":30,"ufs_lider_estadual":1,"municipal":{"lidera":1,"validos_liderados":100,"presenca":[{"limiar":1,"municipios":2},{"limiar":2,"municipios":2},{"limiar":5,"municipios":2},{"limiar":10,"municipios":2},{"limiar":20,"municipios":2}]}}]},{"codigo":"AM","nome":"Amazonas","base":{"validos_presidente":null,"validos_deputado_federal":10,"validos_deputado_estadual":40,"ufs_deputado_estadual":1,"municipal":{"municipios":1,"validos":100,"empates":1}},"unidades":[{"chave":"13","tipo":"partido","nome":null,"partidos":[13],"presidente":null,"deputado_federal":7,"deputado_estadual":20,"ufs_lider_estadual":0,"municipal":{"lidera":0,"validos_liderados":0,"presenca":[{"limiar":1,"municipios":1},{"limiar":2,"municipios":1},{"limiar":5,"municipios":1},{"limiar":10,"municipios":1},{"limiar":20,"municipios":1}]}},{"chave":"22","tipo":"partido","nome":null,"partidos":[22],"presidente":null,"deputado_federal":3,"deputado_estadual":20,"ufs_lider_estadual":0,"municipal":{"lidera":0,"validos_liderados":0,"presenca":[{"limiar":1,"municipios":1},{"limiar":2,"municipios":1},{"limiar":5,"municipios":1},{"limiar":10,"municipios":1},{"limiar":20,"municipios":1}]}}]}]}
@@ -1715,10 +1724,10 @@ Regras (os textos são exatos):
   - `ordenarPlacar(linhas, "presidente", "asc")` e `"desc"` deixam `"65"` por último nas duas.
   - `linhasPorUf(placar, "13", 5)`: os rótulos são `["Acre", "Amazonas"]`, e o presidente de AM é `"—"`.
   - O script termina com `console.log("ok")`.
-- [ ] **Step 2:** Rodar `cd frontend && node --experimental-strip-types src/lib/verificar-placar-forca.ts` e ver falhar com `ERR_MODULE_NOT_FOUND`.
-- [ ] **Step 3:** Implementar `placar-forca.ts`.
-- [ ] **Step 4:** Rodar até imprimir `ok`; depois `pnpm exec tsc --noEmit` e `pnpm exec eslint src/lib/placar-forca.ts src/lib/verificar-placar-forca.ts`, sem saída.
-- [ ] **Step 5:** Sem commit.
+- [x] **Step 2:** Rodar `cd frontend && node --experimental-strip-types src/lib/verificar-placar-forca.ts` e ver falhar com `ERR_MODULE_NOT_FOUND`.
+- [x] **Step 3:** Implementar `placar-forca.ts`.
+- [x] **Step 4:** Rodar até imprimir `ok`; depois `pnpm exec tsc --noEmit` e `pnpm exec eslint src/lib/placar-forca.ts src/lib/verificar-placar-forca.ts`, sem saída.
+- [x] **Step 5:** Sem commit.
 
 **If Task Fails:** um percentual diferente indica a base errada. Confira se a base vem de `recorte.base`, nunca de outro recorte. Se não conseguir se recuperar, pare.
 
@@ -1761,7 +1770,7 @@ Regras:
 - `layoutGrupos` devolve `null` sem grupos.
 - `resumoGrupos`: `"{titulo}. {rotulo}: {curto} {texto}, {curto} {texto}; {rotulo}: …."`.
 
-- [ ] **Step 1: Escrever o script que falha.** Os casos:
+- [x] **Step 1: Escrever o script que falha.** Os casos:
   - fração 1 ocupa a largura útil inteira (640 − 132 − 112 = 396);
   - fração 0 dá largura 0;
   - fração 1,2 é cortada em 396;
@@ -1772,10 +1781,10 @@ Regras:
   - a altura de 2 grupos × 2 barras é `4 + 2·(22 + 2·18 + 10) + 4 = 144`;
   - a variante estreita tem `largura` 340;
   - `resumoGrupos` confere com o texto exato.
-- [ ] **Step 2:** Rodar `node --experimental-strip-types src/lib/verificar-grafico-forca.ts` e ver falhar.
-- [ ] **Step 3:** Implementar.
-- [ ] **Step 4:** `ok`, `tsc` e `eslint` limpos.
-- [ ] **Step 5:** Sem commit.
+- [x] **Step 2:** Rodar `node --experimental-strip-types src/lib/verificar-grafico-forca.ts` e ver falhar.
+- [x] **Step 3:** Implementar.
+- [x] **Step 4:** `ok`, `tsc` e `eslint` limpos.
+- [x] **Step 5:** Sem commit.
 
 ---
 
@@ -1816,9 +1825,9 @@ Desenho e textos:
   - as notas: "Votos válidos são nominais mais legenda, sem brancos e nulos."; "Empate no topo não conta para nenhum partido."; "O exterior entra só no % nacional de presidente."; "O DF elege deputados distritais, que não estão nos dados; por isso fica fora das colunas de deputado estadual e, com esse cargo de referência, dos indicadores municipais."; "— significa sem dados: cargo não gravado, partido que não concorreu ao cargo ou lugar sem esse cargo.";
   - a frase "Cadeiras, governadores e prefeituras entram quando as simulações estiverem disponíveis.", que só aparece enquanto os blocos B e C não vierem.
 
-- [ ] **Step 1:** Implementar os seis componentes.
-- [ ] **Step 2:** Rodar `cd frontend && pnpm exec tsc --noEmit && pnpm lint && node --experimental-strip-types src/lib/verificar-placar-forca.ts && node --experimental-strip-types src/lib/verificar-grafico-forca.ts`. Expected: limpo, `ok` e `ok`.
-- [ ] **Step 3:** Sem commit.
+- [x] **Step 1:** Implementar os seis componentes.
+- [x] **Step 2:** Rodar `cd frontend && pnpm exec tsc --noEmit && pnpm lint && node --experimental-strip-types src/lib/verificar-placar-forca.ts && node --experimental-strip-types src/lib/verificar-grafico-forca.ts`. Expected: limpo, `ok` e `ok`.
+- [x] **Step 3:** Sem commit.
 
 **If Task Fails:** um erro de hidratação aponta valor não determinístico no cliente; não use `Date` nem `Math.random`. Se não conseguir se recuperar, pare.
 
@@ -1836,8 +1845,8 @@ Desenho e textos:
 - A página segue `app/relatorios/classe-governador/page.tsx`: `metadata.title = "Força partidária"`, `maxDuration = 600`, `CHAVES_FILTRO = ["ano", "turno", "cargo"]`, `<h1>Força partidária</h1>`, `<FerramentasApresentacao />`, `Suspense` com `EsqueletoFiltros` e `EsqueletoDados`, e "Selecione os filtros e clique em Consultar." enquanto `consultar` não vale 1.
 - O cargo de referência é lido localmente: `const cargo = escolher(consulta.cargo, CARGOS_PODER.map((c) => c.value), "deputadoEstadual")`, com `escolher` e `CARGOS_PODER` de `@/lib/eleicoes`.
 
-- [ ] **Step 1:** Implementar a página e os três links.
-- [ ] **Step 2:** Rodar `cd frontend && pnpm exec tsc --noEmit && pnpm lint`. Expected: limpo.
+- [x] **Step 1:** Implementar a página e os três links.
+- [x] **Step 2:** Rodar `cd frontend && pnpm exec tsc --noEmit && pnpm lint`. Expected: limpo.
 - [ ] **Step 3: Conferir a API real.** O serviço `api` do `docker-compose.yml` não monta `src` como volume e roda `uvicorn` sem `--reload`, então o código fica na imagem `eleicoes_brasil-importer:dev`. Peça ao usuário para reconstruir **só** esse serviço: `docker compose up -d --build api`. Isso recria apenas o container da API, sem derrubar o Compose; o importer usa a mesma imagem, mas não é recriado. Com a API saudável (`curl -s localhost:15000/health` devolve `{"status":"ok"}`), rode:
 
 ```bash
@@ -1865,7 +1874,7 @@ Expected: `200` e tempo menor que 10 s. A base mostra `ufs_deputado_estadual: 26
 
   Salve as capturas `forca-*.png` no scratchpad.
 
-- [ ] **Step 5:** Sem commit.
+- [x] **Step 5:** Sem commit.
 
 **If Task Fails:**
 1. 404 na API: a imagem não foi reconstruída. `docker compose restart api` não basta, porque o código está dentro da imagem; use `docker compose up -d --build api`.
@@ -2114,3 +2123,4 @@ O usuário aceitou as recomendações da revisão de coerência. Estas decisões
 - **Fusões de partido depois de dez/2025:** conferir no TSE antes da Task 1 do plano 6 (ação, não pergunta).
 - **Título eleitoral e data de nascimento (2024):** guardar no `raw`, como nas demais tabelas brutas (dados públicos).
 - **Itens menores:** sem população do IBGE, limiar de presença na lista fixa, sem classe de viés regional, Força da marca com página fixa, sem mapa de calor e com o visual proposto.
+- **Nome da esfera federal:** a esfera "Federação" passou a se chamar "Nacional" (chave `nacional`), para não confundir com as federações partidárias da fase B.
