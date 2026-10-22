@@ -1947,10 +1947,10 @@ O que o plano 2 já garante (alinhado em 2026-10-22):
 
 **Files:** Modify `src/eleicoes/domain/forca.py` e `tests/domain/test_forca.py`.
 
-- [ ] Acrescentar `tipo: str` (`"partido"` ou `"federacao"`) e `nome: str | None` a `ForcaUnidade`, com os padrões `"partido"` e `None` no fim da dataclass, para não quebrar a fase A.
-- [ ] Criar `placar_com_federacoes(ano, turno, cargo, fontes, federacoes: tuple[Federacao, ...]) -> PlacarForca`. A função roda `placar_forca` duas vezes, uma com `por_partido` e outra com a chave `fed:<sigla>` para membros e `str(partido)` para os demais. Junta as unidades das duas rodadas, sem repetir partido fora de federação, e marca `tipo` e `nome`.
-- [ ] Teste obrigatório (Review Focus) com 3 cidades e uma federação de 13 e 43. Na cidade 1, os votos são 13:30, 43:30 e 22:50, e a federação (60) lidera. Nas cidades 2 e 3, 22 lidera. Por partido, a liderança do 13 é 0, a do 43 é 0 e a da federação é 1, então a soma dos membros (0) não é a liderança da federação (1). Teste também a presença.
-- [ ] `uv run pytest tests/domain/test_forca.py -q` passa; ruff e mypy limpos.
+- [x] Acrescentar `tipo: str` (`"partido"` ou `"federacao"`) e `nome: str | None` a `ForcaUnidade`, com os padrões `"partido"` e `None` no fim da dataclass, para não quebrar a fase A.
+- [x] Criar `placar_com_federacoes(ano, turno, cargo, fontes, federacoes: tuple[Federacao, ...]) -> PlacarForca`. A função roda `placar_forca` duas vezes, uma com `por_partido` e outra com a chave `fed:<sigla>` para membros e `str(partido)` para os demais. Junta as unidades das duas rodadas, sem repetir partido fora de federação, e marca `tipo` e `nome`.
+- [x] Teste obrigatório (Review Focus) com 3 cidades e uma federação de 13 e 43. Na cidade 1, os votos são 13:30, 43:30 e 22:50, e a federação (60) lidera. Nas cidades 2 e 3, 22 lidera. Por partido, a liderança do 13 é 0, a do 43 é 0 e a da federação é 1, então a soma dos membros (0) não é a liderança da federação (1). Teste também a presença.
+- [x] `uv run pytest tests/domain/test_forca.py -q` passa; ruff e mypy limpos.
 
 ### Task 15: Cadeiras no caso de uso e no JSON
 
@@ -1963,19 +1963,19 @@ O que o plano 2 já garante (alinhado em 2026-10-22):
 - Modify: `src/eleicoes/use_cases/placar_forca.py`, `schemas_relatorios.py` e `relatorios.py`
 - Test: `tests/use_cases/test_placar_forca.py` e `tests/adapters/test_read_api.py`
 
-- [ ] `MontarPlacarForca(store, cadeiras: AsyncEstimativaCadeiras | None = None)`. Quando `cadeiras.load` devolve uma estimativa, o placar usa as federações dela e junta as `CadeirasUnidade` por `(chave, uf)`. Quando devolve `None`, o placar continua só por partido e o bloco `cadeiras` sai com `disponivel: false` e o comando do plano 2 (`uv run python scripts/relatorio_cadeiras.py`; alinhado em 2026-10-22).
-- [ ] O JSON ganha `cadeiras: {disponivel: bool, comando: str | null, totais: {...} | null}` no topo e, em cada unidade, `camara`, `senado`, `governador_1t`, `governador_2t` e `assembleia` (`int | null`). Unidades de federação têm `tipo: "federacao"` e `nome`.
-- [ ] Testes: com estimativa (os números aparecem e a federação vem recalculada), sem estimativa (`disponivel: false`, campos nulos) e com a porta ausente (`None`, comportamento da fase A).
-- [ ] `uv run pytest -q`, `uv run ruff check .` e `uv run mypy` limpos.
+- [x] `MontarPlacarForca(store, cadeiras: AsyncEstimativaCadeiras | None = None)`. Quando `cadeiras.load` devolve uma estimativa, o placar usa as federações dela e junta as `CadeirasUnidade` por `(chave, uf)`. Quando devolve `None`, o placar continua só por partido e o bloco `cadeiras` sai com `disponivel: false` e o comando do plano 2 (`uv run python scripts/relatorio_cadeiras.py`; alinhado em 2026-10-22).
+- [x] O JSON ganha `cadeiras: {disponivel: bool, comando: str | null, totais: {...} | null}` no topo e, em cada unidade, `camara`, `senado`, `governador_1t`, `governador_2t` e `assembleia` (`int | null`). Unidades de federação têm `tipo: "federacao"` e `nome`.
+- [x] Testes: com estimativa (os números aparecem e a federação vem recalculada), sem estimativa (`disponivel: false`, campos nulos) e com a porta ausente (`None`, comportamento da fase A).
+- [x] `uv run pytest -q`, `uv run ruff check .` e `uv run mypy` limpos.
 
 ### Task 16: Colunas de cadeiras e alternância de federação no frontend
 
 **Files:** Modify `frontend/src/lib/forca.ts`, `placar-forca.ts`, `grafico-forca.ts`, os scripts `verificar-*` e `placar-forca.tsx`.
 
-- [ ] `ChaveColuna` ganha `camara`, `senado`, `governador_1t`, `governador_2t` e `assembleia`. A Federação recebe "Câmara (cadeiras estimadas)" e "Senado (vagas estimadas)", com o texto `"{n}"`, o detalhe `"de {totais.camara}"` e fração n/513. Os Estados recebem "Governadores no 1º turno" (fração n/27), "No 2º turno de governador (disputa)" e "Assembleias (cadeiras estimadas)". A coluna do 2º turno mostra só a contagem de UFs em que o partido disputa, sem fração e sem barra no gráfico (F14). O detalhe diz "disputa, sem vencedor projetado". As Assembleias incluem as 24 cadeiras da Câmara Legislativa do DF (alinhado em 2026-10-22).
-- [ ] `colunasPlacar` recebe `placar` e só inclui essas colunas quando `placar.cadeiras` existe (F20). Com `disponivel: false`, elas aparecem com "—", e o aviso mostra o comando.
-- [ ] Controle "Mostrar" com duas opções: "Partidos" e "Federações e partidos fora delas". A segunda opção esconde os membros e mostra a linha da federação.
-- [ ] Os scripts de verificação ganham casos com e sem `cadeiras`. Rodar `tsc` e `lint`.
+- [x] `ChaveColuna` ganha `camara`, `senado`, `governador_1t`, `governador_2t` e `assembleia`. A Federação recebe "Câmara (cadeiras estimadas)" e "Senado (vagas estimadas)", com o texto `"{n}"`, o detalhe `"de {totais.camara}"` e fração n/513. Os Estados recebem "Governadores no 1º turno" (fração n/27), "No 2º turno de governador (disputa)" e "Assembleias (cadeiras estimadas)". A coluna do 2º turno mostra só a contagem de UFs em que o partido disputa, sem fração e sem barra no gráfico (F14). O detalhe diz "disputa, sem vencedor projetado". As Assembleias incluem as 24 cadeiras da Câmara Legislativa do DF (alinhado em 2026-10-22).
+- [x] `colunasPlacar` recebe `placar` e só inclui essas colunas quando `placar.cadeiras` existe (F20). Com `disponivel: false`, elas aparecem com "—", e o aviso mostra o comando.
+- [x] Controle "Mostrar" com duas opções: "Partidos" e "Federações e partidos fora delas". A segunda opção esconde os membros e mostra a linha da federação.
+- [x] Os scripts de verificação ganham casos com e sem `cadeiras`. Rodar `tsc` e `lint`.
 - [ ] Verificar no navegador as cadeiras somando 513, 54 e 1.059 na linha de totais (rodapé da tabela) e a alternância de federação.
 
 ### Task 17: Code Review da fase B
@@ -2026,14 +2026,14 @@ A correspondência 2024 → 2026 é a tabela versionada do plano 6 (`src/eleicoe
 
 ### Task 18: Integrar 2024
 
-- [ ] No backend, um campo opcional em `ReadPorts` (`municipal_2024: AsyncMunicipal2024 | None = None`), usado só nos testes. Ele é diferente do campo `municipais` do plano 6, que guarda o leitor bruto. Em `dependencies.py`, `get_municipal_2024` faz o seguinte (alinhado em 2026-10-22):
+- [x] No backend, um campo opcional em `ReadPorts` (`municipal_2024: AsyncMunicipal2024 | None = None`), usado só nos testes. Ele é diferente do campo `municipais` do plano 6, que guarda o leitor bruto. Em `dependencies.py`, `get_municipal_2024` faz o seguinte (alinhado em 2026-10-22):
   - com ports instalados, devolve `installed.municipal_2024`, que pode ser `None`;
   - em produção, devolve `StoredMunicipal2024(AsyncPostgresMunicipalReader(cast(AsyncSqlConnection, connection)))`, com as duas classes do plano 6;
   - não chama `get_municipal_reader`, que levanta `ElectionError` quando os ports estão instalados sem leitor.
-- [ ] O JSON ganha um bloco `municipal_2024: {disponivel, comando, data_corte, totais}`. Cada unidade ganha `prefeitos`, `eleitorado_governado` e `vereadores` (`int | null`).
+- [x] O JSON ganha um bloco `municipal_2024: {disponivel, comando, data_corte, totais}`. Cada unidade ganha `prefeitos`, `eleitorado_governado` e `vereadores` (`int | null`).
   - Com `load` devolvendo `None`, o bloco vem com `disponivel: false` e o comando `make download-municipais && make import-municipais`. Se faltar a `0005`, siga antes o backup e o `make migrate` das Global Constraints do plano 6.
   - Para federação, os três valores **somam** os membros, ao contrário das lideranças da F18.
-- [ ] No frontend, as colunas "Prefeituras (2024)" (n/municípios), "Eleitorado governado (2024)" (n/eleitorado) e "Vereadores (2024)" (n/vereadores) entram na esfera Municípios. Os denominadores vêm de `totais` do recorte: "BR" no Brasil, a UF no recorte por UF. Não vêm da soma das linhas, que deixa de fora os municípios sem prefeito e os partidos `sem_correspondencia`. O JSON leva `totais` por recorte, só com inteiros (F21).
+- [x] No frontend, as colunas "Prefeituras (2024)" (n/municípios), "Eleitorado governado (2024)" (n/eleitorado) e "Vereadores (2024)" (n/vereadores) entram na esfera Municípios. Os denominadores vêm de `totais` do recorte: "BR" no Brasil, a UF no recorte por UF. Não vêm da soma das linhas, que deixa de fora os municípios sem prefeito e os partidos `sem_correspondencia`. O JSON leva `totais` por recorte, só com inteiros (F21).
   - Elas ficam visíveis só com o bloco presente.
   - No recorte DF, mostram "—".
   - O detalhe traz a data de corte: "situação divulgada pelo TSE em …; inclui cassações e suplementares" (pergunta em aberto do plano 6, P2).
@@ -2049,22 +2049,22 @@ A correspondência 2024 → 2026 é a tabela versionada do plano 6 (`src/eleicoe
 
 **Files:** Modify `frontend/src/lib/placar-forca.ts`, `verificar-placar-forca.ts` e o componente do detalhe "Partido por UF".
 
-- [ ] No detalhe do partido (F15b), acrescente três links. Eles são incondicionais, porque esta fase só começa com os planos 3, 4 e 5 integrados. A lista fica numa constante do módulo, para retirar um link sem mexer no resto:
+- [x] No detalhe do partido (F15b), acrescente três links. Eles são incondicionais, porque esta fase só começa com os planos 3, 4 e 5 integrados. A lista fica numa constante do módulo, para retirar um link sem mexer no resto:
   - "Capilaridade": `/relatorios/capilaridade?ano={ano}&turno={turno}&cargo={cargo_referencia}&recorte=brasil&partido={n}&consultar=1`;
   - "Verticalização": `/relatorios/verticalizacao?ano={ano}&turno={turno}&uf=TODAS&partido={n}&consultar=1`;
   - "Força da marca": `/relatorios/marca`.
-- [ ] Linhas de federação (fase B) não têm link, porque os três relatórios são por partido.
-- [ ] Uma função pura `linksPartido(placar, partido)` monta as URLs e é testada em `verificar-placar-forca.ts`.
+- [x] Linhas de federação (fase B) não têm link, porque os três relatórios são por partido.
+- [x] Uma função pura `linksPartido(placar, partido)` monta as URLs e é testada em `verificar-placar-forca.ts`.
 
 ### Task 20: Voto de legenda nacional (opcional)
 
 É a única coluna resumida que sai barata, porque o placar já lê `deputadoFederal` (`pais` e `uf`) e `deputadoEstadual` (`uf`).
 
-- [ ] No domínio, guarde `votos_legenda` à parte, além do total, para os dois cargos de deputado no recorte. Isso vale só para essas duas fontes.
-- [ ] Siga a definição D17 do plano 5: `legenda / (nominais + legenda)` sobre a soma das linhas `uf` de cada cargo. Deputado não tem voto no exterior, então a soma das UFs é igual à linha `pais`.
-- [ ] O JSON ganha os inteiros `legenda_federal` e `legenda_estadual` por unidade. O frontend forma a fração com `formatarPercentualContagem` (F21).
-- [ ] Colunas "Voto de legenda (dep. federal)" e "(dep. estadual)" num grupo próprio, "Perfil do voto", fora das três esferas e fora do gráfico F14. As linhas de federação mostram "—", porque a métrica é por partido. No recorte DF, a coluna estadual mostra "—".
-- [ ] Teste cruzado com o plano 5, com os números esperados: 3,01% em federal (3.438.422 de 114.107.982) e 6,45% em estadual (7.204.172 de 111.662.018).
+- [x] No domínio, guarde `votos_legenda` à parte, além do total, para os dois cargos de deputado no recorte. Isso vale só para essas duas fontes.
+- [x] Siga a definição D17 do plano 5: `legenda / (nominais + legenda)` sobre a soma das linhas `uf` de cada cargo. Deputado não tem voto no exterior, então a soma das UFs é igual à linha `pais`.
+- [x] O JSON ganha os inteiros `legenda_federal` e `legenda_estadual` por unidade. O frontend forma a fração com `formatarPercentualContagem` (F21).
+- [x] Colunas "Voto de legenda (dep. federal)" e "(dep. estadual)" num grupo próprio, "Perfil do voto", fora das três esferas e fora do gráfico F14. As linhas de federação mostram "—", porque a métrica é por partido. No recorte DF, a coluna estadual mostra "—".
+- [x] Teste cruzado com o plano 5, com os números esperados: 3,01% em federal (3.438.422 de 114.107.982) e 6,45% em estadual (7.204.172 de 111.662.018).
 
 ### Task 21: Capilaridade e verticalização em colunas (só se o usuário pedir)
 
