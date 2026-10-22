@@ -113,3 +113,36 @@ class PowerReportLine(Base):
     comparecimento: Mapped[int] = mapped_column(Integer, nullable=False)
     votos_nominais: Mapped[int] = mapped_column(Integer, nullable=False)
     votos_legenda: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class SeatReportHeader(Base):
+    __tablename__ = "relatorio_cadeiras"
+    __table_args__ = {"schema": "analise"}
+
+    ano: Mapped[int] = mapped_column(Integer, primary_key=True)
+    turno: Mapped[int] = mapped_column(Integer, primary_key=True)
+    cargo: Mapped[str] = mapped_column(Text, primary_key=True)
+    gerado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class SeatReportVote(Base):
+    __tablename__ = "relatorio_cadeiras_voto"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["ano", "turno", "cargo"],
+            [
+                "analise.relatorio_cadeiras.ano",
+                "analise.relatorio_cadeiras.turno",
+                "analise.relatorio_cadeiras.cargo",
+            ],
+        ),
+        {"schema": "analise"},
+    )
+
+    ano: Mapped[int] = mapped_column(Integer, primary_key=True)
+    turno: Mapped[int] = mapped_column(Integer, primary_key=True)
+    cargo: Mapped[str] = mapped_column(Text, primary_key=True)
+    uf: Mapped[str] = mapped_column(Text, primary_key=True)
+    tipo_voto: Mapped[str] = mapped_column(Text, primary_key=True)
+    numero: Mapped[int] = mapped_column(Integer, primary_key=True)
+    votos: Mapped[int] = mapped_column(Integer, nullable=False)

@@ -129,10 +129,10 @@ def test_require_current_schema_accepts_the_head() -> None:
     session.close()
 
 
-def test_migrations_form_one_linear_chain_ending_at_0003() -> None:
+def test_migrations_form_one_linear_chain_ending_at_0004() -> None:
     script = ScriptDirectory.from_config(migration_config())
-    assert head_revision() == "0003"
-    assert [item.revision for item in script.walk_revisions()] == ["0003", "0002", "0001"]
+    assert head_revision() == "0004"
+    assert [item.revision for item in script.walk_revisions()] == ["0004", "0003", "0002", "0001"]
 
 
 def test_offline_sql_creates_the_base_schema_and_relaxes_legacy_columns() -> None:
@@ -284,3 +284,19 @@ class _FakeEngine:
     @contextmanager
     def begin(self) -> Iterator[_PostgresConnection]:
         yield self._connection
+
+
+def test_0004_creates_the_seat_vote_tables() -> None:
+    sql = _offline("0003:0004")
+    assert "CREATE TABLE IF NOT EXISTS analise.relatorio_cadeiras (" in sql
+    assert "CREATE TABLE IF NOT EXISTS analise.relatorio_cadeiras_voto (" in sql
+    assert "PRIMARY KEY (ano, turno, cargo, uf, tipo_voto, numero)" in sql
+    assert "UPDATE alembic_version SET version_num='0004'" in sql
+    assert "DROP " not in sql
+
+
+def test_0004_downgrade_drops_only_the_seat_tables() -> None:
+    sql = _offline_downgrade("0004:0003")
+    assert "DROP TABLE IF EXISTS analise.relatorio_cadeiras_voto" in sql
+    assert "DROP TABLE IF EXISTS analise.relatorio_cadeiras" in sql
+    assert "relatorio_poder" not in sql
