@@ -129,10 +129,16 @@ def test_require_current_schema_accepts_the_head() -> None:
     session.close()
 
 
-def test_migrations_form_one_linear_chain_ending_at_0004() -> None:
+def test_migrations_form_one_linear_chain_ending_at_0005() -> None:
     script = ScriptDirectory.from_config(migration_config())
-    assert head_revision() == "0004"
-    assert [item.revision for item in script.walk_revisions()] == ["0004", "0003", "0002", "0001"]
+    assert head_revision() == "0005"
+    assert [item.revision for item in script.walk_revisions()] == [
+        "0005",
+        "0004",
+        "0003",
+        "0002",
+        "0001",
+    ]
 
 
 def test_offline_sql_creates_the_base_schema_and_relaxes_legacy_columns() -> None:
@@ -300,3 +306,25 @@ def test_0004_downgrade_drops_only_the_seat_tables() -> None:
     assert "DROP TABLE IF EXISTS analise.relatorio_cadeiras_voto" in sql
     assert "DROP TABLE IF EXISTS analise.relatorio_cadeiras" in sql
     assert "relatorio_poder" not in sql
+
+
+def test_0005_creates_the_municipal_raw_and_analise_tables() -> None:
+    sql = _offline("0004:0005")
+    for table in (
+        "raw.consulta_cand",
+        "raw.consulta_vagas",
+        "raw.detalhe_votacao_munzona",
+        "analise.municipal_carga",
+        "analise.municipal_prefeito",
+        "analise.municipal_vereador",
+    ):
+        assert f"CREATE TABLE IF NOT EXISTS {table}" in sql
+    assert "cd_sit_tot_turno text" in sql
+    assert "consulta_cand_arquivo_membro_idx" in sql
+    assert "UPDATE alembic_version SET version_num='0005'" in sql
+
+
+def test_0005_downgrade_drops_only_the_municipal_tables() -> None:
+    sql = _offline_downgrade("0005:0004")
+    assert "DROP TABLE IF EXISTS analise.municipal_vereador" in sql
+    assert "raw.csec" not in sql

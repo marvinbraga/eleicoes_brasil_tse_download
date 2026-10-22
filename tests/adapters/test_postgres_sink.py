@@ -212,3 +212,14 @@ def _csv(columns: tuple[str, ...], row: tuple[str, ...]) -> bytes:
     writer.writerow(columns)
     writer.writerow(row)
     return buffer.getvalue().encode("latin-1")
+
+
+def test_municipal_contract_loads_into_its_raw_table() -> None:
+    from eleicoes.domain.municipal_contract import CONSULTA_VAGAS
+
+    connection = _Connection()
+    sink = PostgresTabularSink(lambda: connection)
+    payload = _csv(CONSULTA_VAGAS.columns, ("x",) * len(CONSULTA_VAGAS.columns))
+    sink.replace_member(CONSULTA_VAGAS, _provenance(), payload)
+    text = "\n".join(statement for statement, _params in connection.cursor_obj.statements)
+    assert "INSERT INTO raw.consulta_vagas" in text

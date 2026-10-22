@@ -12,8 +12,9 @@ from eleicoes.domain.errors import DatabaseConfigError, ElectionError, SchemaMis
 from eleicoes.domain.importing import ImportStatus, Provenance
 from eleicoes.domain.tabular_contract import TabularContract
 
-_TABLES = frozenset({"csec", "ccont"})
+_TABLES = frozenset({"csec", "ccont", "consulta_cand", "consulta_vagas", "detalhe_votacao_munzona"})
 _COLUMN = compile_pattern(r"^[A-Z][A-Z0-9_]*$")
+_HEADER_BYTES = 64 * 1024
 _DB_KEYS = (
     "POSTGRES_HOST",
     "POSTGRES_PORT",
@@ -251,7 +252,8 @@ def _statements(script: str) -> Iterator[str]:
 
 
 def _check_header(contract: TabularContract, member: str, csv_bytes: bytes) -> None:
-    text = io.StringIO(csv_bytes.decode("latin-1"), newline="")
+    # Só o começo: decodificar o membro inteiro (até 41 MB) multiplica a memória do importer.
+    text = io.StringIO(csv_bytes[:_HEADER_BYTES].decode("latin-1"), newline="")
     try:
         header = tuple(next(csv.reader(text, delimiter=";")))
     except StopIteration as exc:

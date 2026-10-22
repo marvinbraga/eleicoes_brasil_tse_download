@@ -57,6 +57,18 @@ def test_existing_non_empty_file_is_skipped_and_not_requested(tmp_path: Path) ->
     assert target.read_bytes() == b"already"
 
 
+def test_existing_file_is_downloaded_again_when_overwrite_is_asked(tmp_path: Path) -> None:
+    archive = _archive()
+    target = _stored(tmp_path, archive)
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b"already")
+    http = FakeHttp({archive.url: (200, b"fresh")})
+    status = StreamingFileTransfer(http, overwrite=True).transfer(archive, tmp_path)
+    assert status is TransferStatus.DOWNLOADED
+    assert http.urls == [archive.url]
+    assert target.read_bytes() == b"fresh"
+
+
 def test_empty_file_is_downloaded_again(tmp_path: Path) -> None:
     archive = _archive()
     target = _stored(tmp_path, archive)

@@ -2,6 +2,7 @@ import argparse
 import os
 import sys
 from collections.abc import Callable, Mapping, Sequence
+from datetime import datetime
 from pathlib import Path
 from typing import NoReturn, cast
 
@@ -12,6 +13,8 @@ from eleicoes.composition.settings import (
     build_boletim_command,
     build_command,
     build_import_command,
+    build_municipal_download_command,
+    build_municipal_import_command,
     build_urna_command,
     resolve_destination,
     resolve_year,
@@ -20,6 +23,8 @@ from eleicoes.composition.wiring import (
     build_app,
     build_boletim_import,
     build_import,
+    build_municipal_download,
+    build_municipal_import,
     build_urna_download,
 )
 from eleicoes.domain.boletim import BoletimImportReport
@@ -27,9 +32,12 @@ from eleicoes.domain.errors import (
     SCHEMA_OUTDATED_HINT,
     AnnouncedFilesMissingError,
     DatabaseConfigError,
+    DuplicateMayorError,
     ElectionError,
     InvalidBoletimError,
     InvalidElectionYearError,
+    InvalidMunicipalRowError,
+    InvalidMunicipalYearError,
     InvalidPackageRefError,
     InvalidTurnoError,
     InvalidUfError,
@@ -42,15 +50,18 @@ from eleicoes.domain.errors import (
 )
 from eleicoes.domain.importing import ImportReport, ImportStatus
 from eleicoes.domain.layout import write_index
+from eleicoes.domain.municipais import MunicipalImportReport
 from eleicoes.domain.report import EXIT_FAILURE, EXIT_NOT_PUBLISHED, EXIT_SUCCESS, RunReport
 from eleicoes.domain.urna_models import UrnaRunReport
 from eleicoes.domain.values import ElectionYear, Turno, Uf
 from eleicoes.ports.boletim import BoletimImporter
 from eleicoes.ports.download import ElectionDownloader
 from eleicoes.ports.importer import ElectionImporter
+from eleicoes.ports.municipais import MunicipalImporter
 from eleicoes.ports.urna import UrnaDownloader
 from eleicoes.use_cases.list_ausentes import list_ausentes
 
+_MISSING_SHOWN = 3
 _DATABASE_CONFIG = (
     "Configuração do Postgres incompleta. Defina POSTGRES_HOST, POSTGRES_PORT, "
     "POSTGRES_USER, POSTGRES_PASSWORD e POSTGRES_DB."
@@ -73,8 +84,14 @@ def main(
     urnas: UrnaDownloader | None = None,
     boletins: BoletimImporter | None = None,
     migrate: Callable[[Mapping[str, str]], str] | None = None,
+    municipal_download: Callable[[bool], ElectionDownloader] | None = None,
+    municipal_import: MunicipalImporter | None = None,
 ) -> int:
     args = _parse(argv)
+    if args.command == "download-municipais":
+        return _run_municipal_download(args, environ, municipal_download)
+    if args.command == "import-municipais":
+        return _run_municipal_import(args, environ, municipal_import)
     if args.command == "migrar":
         return _run_migrar(environ, migrate)
     if args.command == "import":
@@ -268,6 +285,96 @@ def _run_import(
     return report.exit_code
 
 
+def _run_municipal_download(
+    args: argparse.Namespace,
+    environ: Mapping[str, str] | None,
+    factory: Callable[[bool], ElectionDownloader] | None,
+) -> int:
+    try:
+        command = build_municipal_download_command(
+            _year_argument(args),
+            _destino_argument(args),
+            _environment(environ),
+        )
+        build = factory if factory is not None else _municipal_downloader
+        report = build(_atualizar_argument(args)).execute(command)
+        index = _index(command.destination, report)
+    except ElectionError as error:
+        print(_user_message(error), file=sys.stderr)
+        return EXIT_FAILURE
+    print(_render(report, index))
+    if report.discovered > 0 and report.missing > 0:
+        print(
+            "O TSE não listou todos os zips municipais; a importação não reconstrói a análise "
+            "sem os três.",
+            file=sys.stderr,
+        )
+        return EXIT_FAILURE
+    return report.exit_code
+
+
+def _municipal_downloader(overwrite: bool) -> ElectionDownloader:
+    return build_municipal_download(overwrite=overwrite)
+
+
+def _atualizar_argument(args: argparse.Namespace) -> bool:
+    return cast(object, getattr(args, "atualizar", False)) is True
+
+
+def _run_municipal_import(
+    args: argparse.Namespace,
+    environ: Mapping[str, str] | None,
+    importer: MunicipalImporter | None,
+) -> int:
+    env = _environment(environ)
+    try:
+        command = build_municipal_import_command(_year_argument(args), _origem_argument(args), env)
+        application = importer if importer is not None else build_municipal_import(env)
+        try:
+            report = application.execute(command)
+        finally:
+            application.close()
+    except ElectionError as error:
+        print(_import_message(error), file=sys.stderr)
+        return EXIT_FAILURE
+    except Exception:
+        print("Não foi possível concluir a importação.", file=sys.stderr)
+        return EXIT_FAILURE
+    print(_render_municipal(report))
+    return report.exit_code
+
+
+def _render_municipal(report: MunicipalImportReport) -> str:
+    if report.tables.exit_code == EXIT_NOT_PUBLISHED:
+        return "Nenhum arquivo municipal para importar. Rode download-municipais antes."
+    tables = _render_import(report.tables)
+    built = report.results
+    if built is None and report.faltando:
+        return f"{tables}\n{_missing_members(report.faltando)}"
+    if built is None:
+        return f"{tables}\nA análise municipal não foi reconstruída por causa das falhas."
+    corte = datetime.strptime(built.geracao, "%d%m%Y%H%M")
+    return "\n".join(
+        (
+            tables,
+            f"Municípios: {len(built.municipios)}. Prefeitos eleitos: {built.prefeitos}. "
+            f"Sem prefeito eleito: {built.sem_prefeito}. Suplementares: {built.suplementares}.",
+            f"Vereadores eleitos: {built.vereadores_eleitos}. "
+            f"Divergências entre eleitos e vagas: {len(built.divergencias)}.",
+            f"Dados do TSE gerados em {corte:%d/%m/%Y} às {corte:%H:%M}.",
+        )
+    )
+
+
+def _missing_members(faltando: tuple[str, ...]) -> str:
+    shown = ", ".join(faltando[:_MISSING_SHOWN])
+    more = "" if len(faltando) <= _MISSING_SHOWN else ", …"
+    return (
+        f"A análise municipal não foi reconstruída: faltam {len(faltando)} arquivos por UF "
+        f"({shown}{more}). Rode download-municipais --atualizar e importe de novo."
+    )
+
+
 def _parse(argv: Sequence[str] | None) -> argparse.Namespace:
     parser = _Parser(
         prog="eleicoes",
@@ -288,6 +395,30 @@ def _parse(argv: Sequence[str] | None) -> argparse.Namespace:
         default=None,
         help="Pasta do ano, com indice.csv. Padrão: downloads/{ano} ou DIRETORIO_SAIDA.",
     )
+    municipal = commands.add_parser(
+        "download-municipais",
+        help="Baixa consulta_cand, consulta_vagas e detalhe_votacao_munzona da eleição municipal.",
+        description=(
+            "Baixa só os três zips municipais do TSE e grava downloads/{ano}/indice.csv. "
+            "Não use download --ano 2024: ele baixaria gigabytes de boletins de urna e "
+            "regravaria o mesmo indice.csv sem os zips municipais."
+        ),
+    )
+    _add_year(municipal)
+    municipal.add_argument(
+        "--destino", default=None, help="Pasta de destino. Padrão: downloads/{ano}."
+    )
+    municipal.add_argument(
+        "--atualizar",
+        action="store_true",
+        help="Baixa de novo mesmo se o zip já existir (o TSE regera os arquivos todo dia).",
+    )
+    municipal_in = commands.add_parser(
+        "import-municipais",
+        help="Importa os CSV municipais baixados e reconstrói prefeitos e vereadores eleitos.",
+    )
+    _add_year(municipal_in)
+    municipal_in.add_argument("--origem", default=None, help="Pasta do ano, com indice.csv.")
     boxes = commands.add_parser("urnas", help="Baixa os arquivos de urna de cada seção.")
     _add_urnas(boxes)
     bulletins = commands.add_parser(
@@ -451,6 +582,12 @@ def _render_boletins(report: BoletimImportReport) -> str:
 
 
 def _import_message(error: ElectionError) -> str:
+    if isinstance(error, InvalidMunicipalYearError):
+        return _user_message(error)
+    if isinstance(error, DuplicateMayorError):
+        return f"Há mais de um prefeito eleito em {error.uf} {error.ue}. Confira o consulta_cand."
+    if isinstance(error, InvalidMunicipalRowError):
+        return f"Valor inesperado no campo {error.field} dos dados municipais."
     if isinstance(error, DatabaseConfigError):
         return _DATABASE_CONFIG
     if isinstance(error, SchemaOutdatedError):
@@ -505,6 +642,8 @@ def _render_urnas(report: UrnaRunReport) -> str:
 
 
 def _user_message(error: ElectionError) -> str:
+    if isinstance(error, InvalidMunicipalYearError):
+        return "Ano sem eleição municipal. Informe um ano como 2024."
     if isinstance(error, InvalidElectionYearError):
         return "Ano inválido. Informe um ano entre 1994 e 2100."
     if isinstance(error, MissingElectionYearError):

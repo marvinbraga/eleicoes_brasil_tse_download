@@ -13,6 +13,7 @@ from eleicoes.domain.errors import (
     MissingElectionYearError,
 )
 from eleicoes.domain.importing import ImportCommand
+from eleicoes.domain.municipal_contract import require_municipal_year
 from eleicoes.domain.urna_models import URNA_COLLECTION, UrnaDownloadCommand
 from eleicoes.domain.values import ElectionYear, Turno, Uf, default_turnos, default_ufs
 
@@ -153,3 +154,32 @@ def _clean(value: str | None) -> str | None:
     if not stripped:
         return None
     return stripped
+
+
+def build_municipal_download_command(
+    cli_year: int | None,
+    cli_destino: str | None,
+    env: Mapping[str, str],
+) -> DownloadCommand:
+    """TSE_URL e TSE_DATASET_URL não se aplicam: a lista de zips municipais é fechada."""
+    year = require_municipal_year(resolve_year(cli_year, env))
+    return (
+        DownloadCommandBuilder()
+        .with_year(year)
+        .with_destination(resolve_destination(cli_destino, env, year))
+        .build()
+    )
+
+
+def build_municipal_import_command(
+    cli_year: int | None,
+    cli_origem: str | None,
+    env: Mapping[str, str],
+) -> ImportCommand:
+    year = require_municipal_year(resolve_year(cli_year, env))
+    return (
+        ImportCommandBuilder()
+        .with_year(year)
+        .with_origin(resolve_origin(cli_origem, env, year))
+        .build()
+    )

@@ -52,3 +52,16 @@ def test_downloaded_row_without_a_path_is_rejected(tmp_path: Path) -> None:
     )
     with pytest.raises(ElectionError):
         CsvIndexReader().downloaded(tmp_path)
+
+
+def test_skipped_zips_are_accepted_when_asked(tmp_path: Path) -> None:
+    (tmp_path / "municipais").mkdir()
+    (tmp_path / "indice.csv").write_text(
+        "conjunto,turno,uf,arquivo,caminho,situacao,tamanho_bytes\n"
+        "municipais,,,consulta_cand_2024.zip,municipais/consulta_cand_2024.zip,ignorado,10\n"
+        "municipais,,,consulta_vagas_2024.zip,municipais/consulta_vagas_2024.zip,ausente,\n",
+        encoding="utf-8",
+    )
+    assert CsvIndexReader().downloaded(tmp_path) == ()
+    found = CsvIndexReader(accepted=frozenset({"baixado", "ignorado"})).downloaded(tmp_path)
+    assert [entry.arquivo for entry in found] == ["consulta_cand_2024.zip"]

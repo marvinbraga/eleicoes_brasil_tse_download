@@ -21,12 +21,13 @@ _STATUS_LABEL: Final = {
 class StreamingFileTransfer:
     """Grava o zip em disco por chunks. Resposta que não é HTTP 200 não é persistida."""
 
-    def __init__(self, http: HttpClient) -> None:
+    def __init__(self, http: HttpClient, *, overwrite: bool = False) -> None:
         self._http = http
+        self._overwrite = overwrite
 
     def transfer(self, archive: RemoteZip, destination: Path) -> TransferStatus:
         target = destination / locate(archive.filename).relative_path
-        if _is_complete(target):
+        if not self._overwrite and _is_complete(target):
             _announce(TransferStatus.SKIPPED, target)
             return TransferStatus.SKIPPED
         print(f"[baixando] {target}", flush=True)

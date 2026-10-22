@@ -1,4 +1,4 @@
-.PHONY: up down import migrate migrate-sql migrate-sql-vazio
+.PHONY: up down import migrate migrate-sql migrate-sql-vazio download-municipais import-municipais
 
 up:
 	docker compose up -d --build
@@ -18,3 +18,10 @@ migrate-sql:
 
 migrate-sql-vazio:
 	uv run alembic upgrade head --sql
+
+download-municipais:
+	uv run python -m eleicoes download-municipais --ano 2024 --destino downloads/2024
+
+import-municipais:
+	docker compose run --rm --build importer \
+		python -m eleicoes import-municipais --ano 2024 --origem /data/downloads/2024

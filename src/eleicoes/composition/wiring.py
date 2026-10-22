@@ -7,9 +7,11 @@ from eleicoes.adapters.ckan_catalog import (
     CkanYearCatalog,
 )
 from eleicoes.adapters.ckan_http import RequestsCkanGateway
+from eleicoes.adapters.ckan_municipal_catalog import CkanMunicipalCatalog
 from eleicoes.adapters.classic_cdn_catalog import ClassicCdnCatalog
 from eleicoes.adapters.csv_index_reader import CsvIndexReader
 from eleicoes.adapters.postgres_boletim import PostgresBoletimSink
+from eleicoes.adapters.postgres_municipais import PostgresMunicipalStore
 from eleicoes.adapters.postgres_sink import PostgresTabularSink, connect_postgres
 from eleicoes.adapters.requests_http import RequestsHttpClient
 from eleicoes.adapters.streaming_transfer import StreamingFileTransfer
@@ -22,9 +24,11 @@ from eleicoes.composition.correspondencia import _host_settings
 from eleicoes.domain.request_pace import PARALLEL_SECTIONS, RequestPace
 from eleicoes.ports.http import HttpClient
 from eleicoes.use_cases.download_election import DownloadElectionArchives
+from eleicoes.use_cases.download_municipais import DownloadMunicipalArchives
 from eleicoes.use_cases.download_urnas import DownloadUrnaFiles
 from eleicoes.use_cases.import_boletins import ImportBoletins
 from eleicoes.use_cases.import_election import ImportElectionTables
+from eleicoes.use_cases.import_municipais import ImportMunicipalTables
 
 
 def build_app(http: HttpClient | None = None) -> DownloadElectionArchives:
@@ -66,4 +70,26 @@ def build_boletim_import(env: Mapping[str, str]) -> ImportBoletins:
     return ImportBoletins(
         reader=Asn1BoletimReader(),
         sink=PostgresBoletimSink(lambda: connect_postgres(settings)),
+    )
+
+
+def build_municipal_download(
+    http: HttpClient | None = None,
+    *,
+    overwrite: bool = False,
+) -> DownloadMunicipalArchives:
+    client = http if http is not None else RequestsHttpClient()
+    return DownloadMunicipalArchives(
+        catalog=CkanMunicipalCatalog(RequestsCkanGateway(client)),
+        transfer=StreamingFileTransfer(client, overwrite=overwrite),
+    )
+
+
+def build_municipal_import(env: Mapping[str, str]) -> ImportMunicipalTables:
+    """O índice regravado sem --atualizar marca os zips como ignorado; eles continuam no disco."""
+    return ImportMunicipalTables(
+        index=CsvIndexReader(accepted=frozenset({"baixado", "ignorado"})),
+        archives=ZipArchiveReader(),
+        sink=PostgresTabularSink(lambda: connect_postgres(env)),
+        store=PostgresMunicipalStore(lambda: connect_postgres(env)),
     )

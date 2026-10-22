@@ -10,6 +10,9 @@ _DOWNLOADED = "baixado"
 
 
 class CsvIndexReader:
+    def __init__(self, accepted: frozenset[str] = frozenset({_DOWNLOADED})) -> None:
+        self._accepted = accepted
+
     def downloaded(self, origin: Path) -> tuple[IndexEntry, ...]:
         index = origin / "indice.csv"
         if not index.is_file():
@@ -17,14 +20,14 @@ class CsvIndexReader:
         entries: list[IndexEntry] = []
         with index.open(encoding="utf-8", newline="") as handle:
             for row in csv.DictReader(handle):
-                entry = _entry(origin, row)
+                entry = _entry(origin, row, self._accepted)
                 if entry is not None:
                     entries.append(entry)
         return tuple(entries)
 
 
-def _entry(origin: Path, row: dict[str, str]) -> IndexEntry | None:
-    if row.get("situacao") != _DOWNLOADED:
+def _entry(origin: Path, row: dict[str, str], accepted: frozenset[str]) -> IndexEntry | None:
+    if row.get("situacao") not in accepted:
         return None
     arquivo = row.get("arquivo") or ""
     caminho = row.get("caminho") or ""
