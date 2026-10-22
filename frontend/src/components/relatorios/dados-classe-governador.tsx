@@ -1,4 +1,5 @@
 import { ErroRelatorio } from "@/components/relatorios/erro-relatorio";
+import { GraficoAcertoUf } from "@/components/relatorios/grafico-acerto-uf";
 import { NotasRelatorio } from "@/components/relatorios/notas-relatorio";
 import { TabelaAcertoUf } from "@/components/relatorios/tabela-acerto-uf";
 import { TabelaClasseGovernador } from "@/components/relatorios/tabela-classe-governador";
@@ -103,6 +104,12 @@ export async function DadosClasseGovernador({ ano, turno }: DadosClasseGovernado
           <p>Ficaram de fora, com menos de 2 municípios: {dados.retidas.join(", ")}.</p>
         ) : null}
       </div>
+      <GraficoAcertoUf
+        porUf={dados.por_uf}
+        acerto={dados.acerto}
+        base={dados.base}
+        baseLider={dados.base_lider}
+      />
       <TabelaAcertoUf linhas={dados.por_uf} />
       <p className="max-w-3xl">
         Na tabela de condições, os percentuais das condições são a parte daquele partido nos votos
