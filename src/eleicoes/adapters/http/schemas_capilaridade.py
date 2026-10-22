@@ -58,13 +58,12 @@ _SPREAD_LABELS: Final[dict[str, str]] = {
 
 def format_times(value: Fraction) -> str:
     """Two decimals, half-up, Brazilian comma: 7/4 -> "1,75"."""
-    whole, cents = divmod(round_half_up(value * _HUNDREDTHS), _HUNDREDTHS)
-    return f"{format_integer(whole)},{cents:02d}"
+    return _fixed(value, _HUNDREDTHS)
 
 
-def _four_places(value: Fraction) -> str:
-    whole, rest = divmod(round_half_up(value * _TEN_THOUSANDTHS), _TEN_THOUSANDTHS)
-    return f"{format_integer(whole)},{rest:04d}"
+def _fixed(value: Fraction, scale: int) -> str:
+    whole, rest = divmod(round_half_up(value * scale), scale)
+    return f"{format_integer(whole)},{rest:0{len(str(scale)) - 1}d}"
 
 
 def _times_word(formatted: str) -> str:
@@ -84,10 +83,14 @@ def rotulo_classe(classe: str, scope: Scope, subdivisao: Subdivision | None) -> 
 
 def _regional_label(scope: Scope, subdivisao: Subdivision | None) -> str:
     if subdivisao is None:
-        return "Regional"
+        raise _impossible("regional")
     if scope.tipo == PAIS:
         return f"Regional ({subdivisao.nome})"
     return f"Concentrado em uma UF ({subdivisao.nome})"
+
+
+def _impossible(classe: str) -> ValueError:
+    return ValueError(f"class {classe} without the share that decided it")
 
 
 def _weighted(share: Share) -> tuple[str, str, str]:
@@ -114,7 +117,7 @@ def _motivo_sem_base(party: ClassifiedParty) -> str:
 def _motivo_capitais(party: ClassifiedParty) -> str:
     capitals = party.metrics.capitais
     if capitals is None:
-        return _motivo_espalhado(party)
+        raise _impossible("capitais")
     parte, vezes, eleitorado = _weighted(capitals)
     return (
         f"As capitais deram {parte} dos votos do partido, "
@@ -125,7 +128,7 @@ def _motivo_capitais(party: ClassifiedParty) -> str:
 def _motivo_regional(party: ClassifiedParty) -> str:
     found = party.classificacao.subdivisao
     if found is None:
-        return _motivo_espalhado(party)
+        raise _impossible("regional")
     parte, vezes, eleitorado = _weighted(found.share)
     return (
         f"{found.nome} deu {parte} dos votos do partido, "
@@ -316,7 +319,7 @@ class PartidoCapilaridadeJson(BaseModel):
             ufs_com_voto=metrics.ufs_com_voto,
             municipios=metrics.municipios,
             indice=str(metrics.indice),
-            indice_texto=_four_places(metrics.indice),
+            indice_texto=_fixed(metrics.indice, _TEN_THOUSANDTHS),
             indice_100=round_half_up(metrics.indice * _HUNDREDTHS),
             top10=ParteJson.from_domain(metrics.top10),
             presenca=PresencaJson.from_domain(metrics),

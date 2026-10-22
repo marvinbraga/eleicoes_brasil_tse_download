@@ -10,9 +10,9 @@ from fastapi import FastAPI
 from tests.adapters.test_read_api import _ports as _read_ports
 
 from eleicoes.adapters.http.dependencies import clear_report_caches, get_capillarity_job
-from eleicoes.adapters.http.schemas_capilaridade import NOTES, format_times, motivo
+from eleicoes.adapters.http.schemas_capilaridade import NOTES, format_times, motivo, rotulo_classe
 from eleicoes.composition.api import create_app
-from eleicoes.domain.capilaridade import PartyMetrics, Share
+from eleicoes.domain.capilaridade import BRASIL, PartyMetrics, Scope, Share, Subdivision
 from eleicoes.domain.capilaridade_classe import (
     CapillarityReport,
     Classification,
@@ -260,7 +260,7 @@ def test_format_times_rounds_half_up() -> None:
     assert format_times(Fraction(0)) == "0,00"
 
 
-def _classified(capitais: Share, classe: str) -> ClassifiedParty:
+def _classified(capitais: Share | None, classe: str) -> ClassifiedParty:
     metrics = PartyMetrics(
         partido=50,
         votos=10,
@@ -306,3 +306,124 @@ def test_other_reasons_are_exact() -> None:
     assert motivo(_classified(capitals, "sem_base")) == (
         "Só 100 municípios com voto; são precisos 20 para classificar."
     )
+
+
+_PARTY_KEYS = {
+    "partido",
+    "votos",
+    "votos_validos",
+    "votos_validos_recorte",
+    "fatia",
+    "fatia_texto",
+    "fatia_recorte_texto",
+    "ufs_com_voto",
+    "municipios",
+    "indice",
+    "indice_texto",
+    "indice_100",
+    "top10",
+    "presenca",
+    "capitais",
+    "subdivisoes",
+    "faixas",
+    "fortes",
+    "maiores",
+    "classe",
+    "rotulo_classe",
+    "motivo",
+}
+_SHARE_KEYS = {
+    "municipios",
+    "votos",
+    "parte",
+    "parte_texto",
+    "eleitorado",
+    "eleitorado_texto",
+    "vezes",
+}
+_PLACE_KEYS = {"codigo", "nome", "votos", "votos_validos", "fatia", "fatia_texto"}
+_SUMMARY_KEYS = {
+    "partido",
+    "votos",
+    "fatia",
+    "fatia_texto",
+    "indice",
+    "indice_100",
+    "presenca",
+    "presenca_texto",
+    "ufs_com_voto",
+    "classe",
+    "rotulo_classe",
+}
+
+
+def test_capilaridade_party_fields_follow_the_contract() -> None:
+    body = _get(_app(_sample()), _BASE_QUERY).json()
+    for party in body["partidos"]:
+        assert set(party) == _PARTY_KEYS
+        assert set(party["top10"]) == _SHARE_KEYS
+        assert set(party["presenca"]) == {"municipios", "parte", "parte_texto"}
+        assert party["capitais"] is None or set(party["capitais"]) == _SHARE_KEYS
+        assert all(set(item) == _SHARE_KEYS | {"codigo", "nome"} for item in party["subdivisoes"])
+        assert all(
+            set(item) == {"chave", "municipios", "votos_validos", "votos"}
+            for item in party["faixas"]
+        )
+        assert len(party["fortes"]) <= 5
+        assert len(party["maiores"]) <= 5
+        assert all(set(item) == _PLACE_KEYS for item in party["fortes"] + party["maiores"])
+    assert all(set(item) == _SUMMARY_KEYS for item in body["resumo"])
+    capital = _party(body, 50)
+    assert capital["fatia"] == "5/57"
+    assert capital["indice"] == "50/57"  # 1 - 420/3420: only Rio Branco voted
+    assert (capital["indice_texto"], capital["indice_100"]) == ("0,8772", 88)
+    assert capital["fortes"][0]["codigo"] == _RIO_BRANCO
+    assert [item["codigo"] for item in capital["maiores"]] == [_RIO_BRANCO]
+    pernambuco_only = _get(_app(_sample()), f"{_BASE_QUERY}&uf=PE").json()
+    assert all(party["capitais"] is None for party in pernambuco_only["partidos"])
+
+
+def test_capilaridade_validates_the_scope_before_building() -> None:
+    built: list[str] = []
+    application = create_app(ports=_read_ports())
+
+    def job(ano: int, turno: int, cargo: str) -> CapillarityReport:
+        built.append(cargo)
+        return build_capillarity(_Cells(_sample()), ano, turno, cargo)
+
+    application.dependency_overrides[get_capillarity_job] = lambda: job
+    for query in ("regiao=XX", "uf=ZZ", "uf=QQ", "regiao=NE&uf=PE"):
+        assert _get(application, f"{_BASE_QUERY}&{query}").status_code == 422
+    assert built == []
+
+
+def test_capilaridade_region_se_is_sudeste_not_sergipe() -> None:
+    response = _get(_app(_sample()), f"{_BASE_QUERY}&regiao=SE")
+    assert response.status_code == 409
+    assert response.json()["detail"].endswith("no recorte Sudeste.")
+
+
+def test_regional_label_inside_a_region_names_the_uf() -> None:
+    acre = Subdivision("AC", "Acre", Share(1, 1, 1, Fraction(1), Fraction(1, 2)))
+    norte = Scope("regiao", "NO", "Norte")
+    assert rotulo_classe("regional", norte, acre) == "Concentrado em uma UF (Acre)"
+    assert rotulo_classe("regional", BRASIL, acre) == "Regional (Acre)"
+    assert rotulo_classe("espalhado", norte, None) == "Espalhado pela região"
+    assert rotulo_classe("capitais", BRASIL, None) == "Concentrado nas capitais"
+
+
+def test_vez_and_vezes_at_the_edges() -> None:
+    def vezes_text(parte: Fraction) -> str:
+        return motivo(_classified(Share(27, 1, 20, parte, Fraction(1, 2)), "capitais"))
+
+    assert "1,00 vez o peso" in vezes_text(Fraction(1, 2))
+    assert "1,99 vez o peso" in vezes_text(Fraction(199, 200))
+    assert "0,50 vezes o peso" in vezes_text(Fraction(1, 4))
+    assert "2,00 vezes o peso" in vezes_text(Fraction(1995, 2000))
+
+
+def test_a_class_without_its_deciding_share_is_a_bug() -> None:
+    with pytest.raises(ValueError):
+        motivo(_classified(None, "capitais"))
+    with pytest.raises(ValueError):
+        motivo(_classified(None, "regional"))

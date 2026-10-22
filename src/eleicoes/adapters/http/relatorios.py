@@ -31,6 +31,7 @@ from eleicoes.adapters.http.schemas_relatorios import (
     GradeJson,
     ProfileJson,
 )
+from eleicoes.domain.capilaridade import scope_of
 from eleicoes.ports.boletim_consulta import AsyncBoletimReader
 from eleicoes.ports.grade import AsyncMunicipalityNames
 from eleicoes.ports.municipais import AsyncMunicipalResultsReader
@@ -282,5 +283,6 @@ async def capilaridade(
     regiao: str | None = None,
     uf: str | None = None,
 ) -> CapilaridadeJson:
+    scope_of(regiao, uf)  # a bad scope answers 422 before the report is built
     report = await asyncio.to_thread(build, ano, turno, cargo)
     return CapilaridadeJson.from_domain(report, report.view(regiao, uf))
