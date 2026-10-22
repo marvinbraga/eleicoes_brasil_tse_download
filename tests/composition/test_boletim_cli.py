@@ -197,6 +197,9 @@ def test_factory_uses_the_published_port_when_compose_host_is_hidden(
 
     monkeypatch.setattr("eleicoes.composition.wiring.connect_postgres", connect)
     monkeypatch.setattr("eleicoes.composition.correspondencia._resolves", lambda _host: False)
+    monkeypatch.setattr(
+        "eleicoes.adapters.postgres_boletim.require_current_revision", lambda _cursor: None
+    )
     monkeypatch.setattr(Asn1BoletimReader, "__init__", skip_compile)
     monkeypatch.setattr(Asn1BoletimReader, "read", read_empty)
     section = tmp_path / "arquivo-urna" / "turno-1" / "AC" / "01104" / "0005" / "0028"

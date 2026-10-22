@@ -99,10 +99,9 @@ def test_mapped_tables_keep_the_existing_schemas() -> None:
     )
 
 
-def test_postgres_ensure_model_runs_the_ddl_script() -> None:
+def test_postgres_ensure_model_checks_the_revision_instead_of_running_ddl() -> None:
     session = ScriptedSession()
-    PostgresPowerReportStore(lambda: session).ensure_model()
-    text = "\n".join(item.text for _begin, item in session.executed if isinstance(item, TextClause))
-    assert "CREATE SCHEMA IF NOT EXISTS analise" in text
-    assert "CREATE TABLE IF NOT EXISTS raw.csec" in text
-    assert "timestamptz" in text
+    seen: list[object] = []
+    PostgresPowerReportStore(lambda: session, seen.append).ensure_model()
+    assert seen == [session]
+    assert not any(isinstance(item, TextClause) for _begin, item in session.executed)

@@ -7,9 +7,9 @@ import psycopg
 import pytest
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.sql.dml import Delete, Insert
-from sqlalchemy.sql.elements import TextClause
 from tests.adapters.orm_fakes import ScriptedSession, memory_sessions
 
+import eleicoes.adapters.postgres_relatorio_presidente_governador as cross_store
 from eleicoes.adapters.postgres_relatorio_presidente_governador import (
     PostgresPresidentGovernorStore,
     _places,
@@ -25,23 +25,22 @@ _LATER = datetime(2026, 10, 8, 15, 0, tzinfo=UTC)
 _NAIVE = datetime(2026, 10, 8, 14, 30)
 
 
-def test_ensure_model_creates_the_cross_tables_without_html_or_drop() -> None:
+@pytest.fixture(autouse=True)
+def _schema_checks(monkeypatch: pytest.MonkeyPatch) -> list[object]:
+    seen: list[object] = []
+    monkeypatch.setattr(cross_store, "require_current_schema", seen.append)
+    return seen
+
+
+def test_postgres_ensure_model_checks_the_revision_once_without_ddl(
+    _schema_checks: list[object],
+) -> None:
     session = ScriptedSession()
-    PostgresPresidentGovernorStore(lambda: session).ensure_model()
-    text = "\n".join(item.text for _begin, item in session.executed if isinstance(item, TextClause))
-    assert "CREATE TABLE IF NOT EXISTS analise.relatorio_presidente_governador (" in text
-    assert "CREATE TABLE IF NOT EXISTS analise.relatorio_presidente_governador_linha" in text
-    assert "CREATE TABLE IF NOT EXISTS analise.relatorio_presidente_governador_cedula" in text
-    assert "PRIMARY KEY (ano, turno)" in text
-    assert "PRIMARY KEY (ano, turno, uf, codigo, cargo, partido)" in text
-    assert "PRIMARY KEY (ano, turno, uf, codigo, cargo)" in text
-    assert "REFERENCES analise.relatorio_presidente_governador (ano, turno)" in text
-    assert "branco integer NOT NULL" in text
-    assert "nulo integer NOT NULL" in text
-    assert "gerado_em timestamptz NOT NULL DEFAULT now()" in text
-    assert "DROP" not in text
-    assert "html" not in text
-    assert "margem" not in text
+    store = PostgresPresidentGovernorStore(lambda: session)
+    store.ensure_model()
+    store.ensure_model()
+    assert _schema_checks == [session]
+    assert session.executed == []
 
 
 def test_save_replaces_lines_and_cedulas_in_one_transaction() -> None:

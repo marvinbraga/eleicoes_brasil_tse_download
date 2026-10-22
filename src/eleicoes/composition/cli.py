@@ -1,12 +1,13 @@
 import argparse
 import os
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import NoReturn, cast
 
 from dotenv import load_dotenv
 
+from eleicoes.composition.migracao import migrate_database
 from eleicoes.composition.settings import (
     build_boletim_command,
     build_command,
@@ -32,6 +33,7 @@ from eleicoes.domain.errors import (
     InvalidTurnoError,
     InvalidUfError,
     MissingElectionYearError,
+    SchemaOutdatedError,
     TransportError,
     TseBlockedError,
     UnexpectedHttpStatusError,
@@ -47,6 +49,15 @@ from eleicoes.ports.download import ElectionDownloader
 from eleicoes.ports.importer import ElectionImporter
 from eleicoes.ports.urna import UrnaDownloader
 from eleicoes.use_cases.list_ausentes import list_ausentes
+
+_DATABASE_CONFIG = (
+    "Configuração do Postgres incompleta. Defina POSTGRES_HOST, POSTGRES_PORT, "
+    "POSTGRES_USER, POSTGRES_PASSWORD e POSTGRES_DB."
+)
+_SCHEMA_OUTDATED = (
+    "O esquema do banco está desatualizado. Rode make migrate "
+    "(ou python -m eleicoes migrar) e tente de novo."
+)
 
 
 class _Parser(argparse.ArgumentParser):
@@ -64,8 +75,11 @@ def main(
     importer: ElectionImporter | None = None,
     urnas: UrnaDownloader | None = None,
     boletins: BoletimImporter | None = None,
+    migrate: Callable[[Mapping[str, str]], str] | None = None,
 ) -> int:
     args = _parse(argv)
+    if args.command == "migrar":
+        return _run_migrar(environ, migrate)
     if args.command == "import":
         return _run_import(args, environ, importer)
     if args.command == "urnas":
@@ -146,6 +160,23 @@ def _run_boletins(
         return EXIT_FAILURE
     print(_render_boletins(report))
     return report.exit_code
+
+
+def _run_migrar(
+    environ: Mapping[str, str] | None,
+    migrate: Callable[[Mapping[str, str]], str] | None,
+) -> int:
+    upgrade = migrate if migrate is not None else migrate_database
+    try:
+        revision = upgrade(_environment(environ))
+    except DatabaseConfigError:
+        print(_DATABASE_CONFIG, file=sys.stderr)
+        return EXIT_FAILURE
+    except Exception:
+        print("Não foi possível atualizar o esquema do banco.", file=sys.stderr)
+        return EXIT_FAILURE
+    print(f"Esquema do banco atualizado. Revisão: {revision}.")
+    return EXIT_SUCCESS
 
 
 def _run_ausentes(
@@ -269,6 +300,10 @@ def _parse(argv: Sequence[str] | None) -> argparse.Namespace:
     _add_year(bulletins)
     bulletins.add_argument("--turno", type=int, default=None, help="Turno 1 ou 2.")
     bulletins.add_argument("--uf", default=None, help="Sigla da UF.")
+    commands.add_parser(
+        "migrar",
+        help="Cria ou atualiza o esquema do Postgres com as migrações do Alembic.",
+    )
     missing = commands.add_parser(
         "ausentes",
         help="Lista os arquivos de urna marcados como ausentes, sem baixar nem importar.",
@@ -395,10 +430,9 @@ def _boletim_message(error: ElectionError) -> str:
     if isinstance(error, InvalidBoletimError):
         return f"Boletim inválido: {error.arquivo}."
     if isinstance(error, DatabaseConfigError):
-        return (
-            "Configuração do Postgres incompleta. Defina POSTGRES_HOST, POSTGRES_PORT, "
-            "POSTGRES_USER, POSTGRES_PASSWORD e POSTGRES_DB."
-        )
+        return _DATABASE_CONFIG
+    if isinstance(error, SchemaOutdatedError):
+        return _SCHEMA_OUTDATED
     if isinstance(error, InvalidTurnoError):
         return "Turno inválido. Informe 1 ou 2."
     if isinstance(error, InvalidUfError):
@@ -421,10 +455,9 @@ def _render_boletins(report: BoletimImportReport) -> str:
 
 def _import_message(error: ElectionError) -> str:
     if isinstance(error, DatabaseConfigError):
-        return (
-            "Configuração do Postgres incompleta. Defina POSTGRES_HOST, POSTGRES_PORT, "
-            "POSTGRES_USER, POSTGRES_PASSWORD e POSTGRES_DB."
-        )
+        return _DATABASE_CONFIG
+    if isinstance(error, SchemaOutdatedError):
+        return _SCHEMA_OUTDATED
     if isinstance(error, (InvalidElectionYearError, MissingElectionYearError)):
         return _user_message(error)
     return "Não foi possível concluir a importação."

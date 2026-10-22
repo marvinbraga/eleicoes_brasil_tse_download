@@ -1,3 +1,19 @@
+"""Base schema: the raw and analise tables as tables.sql created them before Alembic.
+
+Revision ID: 0001
+Revises:
+"""
+
+from typing import Final
+
+from alembic import op
+
+revision: Final = "0001"
+down_revision: Final[str | None] = None
+branch_labels: Final[str | None] = None
+depends_on: Final[str | None] = None
+
+_DDL: Final = """
 CREATE SCHEMA IF NOT EXISTS raw;
 
 CREATE SCHEMA IF NOT EXISTS analise;
@@ -179,3 +195,15 @@ CREATE TABLE IF NOT EXISTS analise.relatorio_poder_linha (
     PRIMARY KEY (ano, turno, cargo, nivel, codigo, partido),
     FOREIGN KEY (ano, turno, cargo) REFERENCES analise.relatorio_poder (ano, turno, cargo)
 );
+"""
+
+
+def upgrade() -> None:
+    for chunk in _DDL.split(";"):
+        statement = chunk.strip()
+        if statement:
+            op.execute(statement)
+
+
+def downgrade() -> None:
+    raise NotImplementedError("the base schema holds imported data and is never dropped")

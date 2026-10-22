@@ -244,3 +244,11 @@ class CargoSemCelulasError(ElectionError):
 class UnusableGroupCountError(ElectionError):
     def __init__(self) -> None:
         super().__init__("O número de grupos não cabe nos municípios.")
+
+
+class SchemaOutdatedError(ElectionError):
+    def __init__(self, current: tuple[str, ...], expected: str) -> None:
+        self.current = current
+        self.expected = expected
+        found = ", ".join(current) or "none"
+        super().__init__(f"database schema revision {found} is not {expected}")

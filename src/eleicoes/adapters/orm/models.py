@@ -1,4 +1,4 @@
-"""Mapped tables for the report stores. Columns follow adapters/sql/tables.sql."""
+"""Mapped tables for the report stores. Columns follow the Alembic migrations."""
 
 from datetime import datetime
 

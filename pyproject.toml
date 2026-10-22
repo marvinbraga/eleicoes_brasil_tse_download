@@ -16,6 +16,7 @@ dependencies = [
     "sqlalchemy[asyncio]>=2,<3",
     "scikit-learn>=1.5,<2",
     "numpy>=2,<3",
+    "alembic>=1.20.0,<2",
 ]
 
 [project.scripts]
@@ -29,7 +30,7 @@ build-backend = "hatchling.build"
 packages = ["src/eleicoes"]
 
 [tool.hatch.build.targets.wheel.force-include]
-"src/eleicoes/adapters/sql/tables.sql" = "eleicoes/adapters/sql/tables.sql"
+"src/eleicoes/adapters/orm/migrations/script.py.mako" = "eleicoes/adapters/orm/migrations/script.py.mako"
 "src/eleicoes/adapters/sql/views.sql" = "eleicoes/adapters/sql/views.sql"
 "src/eleicoes/adapters/asn1/bu.asn1" = "eleicoes/adapters/asn1/bu.asn1"
 
