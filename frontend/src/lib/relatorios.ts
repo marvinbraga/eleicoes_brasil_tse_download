@@ -616,7 +616,7 @@ function lerCelula(valor: unknown): CelulaGrade {
   };
 }
 
-function exigirLista<T>(valor: unknown, ler: (item: unknown) => T): T[] {
+export function exigirLista<T>(valor: unknown, ler: (item: unknown) => T): T[] {
   if (!Array.isArray(valor)) {
     throw new RespostaInvalidaError();
   }
@@ -627,21 +627,21 @@ function ehRegistro(valor: unknown): valor is Record<string, unknown> {
   return typeof valor === "object" && valor !== null && !Array.isArray(valor);
 }
 
-function exigirRegistro(valor: unknown): Record<string, unknown> {
+export function exigirRegistro(valor: unknown): Record<string, unknown> {
   if (!ehRegistro(valor)) {
     throw new RespostaInvalidaError();
   }
   return valor;
 }
 
-function exigirTexto(valor: unknown): string {
+export function exigirTexto(valor: unknown): string {
   if (typeof valor !== "string") {
     throw new RespostaInvalidaError();
   }
   return valor;
 }
 
-function exigirTextoOuNulo(valor: unknown): string | null {
+export function exigirTextoOuNulo(valor: unknown): string | null {
   if (valor === null) {
     return null;
   }
@@ -655,7 +655,7 @@ function exigirBooleano(valor: unknown): boolean {
   return valor;
 }
 
-function exigirInteiro(valor: unknown): number {
+export function exigirInteiro(valor: unknown): number {
   if (typeof valor !== "number" || !Number.isSafeInteger(valor) || valor < 0) {
     throw new RespostaInvalidaError();
   }

@@ -1,5 +1,7 @@
+import type { RelatorioCapilaridade } from "@/lib/capilaridade";
 import { urlApi } from "@/lib/eleicoes";
 import { lerPlacarForca, RespostaForcaInvalidaError, type PlacarForca } from "@/lib/forca";
+import { lerCapilaridade, paramsRecorte } from "@/lib/ler-capilaridade";
 import { lerMunicipais2024, type RelatorioMunicipais } from "@/lib/municipais-2024";
 import {
   lerCadeiras,
@@ -94,6 +96,16 @@ export function buscarMunicipais2024(uf: string | null): Promise<Resultado<Relat
     params.set("uf", uf);
   }
   return buscar("/relatorios/dados/municipais-2024", params, lerMunicipais2024);
+}
+
+export function buscarCapilaridade(
+  ano: string,
+  turno: string,
+  cargo: string,
+  recorte: string,
+): Promise<Resultado<RelatorioCapilaridade>> {
+  const params = new URLSearchParams({ ano, turno, cargo, ...paramsRecorte(recorte) });
+  return buscar("/relatorios/dados/capilaridade", params, lerCapilaridade);
 }
 
 async function buscar<T>(
