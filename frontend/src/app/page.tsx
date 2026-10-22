@@ -40,6 +40,11 @@ const DESTINOS = [
       "Estimativa de cadeiras na Câmara, nas Assembleias, no Senado e nos governos.",
   },
   {
+    href: "/relatorios/capilaridade",
+    titulo: "Capilaridade",
+    descricao: "Se a força de cada partido está espalhada ou concentrada nos municípios.",
+  },
+  {
     href: "/relatorios/municipais-2024",
     titulo: "Municipais 2024",
     descricao: "Prefeitos, eleitorado governado e vereadores de 2024 por partido.",
