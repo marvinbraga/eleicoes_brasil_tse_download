@@ -8,6 +8,7 @@ import { buscarClasseGovernador } from "@/lib/buscar-relatorios";
 import type { Ano, Turno } from "@/lib/eleicoes";
 import { formatarInteiro } from "@/lib/fracao";
 import { frasesClasse } from "@/lib/grafico-acerto-classe";
+import { rotuloPartido } from "@/lib/partidos";
 import type { LinhaClasseGovernador } from "@/lib/relatorios";
 
 const SIGNIFICADO: Record<string, string> = {
@@ -171,6 +172,7 @@ function textoDaRegra(regra: string): string {
     return "Não há uma condição que aponte só esta situação.";
   }
   return regra
+    .replace(/a fatia do partido (\d+) /g, (_, numero: string) => `o ${rotuloPartido(Number(numero))} `)
     .replaceAll("a fatia do partido ", "o partido ")
     .replaceAll(" for menor ou igual a ", " ficou com até ")
     .replaceAll(" for maior que ", " ficou com mais de ");

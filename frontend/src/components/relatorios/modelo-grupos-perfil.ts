@@ -1,4 +1,5 @@
 import { lerFatia } from "@/lib/fatia";
+import { rotuloPartido } from "@/lib/partidos";
 import { compararNumero, type Direcao } from "@/lib/ordem";
 import type { GrupoPerfil } from "@/lib/relatorios";
 
@@ -6,6 +7,7 @@ export type ColunaGrupo = {
   id: string;
   rotulo: string;
   titulo?: string;
+  partido?: number;
   numerica: boolean;
 };
 
@@ -18,8 +20,8 @@ export function colunasDeGrupo(partidos: readonly number[], comCedula: boolean):
   partidos.forEach((partido, indice) => {
     colunas.push({
       id: `centro:${indice}`,
-      rotulo: String(partido),
-      titulo: `Partido ${partido}`,
+      rotulo: rotuloPartido(partido),
+      partido,
       numerica: true,
     });
   });

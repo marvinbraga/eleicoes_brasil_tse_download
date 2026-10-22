@@ -9,7 +9,7 @@ import {
   relativoDe,
   type ColunaGrupo,
 } from "@/components/relatorios/modelo-grupos-perfil";
-import { tinta } from "@/components/relatorios/tabela-poder";
+import { RotuloColunaPartido, tinta } from "@/components/relatorios/tabela-poder";
 import {
   Table,
   TableBody,
@@ -116,7 +116,11 @@ function Cabecalho({
   return (
     <TableHead scope="col" aria-sort={ordem} className={alinhado} title={coluna.titulo}>
       <button type="button" className={`w-full bg-transparent ${alinhado}`} onClick={onClick}>
-        {coluna.rotulo}
+        {coluna.partido === undefined ? (
+          coluna.rotulo
+        ) : (
+          <RotuloColunaPartido partido={coluna.partido} />
+        )}
       </button>
     </TableHead>
   );

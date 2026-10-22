@@ -1,10 +1,11 @@
 import { lerFatia } from "./fatia.ts";
 import { formatarInteiro, formatarPercentualContagem, TRACO } from "./fracao.ts";
+import { rotuloPartido } from "./partidos.ts";
 import type { GrupoPerfil } from "./relatorios.ts";
 
 export const LARGURA = 680,
-  ESQUERDA = 56,
-  LARGURA_MISTURA = 260,
+  ESQUERDA = 112,
+  LARGURA_MISTURA = 220,
   X_PESO_ROTULO = 412,
   X_PESO = 476,
   LARGURA_PESO = 140,
@@ -90,8 +91,8 @@ export function layoutPerfis(entrada: EntradaPerfis): LayoutPerfis | null {
       const partido = partidos[indice] ?? 0;
       return {
         chave: `p${partido}`,
-        rotulo: String(partido),
-        titulo: `Partido ${partido}`,
+        rotulo: rotuloPartido(partido),
+        titulo: rotuloPartido(partido),
         ...fatiaDe(grupo, indice),
         tom,
       };
@@ -150,12 +151,12 @@ export function resumoPerfis(entrada: EntradaPerfis): string {
   }
   const frases = [
     `${entrada.grupos.length} ${entrada.grupos.length === 1 ? "grupo" : "grupos"}.`,
-    `Partidos no gráfico: ${juntar(principaisPerfis(entrada).map(String))}.`,
+    `Partidos no gráfico: ${juntar(principaisPerfis(entrada).map(rotuloPartido))}.`,
   ];
   for (const grupo of entrada.grupos) {
     const lider = liderDe(entrada.partidos, grupo);
     const base = `Grupo ${grupo.numero}: ${formatarInteiro(grupo.municipios)} municípios`;
-    frases.push(lider === null ? `${base}.` : `${base}, lidera o ${lider.partido} com ${lider.texto}.`);
+    frases.push(lider === null ? `${base}.` : `${base}, lidera o ${rotuloPartido(lider.partido)} com ${lider.texto}.`);
   }
   return frases.join(" ");
 }

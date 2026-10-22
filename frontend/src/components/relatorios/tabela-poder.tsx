@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 
 import {
   Table,
@@ -19,6 +19,7 @@ import {
   TRACO,
   type Fracao,
 } from "@/lib/fracao";
+import { rotuloPartido, siglaPartido } from "@/lib/partidos";
 import type { CelulaGrade, LinhaGrade } from "@/lib/relatorios";
 
 type TabelaPoderProps = {
@@ -87,9 +88,9 @@ export function TabelaPoder({ titulo, apoio, colunas, linhas, escala }: TabelaPo
           {colunas.map((partido) => (
             <Cabecalho
               key={partido}
-              rotulo={String(partido)}
+              rotulo={<RotuloColunaPartido partido={partido} />}
               alinhado="text-right"
-              titulo={`Partido ${partido}`}
+              titulo={rotuloPartido(partido)}
               ariaOrdem={aria(coluna, direcao, partido)}
               onClick={() => alternar(partido)}
             />
@@ -140,7 +141,7 @@ function Cabecalho({
   ariaOrdem,
   onClick,
 }: {
-  rotulo: string;
+  rotulo: ReactNode;
   alinhado: string;
   titulo?: string;
   ariaOrdem: "none" | "ascending" | "descending";
@@ -152,6 +153,19 @@ function Cabecalho({
         {rotulo}
       </button>
     </TableHead>
+  );
+}
+
+export function RotuloColunaPartido({ partido }: { partido: number }) {
+  const sigla = siglaPartido(partido);
+  if (sigla === null) {
+    return <>{partido}</>;
+  }
+  return (
+    <span className="inline-flex flex-col items-end text-xs leading-tight">
+      <span>{sigla}</span>
+      <span className="font-normal text-muted-foreground tabular-nums">{partido}</span>
+    </span>
   );
 }
 

@@ -19,6 +19,7 @@ import {
   TRACO,
   type Fracao,
 } from "@/lib/fracao";
+import { rotuloPartido } from "@/lib/partidos";
 import {
   rotuloClasse,
   type LeituraCargo,
@@ -279,5 +280,5 @@ function par(partido: PartidoRanqueado | null, validos: number): [string, string
   if (partido === null) {
     return [TRACO, TRACO];
   }
-  return [String(partido.partido), formatarPercentualContagem(partido.votos, validos)];
+  return [rotuloPartido(partido.partido), formatarPercentualContagem(partido.votos, validos)];
 }

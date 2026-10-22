@@ -40,11 +40,12 @@ const l = layoutPerfis(entrada)!;
 assert.equal(l.blocos.length, 2);
 assert.equal(l.restantes, 2);
 const [b1, b2] = l.blocos;
-assert.deepEqual(b1.barras.map((b) => b.rotulo), ["13", "22", "10", "70", "30", "Outros"]);
+assert.deepEqual(b1.barras.map((b) => b.rotulo), ["PT 13", "PL 22", "REPUBLICANOS 10", "AVANTE 70", "NOVO 30", "Outros"]);
 assert.deepEqual(b1.barras.map((b) => b.tom), [0, 1, 2, 3, 4, null]);
 assert.deepEqual(b1.barras.map((b) => b.texto), ["60,00%", "20,00%", "5,00%", "6,00%", "4,00%", "5,00%"]);
 assert.equal(b2.barras[5].texto, "13,00%");
 assert.equal(b1.barras[5].titulo, "Outros 2 partidos");
+assert.equal(b1.barras[0].titulo, "PT 13");
 assert.equal(l.teto, 0.7);
 assert.equal(l.tetoTexto, "70%");
 assert.ok(Math.abs(b2.barras[2].largura - LARGURA_MISTURA) < 1e-9);
@@ -61,7 +62,7 @@ assert.equal(b1.peso[1].y, b1.barras[1].y);
 
 // branco e nulo fora; sem resto, sem "Outros"; uma barra só ainda cabe o peso
 const dois = layoutPerfis({ partidos: [13, 22], grupos: [{ numero: 1, municipios: 5, comparecimento: 50, centro: ["40,00%", "60,00%", "3,00%", "4,00%"] }] })!;
-assert.deepEqual(dois.blocos[0].barras.map((b) => b.rotulo), ["22", "13"]);
+assert.deepEqual(dois.blocos[0].barras.map((b) => b.rotulo), ["PL 22", "PT 13"]);
 assert.equal(dois.restantes, 0);
 assert.equal(dois.teto, 0.6);
 const um = layoutPerfis({ partidos: [13], grupos: [{ numero: 1, municipios: 5, comparecimento: 50, centro: ["100,00%"] }] })!;
@@ -70,7 +71,7 @@ assert.equal(um.altura, TOPO + CABECA + ALTURA_BLOCO_BASE * PASSO + BASE);
 const restoZero = layoutPerfis({ partidos: [1, 2, 3, 4, 5, 6], grupos: [{ numero: 1, municipios: 1, comparecimento: 1, centro: ["50,00%", "20,00%", "10,00%", "10,00%", "10,00%", "0,00%"] }] })!;
 assert.equal(restoZero.blocos[0].barras.length, 5);
 const ruim = layoutPerfis({ partidos: [1, 2], grupos: [{ numero: 1, municipios: 1, comparecimento: 1, centro: ["—", "10,00%"] }] })!;
-assert.deepEqual(ruim.blocos[0].barras.map((b) => [b.rotulo, b.texto, b.fracao]), [["2", "10,00%", 0.1], ["1", "—", 0]]);
+assert.deepEqual(ruim.blocos[0].barras.map((b) => [b.rotulo, b.texto, b.fracao]), [["Partido 2", "10,00%", 0.1], ["Partido 1", "—", 0]]);
 
 // entradas vazias
 assert.equal(layoutPerfis({ partidos, grupos: [] }), null);
@@ -80,7 +81,7 @@ assert.equal(layoutPerfis({ partidos: [1], grupos: [{ numero: 1, municipios: 0, 
 // resumo
 assert.equal(
   resumoPerfis(entrada),
-  "2 grupos. Partidos no gráfico: 13, 22, 10, 70 e 30. Grupo 1: 300 municípios, lidera o 13 com 60,00%. Grupo 2: 100 municípios, lidera o 10 com 70,00%.",
+  "2 grupos. Partidos no gráfico: PT 13, PL 22, REPUBLICANOS 10, AVANTE 70 e NOVO 30. Grupo 1: 300 municípios, lidera o PT 13 com 60,00%. Grupo 2: 100 municípios, lidera o REPUBLICANOS 10 com 70,00%.",
 );
 assert.equal(resumoPerfis({ partidos, grupos: [] }), "Nenhum grupo.");
 

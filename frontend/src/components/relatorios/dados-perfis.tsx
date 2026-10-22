@@ -13,6 +13,7 @@ import {
 } from "@/lib/eleicoes";
 import { formatarInteiro } from "@/lib/fracao";
 import { leituraSeparacao, liderDe } from "@/lib/grafico-perfis";
+import { rotuloPartido } from "@/lib/partidos";
 import type { GrupoPerfil, RelatorioPerfis } from "@/lib/relatorios";
 
 const NOTAS_CLARAS: Record<string, string> = {
@@ -138,5 +139,5 @@ function leituraDoGrupo(partidos: readonly number[], grupo: GrupoPerfil): string
   if (lider === null) {
     return base;
   }
-  return `${base} Lidera o partido ${lider.partido}, com ${lider.texto} dos votos válidos.`;
+  return `${base} Lidera o ${rotuloPartido(lider.partido)}, com ${lider.texto} dos votos válidos.`;
 }
