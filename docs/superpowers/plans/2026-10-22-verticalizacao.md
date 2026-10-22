@@ -1038,17 +1038,31 @@ O schema tem os modelos `CargoVerticalJson`, `CoerenciaJson`, `UfComparacaoJson`
 ### Task 8: Verificação real do backend
 
 - [ ] **Step 1:** Reconstruir e subir a API: `docker compose build api && docker compose up -d api`. Esperado: o contêiner `api` em `healthy` depois de cerca de 20 s (`docker compose ps api`).
-- [ ] **Step 2:** `time curl -s 'http://localhost:15000/relatorios/dados/verticalizacao?ano=2026&turno=1' -o /tmp/claude-1000/vert.json -w '%{http_code}\n'`. Esperado: `200`, com o primeiro pedido em menos de 30 s e o segundo em menos de 1 s (cache).
-- [ ] **Step 3:** Conferir um número contra o SQL. Para o primeiro partido de `partidos` (P), a `fatia` de deputadoFederal deve bater, em 2 casas, com:
+- [x] **Step 2:** `time curl -s 'http://localhost:15000/relatorios/dados/verticalizacao?ano=2026&turno=1' -o /tmp/claude-1000/vert.json -w '%{http_code}\n'`. Esperado: `200`, com o primeiro pedido em menos de 30 s e o segundo em menos de 1 s (cache).
+- [x] **Step 3:** Conferir um número contra o SQL. Para o primeiro partido de `partidos` (P), a `fatia` de deputadoFederal deve bater, em 2 casas, com:
   ```sql
   select round(100.0 * sum(votos_nominais + votos_legenda) filter (where partido = P)
          / sum(votos_nominais + votos_legenda), 2)
   from analise.relatorio_poder_linha
   where ano = 2026 and turno = 1 and cargo = 'deputadoFederal' and nivel = 'uf' and codigo <> 'ZZ';
   ```
-- [ ] **Step 4:** Rodar `…&uf=SP&partido=13&cargo_x=deputadoEstadual&cargo_y=governador`. Esperado: `dispersao.pontos` com cerca de 645 itens (municípios de SP), ou `[]` se o 13 não concorreu a governador em SP, caso em que `comparacoes[0].sem_candidato` traz SP.
-- [ ] **Step 5:** `…&uf=ZZ` dá 422. `…&cargo_x=governador&cargo_y=governador` dá 422.
+- [x] **Step 4:** Rodar `…&uf=SP&partido=13&cargo_x=deputadoEstadual&cargo_y=governador`. Esperado: `dispersao.pontos` com cerca de 645 itens (municípios de SP), ou `[]` se o 13 não concorreu a governador em SP, caso em que `comparacoes[0].sem_candidato` traz SP.
+- [x] **Step 5:** `…&uf=ZZ` dá 422. `…&cargo_x=governador&cargo_y=governador` dá 422.
 - [ ] **Step 6:** Memória: `docker stats --no-stream api`. Esperado: uso bem abaixo de 1,5 GiB depois do cache quente. Anote o valor no resumo da task.
+
+**Resultado (2026-10-22, execução no worktree, sem Docker):** os Steps 2 a 5 rodaram em processo com `get_vertical_job()` contra o Postgres real, só leitura. Os Steps 1 e 6 (contêiner e `docker stats`) ficam para o orquestrador. Números:
+- Brasil a frio: 3,4 s. Com cache: 0,015 s. JSON de 0,53 MB. Pico de memória do processo: 370 MB.
+- `municipios = 5571`, `sem_uf = 0`, 30 partidos. O primeiro é o 22, e a fatia de deputado federal dele (22,64%) bate com o SQL do Step 3 (22.64).
+- A dispersão padrão (22, Dep. federal × Governador) tem 3.118 pontos, com r = 0,3749.
+- SP, partido 13, Dep. estadual × Governador: 645 pontos, r = 0,7450, classe `alinhado` e sem `sem_candidato`.
+- `uf=DF`: Dep. estadual com `ufs_total = 0` ("n/a").
+- `uf=ZZ` dá 422 "UF inválida.", e governador × governador dá 422 "Cargo inválido.".
+- Calibração (classe somada no Brasil, 30 partidos):
+  - Governador ↔ Dep. estadual: 24 alinhado, 2 puxador, 1 base, 3 sem candidato. Por UF: 161 alinhado, 9 puxador, 10 base.
+  - Senador ↔ Dep. federal: 27 alinhado, 2 puxador, 1 sem candidato. Por UF: 221 alinhado, 28 puxador, 20 base.
+  - Presidente ↔ Dep. federal: 11 alinhado, 1 base, 17 sem candidato, 1 null. Por UF: 291 alinhado, 10 puxador, 23 base.
+  - Perfil: 23 alinhado, 4 puxador, 2 base, 1 sem comparação.
+  - Os limiares ficam como estão, por decisão do usuário (rever depois).
 
 ---
 
