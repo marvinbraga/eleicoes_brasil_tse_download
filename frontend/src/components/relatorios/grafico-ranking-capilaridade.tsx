@@ -89,7 +89,8 @@ function Desenho({ layout, sufixo, resumo, className }: DesenhoProps) {
       {barras.map((barra) => {
         const linhaTopo = barra.y - descida;
         return (
-          <a key={barra.partido} href={barra.href} aria-label={`${barra.rotulo}: índice ${barra.valor}`}>
+          // Dentro de role="img" o link não é anunciado; a tabela abaixo leva os mesmos links.
+          <a key={barra.partido} href={barra.href} tabIndex={-1} aria-hidden="true">
             <rect
               x={0}
               y={linhaTopo}

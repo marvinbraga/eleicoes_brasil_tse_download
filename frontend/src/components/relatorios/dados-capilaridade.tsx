@@ -96,6 +96,7 @@ function Lugares({ titulo, lugares }: { titulo: string; lugares: readonly LugarC
   return (
     <div className="folha-quieta">
       <h3 className="font-medium">{titulo}</h3>
+      {lugares.length === 0 ? <p className="mt-2 text-sm text-muted-foreground">Sem dados.</p> : null}
       <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm">
         {lugares.map((lugar) => (
           <li key={lugar.codigo} className="tabular-nums">

@@ -126,7 +126,15 @@ function larguraNecessaria(
   util: number,
 ): number {
   const maior = Math.max(...barras.map((barra) => larguraTexto(textoDireita(barra, medidas), medidas.fonte)));
-  return medidas.esquerda + util + maior + FOLGA_TEXTO;
+  const direita = medidas.esquerda + util + maior + FOLGA_TEXTO;
+  if (!medidas.rotuloAcima) {
+    return direita;
+  }
+  // Estreito: o rótulo com a classe fica acima da barra e também precisa caber.
+  const acima = Math.max(
+    ...barras.map((barra) => larguraTexto(`${barra.rotulo} · ${barra.classe}`, medidas.fonte)),
+  );
+  return Math.max(direita, medidas.esquerda + acima + FOLGA_TEXTO);
 }
 
 function dicaRanking(item: PartidoCapilaridade): string[] {
