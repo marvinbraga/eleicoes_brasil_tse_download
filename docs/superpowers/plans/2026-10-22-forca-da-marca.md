@@ -132,7 +132,7 @@ Regras da implementação:
 - **`ufs`:** uma entrada por linha, na ordem da grade. `uf` vem de `linha.codigo` e `nome` de `linha.nome`. `texto` é `formatarPercentualContagem(Σlegenda, Σvotos)`, ou `"—"` se `Σvotos = 0`. `celulas` traz só os partidos do `ranking`, na ordem do ranking. `texto` da célula é o percentual se o estado for `"ok"`, ou `"—"` nos outros casos.
 - **`estadoCelula`:** se `nominais + legenda === 0`, devolve `"sem-votos"`. Se `nominais === 0`, devolve `"sem-candidato"`. Se `nominais + legenda < MINIMO_VOTOS_UF`, devolve `"poucos"`. Nos outros casos, `"ok"`.
 
-- [ ] **Step 1: Escrever o teste.** Criar `frontend/src/lib/verificar-grafico-marca.ts` com o conteúdo abaixo. As Tasks 2 e 3 acrescentam blocos antes do `console.log("ok")` final.
+- [x] **Step 1: Escrever o teste.** Criar `frontend/src/lib/verificar-grafico-marca.ts` com o conteúdo abaixo. As Tasks 2 e 3 acrescentam blocos antes do `console.log("ok")` final.
 
 ```ts
 import assert from "node:assert/strict";
@@ -268,13 +268,13 @@ assert.deepEqual(estadual.ufs.map((uf) => [uf.uf, uf.texto]), [["AC", "12,65%"],
 console.log("ok");
 ```
 
-- [ ] **Step 2: Rodar e ver falhar.**
+- [x] **Step 2: Rodar e ver falhar.**
   Run: `cd frontend && node --experimental-strip-types src/lib/verificar-grafico-marca.ts`
   Expected: erro `ERR_MODULE_NOT_FOUND` citando `grafico-marca.ts`.
 
-- [ ] **Step 3: Implementar** `frontend/src/lib/grafico-marca.ts` seguindo as Interfaces e as Regras acima. Funções internas sugeridas: `somarPorPartido(linhas): Map<number, { nominais: number; legenda: number }>`, `compararMarca(a, b): number` e `partidoMarca(partido, contagem, legendaCargo, votosCargo): PartidoMarca`.
+- [x] **Step 3: Implementar** `frontend/src/lib/grafico-marca.ts` seguindo as Interfaces e as Regras acima. Funções internas sugeridas: `somarPorPartido(linhas): Map<number, { nominais: number; legenda: number }>`, `compararMarca(a, b): number` e `partidoMarca(partido, contagem, legendaCargo, votosCargo): PartidoMarca`.
 
-- [ ] **Step 4: Rodar até passar.**
+- [x] **Step 4: Rodar até passar.**
   Run: `cd frontend && node --experimental-strip-types src/lib/verificar-grafico-marca.ts`
   Expected: `ok`
   Run: `pnpm exec tsc --noEmit && pnpm exec eslint src/lib/grafico-marca.ts src/lib/verificar-grafico-marca.ts`
@@ -323,7 +323,7 @@ Regras de `comparacaoCargos`:
 - `maisMuda` é o par com maior `|ie − if|`, em que `i = (legenda·Vcargo)/(votos·Lcargo)`. A conta é exata com `BigInt`: `n = le·Ve·tf·Lf − lf·Vf·te·Le` e `d = te·Le·tf·Lf`, e a comparação de `|n1|/d1` com `|n2|/d2` é por produto cruzado. Empate vai para o menor número. Se o maior `|n|` for 0 ou algum `L` for 0, `maisMuda` é `null`.
 - `fatiaLegendaNacional` soma as linhas da grade, mantém `votos > 0`, devolve um `Map` inserido em ordem crescente de partido e calcula `texto` com `formatarPercentualContagem`.
 
-- [ ] **Step 1: Acrescentar os testes** (antes de `console.log("ok")`; incluir `comparacaoCargos`, `fatiaLegendaNacional` e `leituraMarca` no import):
+- [x] **Step 1: Acrescentar os testes** (antes de `console.log("ok")`; incluir `comparacaoCargos`, `fatiaLegendaNacional` e `leituraMarca` no import):
 
 ```ts
 // contrato do Placar: todo partido com votos, sem mínimo, em ordem de número
@@ -372,9 +372,9 @@ assert.equal(
 assert.deepEqual(leituraMarca(null, null), []);
 ```
 
-- [ ] **Step 2: Rodar e ver falhar.** Run: `cd frontend && node --experimental-strip-types src/lib/verificar-grafico-marca.ts`. Expected: `SyntaxError: The requested module './grafico-marca.ts' does not provide an export named 'comparacaoCargos'`.
-- [ ] **Step 3: Implementar** as três funções. `juntar` é local (mesma lógica de `grafico-poder.ts:316-322`, que não é exportada).
-- [ ] **Step 4: Rodar até `ok`**, depois `pnpm exec tsc --noEmit && pnpm exec eslint src/lib/grafico-marca.ts src/lib/verificar-grafico-marca.ts`, sem saída.
+- [x] **Step 2: Rodar e ver falhar.** Run: `cd frontend && node --experimental-strip-types src/lib/verificar-grafico-marca.ts`. Expected: `SyntaxError: The requested module './grafico-marca.ts' does not provide an export named 'comparacaoCargos'`.
+- [x] **Step 3: Implementar** as três funções. `juntar` é local (mesma lógica de `grafico-poder.ts:316-322`, que não é exportada).
+- [x] **Step 4: Rodar até `ok`**, depois `pnpm exec tsc --noEmit && pnpm exec eslint src/lib/grafico-marca.ts src/lib/verificar-grafico-marca.ts`, sem saída.
 
 **If Task Fails:**
 1. A frase difere por espaço ou pontuação: compare caractere a caractere com `assert.deepEqual`, que mostra o diff.
@@ -424,7 +424,7 @@ assert.deepEqual(leituraMarca(null, null), []);
   // `Voto de legenda como múltiplo da média de cada cargo. ${rotulo}: federal ${f.vezes}, estadual ${e.vezes}; ...`.
   ```
 
-- [ ] **Step 1: Acrescentar os testes:**
+- [x] **Step 1: Acrescentar os testes:**
 
 ```ts
 // ranking: barras da grafico-poder, escala que inclui a média e linha de referência
@@ -488,9 +488,9 @@ assert.equal(
 
 Acrescente ao import do teste `itensRanking`, `layoutRanking`, `resumoRanking`, `layoutHalteres`, `resumoHalteres`, `MEDIDAS_HALTERES_PADRAO`, `MEDIDAS_HALTERES_ESTREITO`, `type LayoutRanking` e `type LayoutHalteres`, além de `MEDIDAS_PADRAO` e `MEDIDAS_ESTREITO` de `./grafico-poder.ts` e `larguraTexto` de `./largura-texto.ts`.
 
-- [ ] **Step 2: Rodar e ver falhar** com `does not provide an export named 'itensRanking'`.
-- [ ] **Step 3: Implementar.** `layoutRanking` chama `layoutBarras(itensRanking(marca), medidas)` e depois recalcula `largura` de cada barra e acrescenta `classe` (pelo índice, que é o mesmo do ranking) e `xReferencia`.
-- [ ] **Step 4: Rodar até `ok`.** Depois rodar `tsc` e `eslint` nos dois arquivos, sem saída.
+- [x] **Step 2: Rodar e ver falhar** com `does not provide an export named 'itensRanking'`.
+- [x] **Step 3: Implementar.** `layoutRanking` chama `layoutBarras(itensRanking(marca), medidas)` e depois recalcula `largura` de cada barra e acrescenta `classe` (pelo índice, que é o mesmo do ranking) e `xReferencia`.
+- [x] **Step 4: Rodar até `ok`.** Depois rodar `tsc` e `eslint` nos dois arquivos, sem saída.
 
 **If Task Fails:**
 1. `xReferencia` passa da borda: a escala precisa ser `Math.max(maior, media)`.
