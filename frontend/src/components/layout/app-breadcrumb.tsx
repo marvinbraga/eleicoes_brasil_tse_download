@@ -33,6 +33,7 @@ const TRILHAS: Record<string, Trilha> = {
   "/relatorios/cadeiras": { pagina: "Simulação de cadeiras", relatorios: true },
   "/relatorios/capilaridade": { pagina: "Capilaridade", relatorios: true },
   "/relatorios/verticalizacao": { pagina: "Verticalização", relatorios: true },
+  "/relatorios/marca": { pagina: "Força da marca", relatorios: true },
   "/relatorios/municipais-2024": { pagina: "Municipais 2024", relatorios: true },
   "/mapa": { pagina: "Mapa", relatorios: false },
 };

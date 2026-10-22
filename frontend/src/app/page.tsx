@@ -51,6 +51,11 @@ const DESTINOS = [
       "Se a força de cada partido se sustenta entre presidente, governador, senador e deputados.",
   },
   {
+    href: "/relatorios/marca",
+    titulo: "Força da marca",
+    descricao: "Quanto do voto para deputado foi só no número do partido.",
+  },
+  {
     href: "/relatorios/municipais-2024",
     titulo: "Municipais 2024",
     descricao: "Prefeitos, eleitorado governado e vereadores de 2024 por partido.",

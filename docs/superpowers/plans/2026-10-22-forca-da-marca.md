@@ -132,7 +132,7 @@ Regras da implementação:
 - **`ufs`:** uma entrada por linha, na ordem da grade. `uf` vem de `linha.codigo` e `nome` de `linha.nome`. `texto` é `formatarPercentualContagem(Σlegenda, Σvotos)`, ou `"—"` se `Σvotos = 0`. `celulas` traz só os partidos do `ranking`, na ordem do ranking. `texto` da célula é o percentual se o estado for `"ok"`, ou `"—"` nos outros casos.
 - **`estadoCelula`:** se `nominais + legenda === 0`, devolve `"sem-votos"`. Se `nominais === 0`, devolve `"sem-candidato"`. Se `nominais + legenda < MINIMO_VOTOS_UF`, devolve `"poucos"`. Nos outros casos, `"ok"`.
 
-- [ ] **Step 1: Escrever o teste.** Criar `frontend/src/lib/verificar-grafico-marca.ts` com o conteúdo abaixo. As Tasks 2 e 3 acrescentam blocos antes do `console.log("ok")` final.
+- [x] **Step 1: Escrever o teste.** Criar `frontend/src/lib/verificar-grafico-marca.ts` com o conteúdo abaixo. As Tasks 2 e 3 acrescentam blocos antes do `console.log("ok")` final.
 
 ```ts
 import assert from "node:assert/strict";
@@ -268,13 +268,13 @@ assert.deepEqual(estadual.ufs.map((uf) => [uf.uf, uf.texto]), [["AC", "12,65%"],
 console.log("ok");
 ```
 
-- [ ] **Step 2: Rodar e ver falhar.**
+- [x] **Step 2: Rodar e ver falhar.**
   Run: `cd frontend && node --experimental-strip-types src/lib/verificar-grafico-marca.ts`
   Expected: erro `ERR_MODULE_NOT_FOUND` citando `grafico-marca.ts`.
 
-- [ ] **Step 3: Implementar** `frontend/src/lib/grafico-marca.ts` seguindo as Interfaces e as Regras acima. Funções internas sugeridas: `somarPorPartido(linhas): Map<number, { nominais: number; legenda: number }>`, `compararMarca(a, b): number` e `partidoMarca(partido, contagem, legendaCargo, votosCargo): PartidoMarca`.
+- [x] **Step 3: Implementar** `frontend/src/lib/grafico-marca.ts` seguindo as Interfaces e as Regras acima. Funções internas sugeridas: `somarPorPartido(linhas): Map<number, { nominais: number; legenda: number }>`, `compararMarca(a, b): number` e `partidoMarca(partido, contagem, legendaCargo, votosCargo): PartidoMarca`.
 
-- [ ] **Step 4: Rodar até passar.**
+- [x] **Step 4: Rodar até passar.**
   Run: `cd frontend && node --experimental-strip-types src/lib/verificar-grafico-marca.ts`
   Expected: `ok`
   Run: `pnpm exec tsc --noEmit && pnpm exec eslint src/lib/grafico-marca.ts src/lib/verificar-grafico-marca.ts`
@@ -323,7 +323,7 @@ Regras de `comparacaoCargos`:
 - `maisMuda` é o par com maior `|ie − if|`, em que `i = (legenda·Vcargo)/(votos·Lcargo)`. A conta é exata com `BigInt`: `n = le·Ve·tf·Lf − lf·Vf·te·Le` e `d = te·Le·tf·Lf`, e a comparação de `|n1|/d1` com `|n2|/d2` é por produto cruzado. Empate vai para o menor número. Se o maior `|n|` for 0 ou algum `L` for 0, `maisMuda` é `null`.
 - `fatiaLegendaNacional` soma as linhas da grade, mantém `votos > 0`, devolve um `Map` inserido em ordem crescente de partido e calcula `texto` com `formatarPercentualContagem`.
 
-- [ ] **Step 1: Acrescentar os testes** (antes de `console.log("ok")`; incluir `comparacaoCargos`, `fatiaLegendaNacional` e `leituraMarca` no import):
+- [x] **Step 1: Acrescentar os testes** (antes de `console.log("ok")`; incluir `comparacaoCargos`, `fatiaLegendaNacional` e `leituraMarca` no import):
 
 ```ts
 // contrato do Placar: todo partido com votos, sem mínimo, em ordem de número
@@ -372,9 +372,9 @@ assert.equal(
 assert.deepEqual(leituraMarca(null, null), []);
 ```
 
-- [ ] **Step 2: Rodar e ver falhar.** Run: `cd frontend && node --experimental-strip-types src/lib/verificar-grafico-marca.ts`. Expected: `SyntaxError: The requested module './grafico-marca.ts' does not provide an export named 'comparacaoCargos'`.
-- [ ] **Step 3: Implementar** as três funções. `juntar` é local (mesma lógica de `grafico-poder.ts:316-322`, que não é exportada).
-- [ ] **Step 4: Rodar até `ok`**, depois `pnpm exec tsc --noEmit && pnpm exec eslint src/lib/grafico-marca.ts src/lib/verificar-grafico-marca.ts`, sem saída.
+- [x] **Step 2: Rodar e ver falhar.** Run: `cd frontend && node --experimental-strip-types src/lib/verificar-grafico-marca.ts`. Expected: `SyntaxError: The requested module './grafico-marca.ts' does not provide an export named 'comparacaoCargos'`.
+- [x] **Step 3: Implementar** as três funções. `juntar` é local (mesma lógica de `grafico-poder.ts:316-322`, que não é exportada).
+- [x] **Step 4: Rodar até `ok`**, depois `pnpm exec tsc --noEmit && pnpm exec eslint src/lib/grafico-marca.ts src/lib/verificar-grafico-marca.ts`, sem saída.
 
 **If Task Fails:**
 1. A frase difere por espaço ou pontuação: compare caractere a caractere com `assert.deepEqual`, que mostra o diff.
@@ -424,7 +424,7 @@ assert.deepEqual(leituraMarca(null, null), []);
   // `Voto de legenda como múltiplo da média de cada cargo. ${rotulo}: federal ${f.vezes}, estadual ${e.vezes}; ...`.
   ```
 
-- [ ] **Step 1: Acrescentar os testes:**
+- [x] **Step 1: Acrescentar os testes:**
 
 ```ts
 // ranking: barras da grafico-poder, escala que inclui a média e linha de referência
@@ -488,9 +488,9 @@ assert.equal(
 
 Acrescente ao import do teste `itensRanking`, `layoutRanking`, `resumoRanking`, `layoutHalteres`, `resumoHalteres`, `MEDIDAS_HALTERES_PADRAO`, `MEDIDAS_HALTERES_ESTREITO`, `type LayoutRanking` e `type LayoutHalteres`, além de `MEDIDAS_PADRAO` e `MEDIDAS_ESTREITO` de `./grafico-poder.ts` e `larguraTexto` de `./largura-texto.ts`.
 
-- [ ] **Step 2: Rodar e ver falhar** com `does not provide an export named 'itensRanking'`.
-- [ ] **Step 3: Implementar.** `layoutRanking` chama `layoutBarras(itensRanking(marca), medidas)` e depois recalcula `largura` de cada barra e acrescenta `classe` (pelo índice, que é o mesmo do ranking) e `xReferencia`.
-- [ ] **Step 4: Rodar até `ok`.** Depois rodar `tsc` e `eslint` nos dois arquivos, sem saída.
+- [x] **Step 2: Rodar e ver falhar** com `does not provide an export named 'itensRanking'`.
+- [x] **Step 3: Implementar.** `layoutRanking` chama `layoutBarras(itensRanking(marca), medidas)` e depois recalcula `largura` de cada barra e acrescenta `classe` (pelo índice, que é o mesmo do ranking) e `xReferencia`.
+- [x] **Step 4: Rodar até `ok`.** Depois rodar `tsc` e `eslint` nos dois arquivos, sem saída.
 
 **If Task Fails:**
 1. `xReferencia` passa da borda: a escala precisa ser `Math.max(maior, media)`.
@@ -503,6 +503,8 @@ Acrescente ao import do teste `itensRanking`, `layoutRanking`, `resumoRanking`, 
 1. **REQUIRED SUB-SKILL:** Use jarvis:codereview: dispatch all reviewers in parallel sobre `frontend/src/lib/grafico-marca.ts` e `frontend/src/lib/verificar-grafico-marca.ts`.
 2. **Handle findings by severity:** see jarvis:codereview severity rules.
 3. **Proceed only when:** zero Critical/High/Medium issues remain. Foco: exatidão (D5, D9, D10), `fora` nunca some, células vazias nunca viram 0%.
+
+> **Executada em 2026-10-22:** 8 revisores, nenhum problema de código acima de Low. A revisão de testes (por mutação) achou ramos não cobertos (desempate por número e por nome de UF, `sem-candidato`/`poucos` via `ufMarca`, `maisMuda` nulo, layout com partes zeradas); asserts acrescentados. Desvio aceito: `layoutRanking` passa `valor: 1` ao `layoutBarras` para manter as linhas mesmo com todas as partes zeradas.
 
 ---
 
@@ -578,8 +580,8 @@ const [respostaFederal, respostaEstadual] = await Promise.all(
   - para cada cargo, um `<section aria-labelledby>` com `<h2 className="leitura-titulo text-xl">` ("Deputado federal" ou "Deputado estadual"), seguido de `ErroRelatorio` se a resposta falhou, ou de `GraficoMarca`, `TabelaMarca` e `TabelaMarcaUf` se a marca existe, ou do texto "Sem votos gravados para este cargo." se a marca é `null`;
   - por fim, se as duas marcas existem e `comparacaoCargos(...).pares.length > 0`, o `GraficoMarcaCargos`.
 
-- [ ] **Step 1:** Implementar os cinco componentes.
-- [ ] **Step 2:** Run (de `frontend/`): `pnpm exec tsc --noEmit && pnpm exec eslint src/components/relatorios/*marca*.tsx && node --experimental-strip-types src/lib/verificar-grafico-marca.ts`. Expected: só `ok`.
+- [x] **Step 1:** Implementar os cinco componentes.
+- [x] **Step 2:** Run (de `frontend/`): `pnpm exec tsc --noEmit && pnpm exec eslint src/components/relatorios/*marca*.tsx && node --experimental-strip-types src/lib/verificar-grafico-marca.ts`. Expected: só `ok`.
 
 **If Task Fails:**
 1. Erro de tipo em `Promise.all` com `map`: tipe o retorno como `Promise<Resultado<GradeRelatorio>>[]` ou chame `buscarGrade` duas vezes, de forma explícita.
@@ -595,7 +597,7 @@ const [respostaFederal, respostaEstadual] = await Promise.all(
 - Modify: `frontend/src/components/layout/app-breadcrumb.tsx` (`TRILHAS`, linhas 20–33)
 - Modify: `frontend/src/app/page.tsx` (`DESTINOS`, linhas 10–36)
 
-- [ ] **Step 1:** Criar a página:
+- [x] **Step 1:** Criar a página:
 
 ```tsx
 import type { Metadata } from "next";
@@ -627,11 +629,11 @@ export default function MarcaPage() {
 }
 ```
 
-- [ ] **Step 2:** Navegação (uma entrada em cada arquivo). "Força da marca" é a 5ª do bloco dos seis planos, depois de "Classe do governador": fica depois de Força partidária, Cadeiras, Capilaridade e Verticalização, se existirem, e antes de "Municipais 2024" e "Mapa" (alinhado em 2026-10-22):
+- [x] **Step 2:** Navegação (uma entrada em cada arquivo). "Força da marca" é a 5ª do bloco dos seis planos, depois de "Classe do governador": fica depois de Força partidária, Cadeiras, Capilaridade e Verticalização, se existirem, e antes de "Municipais 2024" e "Mapa" (alinhado em 2026-10-22):
   - `app-sidebar.tsx`: `{ href: "/relatorios/marca", rotulo: "Força da marca" },`
   - `app-breadcrumb.tsx`: `"/relatorios/marca": { pagina: "Força da marca", relatorios: true },`
   - `app/page.tsx`: `{ href: "/relatorios/marca", titulo: "Força da marca", descricao: "Quanto do voto para deputado foi só no número do partido." },`
-- [ ] **Step 3:** Run: `pnpm exec tsc --noEmit && pnpm exec eslint src/app/relatorios/marca/page.tsx src/components/layout/app-sidebar.tsx src/components/layout/app-breadcrumb.tsx src/app/page.tsx`. Expected: nenhuma saída.
+- [x] **Step 3:** Run: `pnpm exec tsc --noEmit && pnpm exec eslint src/app/relatorios/marca/page.tsx src/components/layout/app-sidebar.tsx src/components/layout/app-breadcrumb.tsx src/app/page.tsx`. Expected: nenhuma saída.
 
 **If Task Fails:**
 1. Next 16 reclama da assinatura da página: leia `frontend/node_modules/next/dist/docs/` (veja `frontend/AGENTS.md`). A página não recebe `searchParams`.
@@ -672,6 +674,8 @@ export default function MarcaPage() {
 ### Task 8 (opcional): Mapa de calor partido × UF
 
 Faça esta task só se o humano confirmar (Q5). Ela é independente das Tasks 5 a 7.
+
+> **Não executada:** o usuário decidiu em 2026-10-22 que a página fica sem mapa de calor (seção "Decisões do usuário"). A `TabelaMarcaUf` é o indicador por UF.
 
 **Files:**
 - Modify: `frontend/src/lib/grafico-marca.ts`
@@ -722,6 +726,8 @@ assert.equal(layoutCalor({ ...federal, ranking: [] }), null);
 1. **REQUIRED SUB-SKILL:** Use jarvis:codereview: dispatch all reviewers in parallel sobre todos os arquivos novos e modificados.
 2. **Handle findings by severity:** see jarvis:codereview severity rules.
 3. **Proceed only when:** zero Critical/High/Medium issues remain. Depois, `node --experimental-strip-types src/lib/verificar-grafico-marca.ts` (`ok`), `pnpm exec tsc --noEmit` e `pnpm exec eslint` (sem saída). Sem commit, a não ser que o usuário peça.
+
+> **Executada em 2026-10-22:** 8 revisores, todos PASS. Corrigidos: `CARGOS_MARCA` sem uso (agora no `Promise.all`), "100.000" fixo nos textos, rodapé "1,00×" com média zero, motivo `sr-only` na média de UF vazia, testes do meio exato e do rótulo oculto. Fica como dívida: a moldura do SVG de `grafico-marca.tsx` repete a de `grafico-poder.tsx` (estender `GraficoPoder` mexeria num componente compartilhado). A Task 7 (navegador) fica para o orquestrador.
 
 ## Perguntas em aberto
 
