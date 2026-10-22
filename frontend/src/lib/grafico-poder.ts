@@ -1,10 +1,11 @@
 import { formatarInteiro, formatarPercentualContagem } from "./fracao.ts";
+import { rotuloPartido } from "./partidos.ts";
 import type { LinhaGrade } from "./relatorios.ts";
 
 export const LARGURA = 640,
   ALTURA_LINHA = 28,
   ALTURA_BARRA = 16,
-  ESQUERDA = 96,
+  ESQUERDA = 120,
   DIREITA = 72,
   TOPO = 4,
   BASE = 4,
@@ -16,6 +17,7 @@ export type ItemBarra = {
   valor: number;
   texto: string;
   detalhe: string;
+  lugares?: number;
 };
 
 export type Barra = ItemBarra & { y: number; largura: number };
@@ -58,24 +60,37 @@ export function liderancasPoder(linhas: readonly LinhaGrade[]): {
   empates: number;
 } {
   const disputas = disputasDe(linhas);
-  const contagem = new Map<number, number>();
+  const votosLiderados = new Map<number, number>();
+  const lugaresLiderados = new Map<number, number>();
   let empates = 0;
   for (const disputa of disputas) {
     if (empatada(disputa)) {
       empates += 1;
     } else {
       const partido = disputa.primeiro.partido;
-      contagem.set(partido, (contagem.get(partido) ?? 0) + 1);
+      votosLiderados.set(partido, (votosLiderados.get(partido) ?? 0) + disputa.validos);
+      lugaresLiderados.set(partido, (lugaresLiderados.get(partido) ?? 0) + 1);
     }
   }
   const lugares = disputas.length;
-  const itens = agrupar(ordenarContagens(contagem)).map((grupo) => ({
-    chave: grupo.chave,
-    rotulo: grupo.rotulo,
-    valor: grupo.valor,
-    texto: formatarInteiro(grupo.valor),
-    detalhe: `${formatarInteiro(grupo.valor)} de ${formatarInteiro(lugares)} ${lugares === 1 ? "lugar" : "lugares"}`,
-  }));
+  const total = disputas.reduce((soma, disputa) => soma + disputa.validos, 0);
+  const contagens = ordenarContagens(votosLiderados);
+  const grupos = agrupar(contagens);
+  const visiveis = grupos.filter((grupo) => grupo.chave !== "outros").length;
+  const itens = grupos.map((grupo) => {
+    const liderados =
+      grupo.chave === "outros"
+        ? contagens.slice(visiveis).reduce((soma, item) => soma + (lugaresLiderados.get(item.partido) ?? 0), 0)
+        : (lugaresLiderados.get(Number(grupo.chave)) ?? 0);
+    return {
+      chave: grupo.chave,
+      rotulo: grupo.rotulo,
+      valor: grupo.valor,
+      texto: formatarPercentualContagem(grupo.valor, total),
+      detalhe: `${votos(grupo.valor)} válidos\n${formatarInteiro(liderados)} de ${formatarInteiro(lugares)} ${lugares === 1 ? "lugar" : "lugares"}`,
+      lugares: liderados,
+    };
+  });
   return { itens, lugares, empates };
 }
 
@@ -113,12 +128,12 @@ export function leituraPoder(linhas: readonly LinhaGrade[]): string[] {
   const frases: string[] = [];
   const { itens, lugares, empates } = liderancasPoder(linhas);
   const primeiro = itens[0];
-  if (primeiro !== undefined) {
+  if (primeiro !== undefined && primeiro.chave !== "outros") {
     const lideres = itens.filter((item) => item.chave !== "outros" && item.valor === primeiro.valor);
-    const parte = `${formatarInteiro(primeiro.valor)} dos ${formatarInteiro(lugares)} lugares do recorte`;
+    const parte = `lugares que somam ${primeiro.texto} dos votos válidos do recorte`;
     frases.push(
       lideres.length === 1
-        ? `${primeiro.rotulo} lidera em ${parte}.`
+        ? `${primeiro.rotulo} lidera em ${parte} (${formatarInteiro(primeiro.lugares ?? 0)} de ${formatarInteiro(lugares)} lugares).`
         : `${juntar(lideres.map((item) => item.rotulo))} lideram em ${parte} cada.`,
     );
   }
@@ -240,10 +255,6 @@ function agrupar(
     });
   }
   return grupos;
-}
-
-function rotuloPartido(partido: number): string {
-  return `Partido ${partido}`;
 }
 
 function votos(valor: number): string {

@@ -29,8 +29,8 @@ export function ExplicacaoPoder({ nivel, frases }: ExplicacaoPoderProps) {
         <div>
           <dt className="font-medium">Colunas</dt>
           <dd className="text-muted-foreground">
-            &ldquo;Votos válidos&rdquo; é o total do lugar. Cada coluna com número é um partido,
-            pelo número dele na urna.
+            &ldquo;Votos válidos&rdquo; é o total do lugar. As outras colunas são os partidos,
+            com a sigla e o número dele na urna.
           </dd>
         </div>
         <div>
@@ -52,7 +52,8 @@ export function ExplicacaoPoder({ nivel, frases }: ExplicacaoPoderProps) {
       </dl>
       <p>
         Como ler: o primeiro gráfico soma todos os lugares do recorte e mostra a parte de cada
-        partido no total. Nas tabelas, o maior percentual de uma linha é o partido que lidera
+        partido no total. O segundo mostra quanto do eleitorado do recorte vive onde cada partido
+        ficou em primeiro; passe o mouse para ver quantos lugares são. Nas tabelas, o maior percentual de uma linha é o partido que lidera
         naquele lugar. Clique num cabeçalho para ordenar e passe o mouse sobre uma célula para ver
         os votos.
       </p>

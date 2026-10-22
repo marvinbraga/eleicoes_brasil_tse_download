@@ -15,6 +15,7 @@ import {
   type Turno,
   type UfFiltro,
 } from "@/lib/eleicoes";
+import { formatarInteiro } from "@/lib/fracao";
 import { fatiasPoder, leituraPoder, liderancasPoder } from "@/lib/grafico-poder";
 import { linhasVisiveis, type LinhaGrade } from "@/lib/relatorios";
 
@@ -50,12 +51,12 @@ export async function DadosPoder({ ano, turno, uf, cargo, nivel }: DadosPoderPro
         {liderancas.lugares > 1 ? (
           <GraficoPoder
             id="grafico-poder-liderancas"
-            titulo="Lugares em que cada partido lidera"
-            introducao={`Número de lugares em que cada partido teve mais votos válidos, de ${liderancas.lugares}.`}
+            titulo="Votos dos lugares em que cada partido lidera"
+            introducao={`Parte dos votos válidos do recorte que está nos lugares em que cada partido ficou em primeiro, entre ${formatarInteiro(liderancas.lugares)} lugares.`}
             legenda={
               liderancas.empates > 0
-                ? "Cada barra conta os lugares em que o partido ficou em primeiro. Lugares com empate no topo não contam para ninguém."
-                : "Cada barra conta os lugares em que o partido ficou em primeiro."
+                ? "Cada barra soma os votos válidos de todos os partidos nos lugares em que o partido ficou em primeiro, como parte do total do recorte. Assim, uma capital pesa mais que uma cidade pequena. Lugares com empate no topo não contam para ninguém."
+                : "Cada barra soma os votos válidos de todos os partidos nos lugares em que o partido ficou em primeiro, como parte do total do recorte. Assim, uma capital pesa mais que uma cidade pequena."
             }
             itens={liderancas.itens}
           />

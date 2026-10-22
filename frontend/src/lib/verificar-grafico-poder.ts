@@ -40,9 +40,9 @@ const recorte = [alfa, beta, gama, delta, vazio];
 // fatias: soma das linhas, ordem decrescente, sem Outros com poucos partidos
 const fatias = fatiasPoder(recorte);
 assert.deepEqual(fatias.map((item) => [item.rotulo, item.texto]), [
-  ["Partido 22", "42,19%"],
-  ["Partido 13", "40,31%"],
-  ["Partido 55", "17,50%"],
+  ["PL 22", "42,19%"],
+  ["PT 13", "40,31%"],
+  ["PSD 55", "17,50%"],
 ]);
 assert.equal(fatias[0].valor, 1350);
 assert.equal(fatias[0].detalhe, "1.350 votos");
@@ -54,7 +54,7 @@ for (let indice = 0; indice < 10; indice += 1) {
 }
 const comOutros = fatiasPoder([linha("Muitos", muitos)]);
 assert.equal(comOutros.length, 9);
-assert.deepEqual(comOutros.slice(0, 2).map((item) => item.rotulo), ["Partido 10", "Partido 11"]);
+assert.deepEqual(comOutros.slice(0, 2).map((item) => item.rotulo), ["REPUBLICANOS 10", "PP 11"]);
 assert.deepEqual(comOutros[8], {
   chave: "outros",
   rotulo: "Outros",
@@ -88,46 +88,49 @@ assert.ok(ESQUERDA + cheio.barras[0].largura + 6 + 7 * 7 <= LARGURA);
 assert.equal(layoutBarras([]), null);
 assert.equal(layoutBarras(fatiasPoder([vazio])), null);
 
-// lideranças: empate não conta, linha sem votos não conta
+// lideranças: peso pelos votos válidos dos lugares liderados; empate não conta, linha sem votos não conta
 const liderancas = liderancasPoder(recorte);
 assert.equal(liderancas.lugares, 4);
 assert.equal(liderancas.empates, 1);
 assert.deepEqual(liderancas.itens.map((item) => [item.rotulo, item.texto, item.detalhe]), [
-  ["Partido 22", "2", "2 de 4 lugares"],
-  ["Partido 13", "1", "1 de 4 lugares"],
+  ["PL 22", "62,50%", "2.000 votos válidos\n2 de 4 lugares"],
+  ["PT 13", "31,25%", "1.000 votos válidos\n1 de 4 lugares"],
 ]);
+assert.deepEqual(liderancas.itens.map((item) => item.lugares), [2, 1]);
+const pequenos = liderancasPoder([linha("Grande", { 13: 900, 22: 100 }), linha("P1", { 22: 10 }), linha("P2", { 22: 10 })]);
+assert.deepEqual(pequenos.itens.map((item) => [item.rotulo, item.texto]), [["PT 13", "98,04%"], ["PL 22", "1,96%"]]);
 
 // resumo
 assert.equal(
   resumoBarras("Fatia de cada partido.", fatias),
-  "Fatia de cada partido. Partido 22: 42,19%; Partido 13: 40,31%; Partido 55: 17,50%.",
+  "Fatia de cada partido. PL 22: 42,19%; PT 13: 40,31%; PSD 55: 17,50%.",
 );
 
 // leitura: líder, empates e disputa mais apertada
 assert.deepEqual(leituraPoder(recorte), [
-  "Partido 22 lidera em 2 dos 4 lugares do recorte.",
+  "PL 22 lidera em lugares que somam 62,50% dos votos válidos do recorte (2 de 4 lugares).",
   "Em 1 lugar, os dois primeiros empatam.",
-  "A disputa mais apertada é em Delta, com empate entre Partido 13 e Partido 22.",
+  "A disputa mais apertada é em Delta, com empate entre PT 13 e PL 22.",
 ]);
 assert.deepEqual(leituraPoder([alfa, beta, gama]), [
-  "Partido 22 lidera em 2 dos 3 lugares do recorte.",
-  "A disputa mais apertada é em Beta: Partido 22 tem 40,00% e Partido 13 tem 39,00%, uma diferença de 1,00% dos votos válidos.",
+  "PL 22 lidera em lugares que somam 66,67% dos votos válidos do recorte (2 de 3 lugares).",
+  "A disputa mais apertada é em Beta: PL 22 tem 40,00% e PT 13 tem 39,00%, uma diferença de 1,00% dos votos válidos.",
 ]);
 assert.deepEqual(leituraPoder([alfa, gama]), [
-  "Partido 13 e Partido 22 lideram em 1 dos 2 lugares do recorte cada.",
-  "A disputa mais apertada é em Gama: Partido 13 tem 50,00% e Partido 22 tem 25,00%, uma diferença de 25,00% dos votos válidos.",
+  "PT 13 e PL 22 lideram em lugares que somam 50,00% dos votos válidos do recorte cada.",
+  "A disputa mais apertada é em Gama: PT 13 tem 50,00% e PL 22 tem 25,00%, uma diferença de 25,00% dos votos válidos.",
 ]);
 
 // um lugar só
 assert.deepEqual(leituraPoder([linha("Acre", { 10: 300, 13: 200, 22: 0 })]), [
-  "Em Acre, Partido 10 lidera com 60,00% dos votos válidos.",
-  "O segundo é Partido 13, com 40,00%, uma diferença de 20,00% dos votos válidos.",
+  "Em Acre, REPUBLICANOS 10 lidera com 60,00% dos votos válidos.",
+  "O segundo é PT 13, com 40,00%, uma diferença de 20,00% dos votos válidos.",
 ]);
 assert.deepEqual(leituraPoder([linha("Acre", { 10: 300 })]), [
-  "Em Acre, Partido 10 lidera com 100,00% dos votos válidos.",
+  "Em Acre, REPUBLICANOS 10 lidera com 100,00% dos votos válidos.",
 ]);
 assert.deepEqual(leituraPoder([linha("Acre", { 10: 300, 13: 300 })]), [
-  "Em Acre, Partido 10 e Partido 13 empatam no primeiro lugar.",
+  "Em Acre, REPUBLICANOS 10 e PT 13 empatam no primeiro lugar.",
 ]);
 
 // recorte vazio
