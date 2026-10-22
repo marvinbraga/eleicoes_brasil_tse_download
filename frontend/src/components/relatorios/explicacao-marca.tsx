@@ -1,3 +1,6 @@
+import { formatarInteiro } from "@/lib/fracao";
+import { MINIMO_VOTOS_RANKING } from "@/lib/grafico-marca";
+
 type ExplicacaoMarcaProps = {
   frases: readonly string[];
 };
@@ -25,8 +28,7 @@ const TERMOS = [
   },
   {
     termo: "Partidos pequenos",
-    texto:
-      "Só entram no ranking os partidos com pelo menos 100.000 votos no cargo. Um partido com poucos candidatos recebe boa parte do voto na legenda porque o eleitor não tem em quem votar, e isso não é marca forte. Esses partidos aparecem no fim de cada tabela, fora do ranking.",
+    texto: `Só entram no ranking os partidos com pelo menos ${formatarInteiro(MINIMO_VOTOS_RANKING)} votos no cargo. Um partido com poucos candidatos recebe boa parte do voto na legenda porque o eleitor não tem em quem votar, e isso não é marca forte. Esses partidos aparecem no fim de cada tabela, fora do ranking.`,
   },
   {
     termo: "DF e federações",

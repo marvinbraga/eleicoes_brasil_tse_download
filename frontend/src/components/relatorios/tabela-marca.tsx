@@ -8,7 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatarInteiro } from "@/lib/fracao";
+import { TRACO, formatarInteiro } from "@/lib/fracao";
 import {
   MINIMO_VOTOS_RANKING,
   ROTULOS_CLASSE_MARCA,
@@ -56,7 +56,9 @@ export function TabelaMarca({ marca }: { marca: MarcaCargo }) {
           <TableCell className="text-right tabular-nums">{formatarInteiro(marca.votos)}</TableCell>
           <TableCell className="text-right tabular-nums">{formatarInteiro(marca.legenda)}</TableCell>
           <TableCell className="text-right tabular-nums">{marca.texto}</TableCell>
-          <TableCell className="text-right tabular-nums">1,00×</TableCell>
+          <TableCell className="text-right tabular-nums">
+            {marca.legenda === 0 ? TRACO : "1,00×"}
+          </TableCell>
           <TableCell>Média do cargo</TableCell>
         </TableRow>
       </TableFooter>

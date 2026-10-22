@@ -52,7 +52,10 @@ export function TabelaMarcaUf({ marca }: { marca: MarcaCargo }) {
             <TableHead scope="row" className="h-auto p-2 text-left font-normal">
               {uf.nome}
             </TableHead>
-            <TableCell className="text-right tabular-nums">{uf.texto}</TableCell>
+            <TableCell className="text-right tabular-nums">
+              {uf.texto}
+              {uf.votos === 0 ? <span className="sr-only"> ({MOTIVOS["sem-votos"]})</span> : null}
+            </TableCell>
             {uf.celulas.map((celula) => (
               <TableCell key={celula.partido} className="text-right tabular-nums">
                 {celula.texto}

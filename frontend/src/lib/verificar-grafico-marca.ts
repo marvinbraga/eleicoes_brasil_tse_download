@@ -319,6 +319,19 @@ assert.deepEqual(leituraMarca(fortes, null).slice(1, 3), [
   "Marca forte para deputado federal: REPUBLICANOS 10 (30,00%) e PP 11 (30,00%), cada um com pelo menos o dobro da média do cargo (13,64%).",
   "Para deputado federal, nenhum partido do ranking fica abaixo da metade da média do cargo (13,64%).",
 ]);
+// múltiplo: meio exato arredonda para cima; parte inteira com dois dígitos
+assert.equal(formatarVezes(1, 8, 1, 1), "0,13×");
+assert.equal(formatarVezes(1_000, 100, 1, 1), "10,00×");
+
+// halteres estreitos com escala grande: o rótulo "1×" colide com "0,5×" e some
+const gradeLarga = (cargo: string) =>
+  grade(cargo, [linha("SP", "São Paulo", { 13: [10_000, 90_000], 22: [990_000, 0] })]);
+const largaF = marcaDoCargo("deputadoFederal", gradeLarga("deputadoFederal")) as MarcaCargo;
+const largaE = marcaDoCargo("deputadoEstadual", gradeLarga("deputadoEstadual")) as MarcaCargo;
+const larga = layoutHalteres(comparacaoCargos(largaF, largaE).pares, me) as LayoutHalteres;
+assert.ok(larga.escala > 10);
+assert.deepEqual(larga.referencias.map((ref) => ref.rotulo), ["0,5×", "", "2×"]);
+
 // contrato do Placar: a soma da fatia nacional é o total do cargo
 const fatiaFederal = [...fatiaLegendaNacional(gradeFederal).values()];
 assert.equal(fatiaFederal.reduce((soma, item) => soma + item.legenda, 0), federal.legenda);

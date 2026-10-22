@@ -7,6 +7,7 @@ import { TabelaMarcaUf } from "@/components/relatorios/tabela-marca-uf";
 import { buscarGrade, type Resultado } from "@/lib/buscar-relatorios";
 import type { Ano, Turno } from "@/lib/eleicoes";
 import {
+  CARGOS_MARCA,
   comparacaoCargos,
   leituraMarca,
   marcaDoCargo,
@@ -26,10 +27,9 @@ const TITULOS: Record<CargoMarca, string> = {
 };
 
 export async function DadosMarca() {
-  const [respostaFederal, respostaEstadual] = await Promise.all([
-    buscarGrade(ANO, TURNO, UF_ANCORA, "deputadoFederal", "uf"),
-    buscarGrade(ANO, TURNO, UF_ANCORA, "deputadoEstadual", "uf"),
-  ]);
+  const [respostaFederal, respostaEstadual] = await Promise.all(
+    CARGOS_MARCA.map((cargo) => buscarGrade(ANO, TURNO, UF_ANCORA, cargo, "uf")),
+  );
   if (!respostaFederal.ok && !respostaEstadual.ok) {
     return <ErroRelatorio detalhe={respostaFederal.detalhe} />;
   }

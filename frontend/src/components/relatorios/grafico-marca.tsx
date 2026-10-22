@@ -1,5 +1,7 @@
 import { DicaGrafico } from "@/components/relatorios/dica-grafico";
+import { formatarInteiro } from "@/lib/fracao";
 import {
+  MINIMO_VOTOS_RANKING,
   layoutRanking,
   resumoRanking,
   type ClasseMarca,
@@ -29,7 +31,8 @@ export function GraficoMarca({ id, marca }: GraficoMarcaProps) {
         <p className="font-medium text-foreground">{titulo}</p>
         <p className="mt-1 text-sm text-muted-foreground">
           A linha tracejada marca a média do cargo ({marca.texto}). Barra cheia: marca forte;
-          média: perto da média; clara: voto na pessoa. Só partidos com pelo menos 100.000 votos.
+          média: perto da média; clara: voto na pessoa. Só partidos com pelo menos{" "}
+          {formatarInteiro(MINIMO_VOTOS_RANKING)} votos.
         </p>
       </figcaption>
       <DicaGrafico>
