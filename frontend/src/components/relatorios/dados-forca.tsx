@@ -30,7 +30,21 @@ export async function DadosForca({ ano, turno, cargo }: DadosForcaProps) {
           </ul>
         </div>
       ) : null}
-      <ExplicacaoForca cargo={placar.cargo_referencia} />
+      {placar.cadeiras !== null && !placar.cadeiras.disponivel ? (
+        <div role="status" className="folha-quieta max-w-3xl space-y-2 text-sm">
+          <p>A simulação de cadeiras ainda não foi gravada; as colunas de cadeiras mostram —.</p>
+          {placar.cadeiras.comando !== null ? <code className="break-all">{placar.cadeiras.comando}</code> : null}
+        </div>
+      ) : null}
+      {placar.municipal_2024 !== null && !placar.municipal_2024.disponivel ? (
+        <div role="status" className="folha-quieta max-w-3xl space-y-2 text-sm">
+          <p>Os resultados municipais de 2024 ainda não foram importados; as colunas de 2024 mostram —.</p>
+          {placar.municipal_2024.comando !== null ? (
+            <code className="break-all">{placar.municipal_2024.comando}</code>
+          ) : null}
+        </div>
+      ) : null}
+      <ExplicacaoForca cargo={placar.cargo_referencia} blocos={placar} />
       <PlacarForcaVista placar={placar} />
     </div>
   );

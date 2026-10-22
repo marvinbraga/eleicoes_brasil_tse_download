@@ -3,14 +3,15 @@ import {
   TableBody,
   TableCaption,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
 import type { Direcao } from "@/lib/ordem";
 import {
-  ESFERAS,
-  ROTULOS_ESFERA,
+  GRUPOS_COLUNA,
+  ROTULOS_GRUPO,
   type ChaveColuna,
   type Coluna,
   type LinhaPlacar,
@@ -27,6 +28,8 @@ type TabelaForcaProps = {
   aoOrdenar: (coluna: ColunaOrdem) => void;
   aoEscolher?: (chave: string) => void;
   rotuloUnidade?: string;
+  // Linha de totais (soma das linhas de partido); sem colunas somáveis, não aparece.
+  totais?: Partial<Record<ChaveColuna, string>>;
 };
 
 type AriaOrdem = "none" | "ascending" | "descending";
@@ -41,8 +44,10 @@ export function TabelaForca({
   aoOrdenar,
   aoEscolher,
   rotuloUnidade = "Partido",
+  totais = {},
 }: TabelaForcaProps) {
-  const esferas = ESFERAS.map((esfera) => ({
+  const comTotais = colunas.some((item) => totais[item.chave] !== undefined);
+  const esferas = GRUPOS_COLUNA.map((esfera) => ({
     esfera,
     total: colunas.filter((item) => item.esfera === esfera).length,
   })).filter((item) => item.total > 0);
@@ -63,7 +68,7 @@ export function TabelaForca({
           </TableHead>
           {esferas.map(({ esfera, total }) => (
             <TableHead key={esfera} colSpan={total} scope="colgroup" className="border-l text-center">
-              {ROTULOS_ESFERA[esfera]}
+              {ROTULOS_GRUPO[esfera]}
             </TableHead>
           ))}
         </TableRow>
@@ -126,6 +131,23 @@ export function TabelaForca({
           ))
         )}
       </TableBody>
+      {comTotais ? (
+        <TableFooter>
+          <TableRow>
+            <TableHead scope="row" className="font-medium">
+              Total dos partidos
+            </TableHead>
+            {colunas.map((item, indice) => (
+              <TableCell
+                key={item.chave}
+                className={`text-right tabular-nums ${inicioDeEsfera(colunas, indice) ? "border-l" : ""}`}
+              >
+                {totais[item.chave] ?? ""}
+              </TableCell>
+            ))}
+          </TableRow>
+        </TableFooter>
+      ) : null}
     </Table>
   );
 }

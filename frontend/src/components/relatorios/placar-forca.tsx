@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { FiltroSelect } from "@/components/filtros/filtro-select";
@@ -14,19 +15,26 @@ import type { Direcao } from "@/lib/ordem";
 import {
   COLUNA_PADRAO,
   ESFERAS,
+  MODOS_UNIDADES,
   ROTULOS_ESFERA,
   colunasPlacar,
   linhasPlacar,
   linhasPorUf,
+  linksUnidade,
+  recorteDoModo,
   ordenarPlacar,
   rotuloUnidade,
+  temFederacoes,
+  totaisPlacar,
+  type ModoUnidades,
 } from "@/lib/placar-forca";
 
 const BRASIL = "BR";
 
 const LEGENDA_GRAFICO =
   "Os 8 primeiros da tabela, na ordem atual. Cada barra é a parte do total da esfera: " +
-  "votos válidos, UFs ou municípios. A escala vai de 0 a 100%.";
+  "votos válidos, UFs, municípios, cadeiras, prefeituras, eleitorado ou vereadores. " +
+  "A escala vai de 0 a 100%. O voto de legenda fica fora dos gráficos.";
 
 type Ordem = { coluna: ColunaOrdem; direcao: Direcao };
 
@@ -38,25 +46,29 @@ export function PlacarForcaVista({ placar }: { placar: PlacarForca }) {
   const [ordem, setOrdem] = useState<Ordem>(ORDEM_PADRAO);
   const [partido, setPartido] = useState<string | null>(null);
   const [ordemUf, setOrdemUf] = useState<Ordem>(ORDEM_PADRAO);
+  const [modo, setModo] = useState<ModoUnidades>("partidos");
   const tituloDetalhe = useRef<HTMLHeadingElement>(null);
 
   const escolhido = placar.ufs.find((uf) => uf.codigo === recorte) ?? placar.pais;
   const nivel = escolhido === placar.pais ? "pais" : "uf";
-  const colunas = useMemo(() => colunasPlacar(limiar, nivel), [limiar, nivel]);
-  const brutas = useMemo(() => linhasPlacar(escolhido, limiar, nivel), [escolhido, limiar, nivel]);
+  const colunas = useMemo(() => colunasPlacar(placar, limiar, nivel), [placar, limiar, nivel]);
+  const visivel = useMemo(() => recorteDoModo(escolhido, modo), [escolhido, modo]);
+  const brutas = useMemo(() => linhasPlacar(visivel, limiar, nivel), [visivel, limiar, nivel]);
   const linhas = useMemo(() => ordenarPlacar(brutas, ordem.coluna, ordem.direcao), [brutas, ordem]);
-  const colunasUf = useMemo(() => colunasPlacar(limiar, "uf"), [limiar]);
+  const totais = useMemo(() => totaisPlacar(escolhido), [escolhido]);
+  const colunasUf = useMemo(() => colunasPlacar(placar, limiar, "uf"), [placar, limiar]);
   const brutasUf = useMemo(
-    () => (partido === null ? [] : linhasPorUf(placar, partido, limiar)),
-    [placar, partido, limiar],
+    () => (partido === null ? [] : linhasPorUf(placar, partido, limiar, modo)),
+    [placar, partido, limiar, modo],
   );
   const linhasUf = useMemo(
     () => ordenarPlacar(brutasUf, ordemUf.coluna, ordemUf.direcao),
     [brutasUf, ordemUf],
   );
-  const unidadeDetalhe = placar.pais.unidades.find((unidade) => unidade.chave === partido);
+  const unidadeDetalhe = recorteDoModo(placar.pais, modo).unidades.find((unidade) => unidade.chave === partido);
   const rotuloDetalhe = unidadeDetalhe === undefined ? (partido ?? "") : rotuloUnidade(unidadeDetalhe);
-  const empates = escolhido.base.municipal?.empates ?? 0;
+  const links = linksUnidade(placar, unidadeDetalhe);
+  const empates = visivel.base.municipal?.empates ?? 0;
 
   useEffect(() => {
     if (partido !== null) {
@@ -88,6 +100,18 @@ export function PlacarForcaVista({ placar }: { placar: PlacarForca }) {
           options={opcoesLimiar}
           onChange={(valor) => setLimiar(Number(valor))}
         />
+        {temFederacoes(placar) ? (
+          <FiltroSelect
+            id="modo-forca"
+            label="Mostrar"
+            value={modo}
+            options={MODOS_UNIDADES}
+            onChange={(valor) => {
+              setModo(valor === "federacoes" ? "federacoes" : "partidos");
+              setPartido(null);
+            }}
+          />
+        ) : null}
       </div>
       <TabelaForca
         titulo={`${escolhido.nome} · ${contexto}`}
@@ -97,6 +121,7 @@ export function PlacarForcaVista({ placar }: { placar: PlacarForca }) {
         direcao={ordem.direcao}
         aoOrdenar={(coluna) => setOrdem((atual) => alternar(atual, coluna))}
         aoEscolher={setPartido}
+        totais={totais}
       />
       {empates > 0 ? (
         <p className="text-sm text-muted-foreground">
@@ -124,6 +149,19 @@ export function PlacarForcaVista({ placar }: { placar: PlacarForca }) {
             aoOrdenar={(coluna) => setOrdemUf((atual) => alternar(atual, coluna))}
             rotuloUnidade="UF"
           />
+          {links.length > 0 ? (
+            <nav aria-label={`Outros relatórios de ${rotuloDetalhe}`}>
+              <ul className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                {links.map((link) => (
+                  <li key={link.rotulo}>
+                    <Link href={link.href} className="underline underline-offset-4">
+                      {link.rotulo}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          ) : null}
         </section>
       ) : null}
       <div className="flex flex-col gap-4">

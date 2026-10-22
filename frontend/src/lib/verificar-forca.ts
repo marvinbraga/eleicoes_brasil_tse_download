@@ -49,4 +49,62 @@ assert.throws(() => lerPlacarForca(null), {
   name: "RespostaForcaInvalidaError",
   message: "A API devolveu um JSON que não confere com o placar de força.",
 });
+
+// fase B: bloco de cadeiras no topo, totais por recorte e cadeiras por unidade
+const totais = { camara: 513, senado: 54, governadores: 27, assembleias: 1059 };
+const comCadeiras = structuredClone(json) as Record<string, unknown>;
+comCadeiras.cadeiras = { disponivel: true, comando: null, totais };
+const recorteB = comCadeiras.pais as { base: Record<string, unknown>; unidades: Record<string, unknown>[] };
+recorteB.base.cadeiras = totais;
+Object.assign(recorteB.unidades[0], { camara: 119, senado: 14, governador_1t: 3, governador_2t: 5, assembleia: 200 });
+const lidoB = lerPlacarForca(comCadeiras);
+assert.deepEqual(lidoB.cadeiras, { disponivel: true, comando: null, totais });
+assert.deepEqual(lidoB.pais.base.cadeiras, totais);
+const u = lidoB.pais.unidades[0];
+assert.deepEqual([u.camara, u.senado, u.governador_1t, u.governador_2t, u.assembleia], [119, 14, 3, 5, 200]);
+// visão com federações: lista própria e base própria por recorte
+const federacaoJson = { ...unidade, chave: "fed:fe", tipo: "federacao", nome: "Federação" };
+const comFederadas = lerPlacarForca({ ...json, pais: { ...recorte, federadas: [federacaoJson],
+  base_federada: { ...recorte.base, municipal: { municipios: 3, validos: 300, empates: 0 } } } });
+assert.equal(comFederadas.pais.federadas[0].tipo, "federacao");
+assert.equal(comFederadas.pais.base_federada?.municipal?.empates, 0);
+assert.deepEqual(lido.pais.federadas, []);
+assert.equal(lido.pais.base_federada, null);
+// fase C: bloco de 2024, totais por recorte e contagens por unidade
+const totais2024 = { municipios: 5569, com_prefeito: 5560, eleitorado: 155912680, vereadores: 58000 };
+const com2024 = structuredClone(json) as Record<string, unknown>;
+com2024.municipal_2024 = { disponivel: true, comando: null, data_corte: "2026-10-01T08:30:00Z", totais: totais2024 };
+const recorteC = com2024.pais as { base: Record<string, unknown>; unidades: Record<string, unknown>[] };
+recorteC.base.municipal_2024 = totais2024;
+Object.assign(recorteC.unidades[0], { prefeitos: 500, eleitorado_governado: 2000, vereadores: 4000 });
+const lidoC = lerPlacarForca(com2024);
+assert.deepEqual(lidoC.municipal_2024, {
+  disponivel: true, comando: null, data_corte: "2026-10-01T08:30:00Z", totais: totais2024,
+});
+assert.deepEqual(lidoC.pais.base.municipal_2024, totais2024);
+const uC = lidoC.pais.unidades[0];
+assert.deepEqual([uC.prefeitos, uC.eleitorado_governado, uC.vereadores], [500, 2000, 4000]);
+assert.equal(lido.municipal_2024, null);
+assert.equal(lido.pais.base.municipal_2024, null);
+assert.equal(lido.pais.unidades[0].prefeitos, null);
+assert.equal(lido.pais.unidades[0].legenda_federal, null);
+const comLegenda = structuredClone(json);
+Object.assign(comLegenda.pais.unidades[0], { legenda_federal: 7, legenda_estadual: 3 });
+assert.deepEqual(
+  [lerPlacarForca(comLegenda).pais.unidades[0].legenda_federal, lerPlacarForca(comLegenda).pais.unidades[0].legenda_estadual],
+  [7, 3],
+);
+assert.throws(() => lerPlacarForca({ ...json, municipal_2024: { disponivel: true, comando: null, data_corte: 3, totais: null } }),
+  RespostaForcaInvalidaError);
+// fase A: sem bloco e sem campos, tudo null
+assert.equal(lido.cadeiras, null);
+assert.equal(lido.pais.base.cadeiras, null);
+assert.equal(lido.pais.unidades[0].camara, null);
+// bloco indisponível, com comando
+const indisponivel = lerPlacarForca({ ...json, cadeiras: { disponivel: false, comando: "uv run c", totais: null } });
+assert.deepEqual(indisponivel.cadeiras, { disponivel: false, comando: "uv run c", totais: null });
+assert.throws(() => lerPlacarForca({ ...json, cadeiras: { disponivel: "sim", comando: null, totais: null } }),
+  RespostaForcaInvalidaError);
+assert.throws(() => lerPlacarForca({ ...json, cadeiras: { disponivel: true, comando: null, totais: { camara: 1 } } }),
+  RespostaForcaInvalidaError);
 console.log("ok");

@@ -22,10 +22,10 @@ function linha(chave: string, fracoes: Partial<Record<ChaveColuna, number | null
   for (const c of CHAVES_COLUNA) {
     valores[c] = valor(fracoes[c] ?? null, `${Math.round((fracoes[c] ?? 0) * 100)}%`);
   }
-  return { chave, rotulo: `P ${chave}`, partidos: [Number(chave)], valores };
+  return { chave, tipo: "partido", rotulo: `P ${chave}`, partidos: [Number(chave)], valores };
 }
 
-const colunas = colunasPlacar(5, "pais");
+const colunas = colunasPlacar({ cadeiras: null, municipal_2024: null }, 5, "pais");
 const UTIL = MEDIDAS_PADRAO.largura - MEDIDAS_PADRAO.esquerda - MEDIDAS_PADRAO.direita;
 assert.equal(UTIL, 396);
 
@@ -109,4 +109,18 @@ assert.equal(
   "Nacional. A: Presidente 50,00%, Dep. federal 25,00%; B: Presidente 10,00%, Dep. federal 20,00%.",
 );
 assert.equal(resumoGrupos("Municípios", []), "Municípios.");
+
+// fase B: cadeiras entram nos painéis Nacional e Estados; o 2º turno de governador não vira barra
+const colunasB = colunasPlacar({ cadeiras: { disponivel: true, comando: null, totais: null }, municipal_2024: null }, 5, "pais");
+const cheia = linha("22", {
+  presidente: 0.4, deputado_federal: 0.2, camara: 0.23, senado: 0.26,
+  deputado_estadual: 0.2, ufs_lider_estadual: 0.4, governador_1t: 0.1, governador_2t: 0.2, assembleia: 0.19,
+});
+assert.deepEqual(gruposEsfera([cheia], colunasB, "nacional")[0].metricas.map((m) => m.chave), [
+  "presidente", "deputado_federal", "camara", "senado",
+]);
+const nula = { ...cheia, valores: { ...cheia.valores, governador_2t: { ordem: 5, fracao: null, texto: "5", detalhe: "" } } };
+assert.deepEqual(gruposEsfera([nula], colunasB, "estados")[0].metricas.map((m) => m.chave), [
+  "deputado_estadual", "ufs_lider_estadual", "governador_1t", "assembleia",
+]);
 console.log("ok");
