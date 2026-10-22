@@ -2,9 +2,10 @@ from collections.abc import Mapping
 
 import pytest
 
+from eleicoes.adapters.http.errors import http_error
 from eleicoes.composition.cli import main
 from eleicoes.composition.migracao import migrate_database
-from eleicoes.domain.errors import DatabaseConfigError, SchemaOutdatedError
+from eleicoes.domain.errors import SCHEMA_OUTDATED_HINT, DatabaseConfigError, SchemaOutdatedError
 from eleicoes.domain.importing import ImportCommand, ImportReport
 
 
@@ -55,6 +56,10 @@ def test_migrate_database_uses_the_published_port(monkeypatch: pytest.MonkeyPatc
     assert revision == "0002"
     assert seen[0]["POSTGRES_HOST"] == "127.0.0.1"
     assert seen[0]["POSTGRES_PORT"] == "25432"
+
+
+def test_api_answers_503_with_the_migration_hint() -> None:
+    assert http_error(SchemaOutdatedError(("0001",), "0002")) == (503, SCHEMA_OUTDATED_HINT)
 
 
 class _Outdated:

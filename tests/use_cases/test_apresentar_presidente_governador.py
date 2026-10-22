@@ -8,7 +8,12 @@ from pathlib import Path
 import pytest
 
 from eleicoes.domain.boletim_consulta import BrancosNulos, PoderPartido
-from eleicoes.domain.errors import ElectionError, InvalidStoredReportError
+from eleicoes.domain.errors import (
+    SCHEMA_OUTDATED_HINT,
+    ElectionError,
+    InvalidStoredReportError,
+    SchemaOutdatedError,
+)
 from eleicoes.domain.presidente_governador import (
     CargoTally,
     CrossReportView,
@@ -490,3 +495,18 @@ def _prime(reader: _Reader, nominal: int) -> None:
     reader.ufs = {"presidente": ("AC",), "governador": ("AC",)}
     reader.rows[("AC", "presidente")] = (PoderPartido(10, None, 13, nominal, 0, nominal),)
     reader.rows[("AC", "governador")] = (PoderPartido(10, None, 13, 1, 0, 1),)
+
+
+class _Outdated(_Broken):
+    def load(self, _ano: int, _turno: int) -> StoredCrossReport | None:
+        raise SchemaOutdatedError(("0001",), "0002")
+
+
+def test_outdated_schema_asks_for_the_migration(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    destino = tmp_path / "cruzado.html"
+    code = main(["--destino", str(destino)], reader=_Reader(), names=_Names({}), store=_Outdated())
+    assert code == 1
+    assert capsys.readouterr().err == SCHEMA_OUTDATED_HINT + "\n"

@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from eleicoes.domain.errors import (
+    SCHEMA_OUTDATED_HINT,
     CargoSemCelulasError,
     DatabaseConfigError,
     ElectionError,
@@ -26,6 +27,7 @@ from eleicoes.domain.errors import (
     InvalidUfError,
     MissingCrossReportError,
     MissingPowerReportError,
+    SchemaOutdatedError,
     StoredReadError,
     UnusableGroupCountError,
 )
@@ -41,6 +43,7 @@ _HTTP: tuple[tuple[type[ElectionError], int, str], ...] = (
     (InvalidBoletimConsultaError, 422, "Consulta de boletim inválida."),
     (InvalidStoredReportError, 422, "Relatório armazenado inválido."),
     (DatabaseConfigError, 500, "Configuração do banco ausente."),
+    (SchemaOutdatedError, 503, SCHEMA_OUTDATED_HINT),
 )
 _OWN_TEXT: tuple[tuple[type[ElectionError], int], ...] = (
     (InvalidGroupSpanError, 422),

@@ -24,6 +24,7 @@ from eleicoes.composition.wiring import (
 )
 from eleicoes.domain.boletim import BoletimImportReport
 from eleicoes.domain.errors import (
+    SCHEMA_OUTDATED_HINT,
     AnnouncedFilesMissingError,
     DatabaseConfigError,
     ElectionError,
@@ -53,10 +54,6 @@ from eleicoes.use_cases.list_ausentes import list_ausentes
 _DATABASE_CONFIG = (
     "Configuração do Postgres incompleta. Defina POSTGRES_HOST, POSTGRES_PORT, "
     "POSTGRES_USER, POSTGRES_PASSWORD e POSTGRES_DB."
-)
-_SCHEMA_OUTDATED = (
-    "O esquema do banco está desatualizado. Rode make migrate "
-    "(ou python -m eleicoes migrar) e tente de novo."
 )
 
 
@@ -432,7 +429,7 @@ def _boletim_message(error: ElectionError) -> str:
     if isinstance(error, DatabaseConfigError):
         return _DATABASE_CONFIG
     if isinstance(error, SchemaOutdatedError):
-        return _SCHEMA_OUTDATED
+        return SCHEMA_OUTDATED_HINT
     if isinstance(error, InvalidTurnoError):
         return "Turno inválido. Informe 1 ou 2."
     if isinstance(error, InvalidUfError):
@@ -457,7 +454,7 @@ def _import_message(error: ElectionError) -> str:
     if isinstance(error, DatabaseConfigError):
         return _DATABASE_CONFIG
     if isinstance(error, SchemaOutdatedError):
-        return _SCHEMA_OUTDATED
+        return SCHEMA_OUTDATED_HINT
     if isinstance(error, (InvalidElectionYearError, MissingElectionYearError)):
         return _user_message(error)
     return "Não foi possível concluir a importação."

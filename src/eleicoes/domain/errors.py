@@ -246,6 +246,12 @@ class UnusableGroupCountError(ElectionError):
         super().__init__("O número de grupos não cabe nos municípios.")
 
 
+SCHEMA_OUTDATED_HINT = (
+    "O esquema do banco está desatualizado. Rode make migrate "
+    "(ou python -m eleicoes migrar) e tente de novo."
+)
+
+
 class SchemaOutdatedError(ElectionError):
     def __init__(self, current: tuple[str, ...], expected: str) -> None:
         self.current = current

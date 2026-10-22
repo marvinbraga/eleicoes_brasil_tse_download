@@ -50,7 +50,7 @@ O Alembic versiona as tabelas dos esquemas `raw` e `analise`. Depois de `make up
 make migrate
 ```
 
-No computador, o equivalente é `uv run python -m eleicoes migrar`. Um banco criado antes do Alembic é marcado na revisão `0001` sem recriar nada e recebe só as migrações seguintes. Para revisar o SQL sem tocar no banco, use `make migrate-sql`. A importação e os relatórios recusam um banco fora da última revisão e pedem `make migrate`.
+No computador, o equivalente é `uv run python -m eleicoes migrar`. Um banco criado antes do Alembic é marcado na revisão `0001` sem recriar nada e recebe só as migrações seguintes. Para revisar o SQL sem tocar no banco, use `make migrate-sql` (banco já existente, a partir da `0001`) ou `make migrate-sql-vazio` (banco vazio). A importação e os relatórios recusam um banco fora da última revisão e pedem `make migrate`.
 
 Consulta direta:
 

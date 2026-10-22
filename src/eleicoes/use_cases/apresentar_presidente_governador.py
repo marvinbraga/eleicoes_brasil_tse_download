@@ -12,7 +12,12 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from eleicoes.adapters.html_presidente_governador import html_presidente_governador
-from eleicoes.domain.errors import ElectionError, InvalidStoredReportError
+from eleicoes.domain.errors import (
+    SCHEMA_OUTDATED_HINT,
+    ElectionError,
+    InvalidStoredReportError,
+    SchemaOutdatedError,
+)
 from eleicoes.domain.presidente_governador import CrossReportView, MunicipalPlace, view_from_places
 from eleicoes.domain.report import EXIT_FAILURE, EXIT_SUCCESS
 from eleicoes.domain.values import ElectionYear, Turno, Uf
@@ -105,6 +110,9 @@ def main(
     args = _parser().parse_args(argv)
     try:
         text = _present(args, reader, names, store, render, open_report)
+    except SchemaOutdatedError:
+        print(SCHEMA_OUTDATED_HINT, file=sys.stderr)
+        return EXIT_FAILURE
     except ElectionError:
         print("Não foi possível apresentar os relatórios.", file=sys.stderr)
         return EXIT_FAILURE

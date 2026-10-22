@@ -11,7 +11,7 @@ from typing import Final
 
 from eleicoes.adapters.html_grade import html_das_grades
 from eleicoes.consultas.grade import grade_de_poder
-from eleicoes.domain.errors import ElectionError
+from eleicoes.domain.errors import SCHEMA_OUTDATED_HINT, ElectionError, SchemaOutdatedError
 from eleicoes.domain.grade import GradeDePoder
 from eleicoes.domain.report import EXIT_FAILURE, EXIT_SUCCESS
 from eleicoes.ports.relatorio_poder import RelatorioPoderStore
@@ -99,6 +99,9 @@ def main(
     destino = _destino(args.ano, args.turno, args.uf, args.cargo, args.destino)
     try:
         text = _present(args, destino, presenter, store)
+    except SchemaOutdatedError:
+        print(SCHEMA_OUTDATED_HINT, file=sys.stderr)
+        return EXIT_FAILURE
     except ElectionError:
         print("Não foi possível apresentar os relatórios.", file=sys.stderr)
         return EXIT_FAILURE
