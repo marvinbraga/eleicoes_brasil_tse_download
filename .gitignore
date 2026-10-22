@@ -145,3 +145,6 @@ cython_debug/
 
 # Protótipo antigo do frontend, com repositório git próprio
 /next-app/
+
+# Backups locais do banco
+/backups/
