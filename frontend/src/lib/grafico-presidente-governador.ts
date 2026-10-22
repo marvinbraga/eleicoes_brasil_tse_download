@@ -1,4 +1,4 @@
-import { INTENSIDADE, ORDEM_CLASSE, type ClasseCruzada } from "../cruzamento/finalidade.ts";
+import { COR_CLASSE, ORDEM_CLASSE, type ClasseCruzada } from "../cruzamento/finalidade.ts";
 import { formatarPercentualContagem } from "./fracao.ts";
 import type { GrupoMunicipios } from "./relatorios.ts";
 
@@ -56,7 +56,7 @@ export type FatiaBarra = {
   fatiaTexto: string;
   x: number;
   largura: number;
-  opacidade: number;
+  cor: string;
 };
 
 export type BarraLugar = { codigo: string; total: number; y: number; fatias: FatiaBarra[] };
@@ -229,7 +229,7 @@ function fatiasDe(lugar: ComposicaoLugar, esquerda: number, plotagem: number): F
       fatiaTexto: formatarPercentualContagem(votos, lugar.total),
       x,
       largura,
-      opacidade: INTENSIDADE[classe],
+      cor: COR_CLASSE[classe],
     };
   });
 }

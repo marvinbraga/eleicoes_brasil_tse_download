@@ -1,4 +1,4 @@
-import { ORDEM_CLASSE, INTENSIDADE } from "@/cruzamento/finalidade";
+import { ORDEM_CLASSE, COR_CLASSE } from "@/cruzamento/finalidade";
 import { DicaGrafico } from "@/components/relatorios/dica-grafico";
 import { formatarInteiro } from "@/lib/fracao";
 import {
@@ -165,8 +165,7 @@ function FiguraComposicao({ id, titulo, lugares, unidade, esquerda, nota }: Figu
                         y={barra.y}
                         width={fatia.largura}
                         height={ALTURA_BARRA}
-                        fill="var(--tinta-quente)"
-                        fillOpacity={fatia.opacidade}
+                        fill={fatia.cor}
                       />
                     ) : null,
                   )}
@@ -184,8 +183,7 @@ function FiguraComposicao({ id, titulo, lugares, unidade, esquerda, nota }: Figu
                 <rect
                   width={12}
                   height={12}
-                  fill="var(--tinta-quente)"
-                  fillOpacity={INTENSIDADE[classe]}
+                  fill={COR_CLASSE[classe]}
                 />
               </svg>
               {ROTULOS[classe]}

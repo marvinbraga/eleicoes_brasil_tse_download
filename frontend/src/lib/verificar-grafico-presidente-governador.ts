@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { INTENSIDADE } from "../cruzamento/finalidade.ts";
+import { COR_CLASSE } from "../cruzamento/finalidade.ts";
 import {
   ALTURA_LINHA,
   BASE,
@@ -48,7 +48,7 @@ const sc = l.barras[0].fatias;
 assert.deepEqual(sc.map((f) => f.classe), ["consolidacao", "terreno_de_virada", "em_aberto", "sem_governador"]);
 assert.deepEqual(sc.map((f) => [f.x, f.largura]), [[44, 521], [566, 0], [566, 58], [624, 0]]);
 assert.deepEqual(sc.map((f) => f.fatiaTexto), ["90,00%", "0,00%", "10,00%", "0,00%"]);
-assert.equal(sc[0].opacidade, INTENSIDADE.consolidacao);
+assert.equal(sc[0].cor, COR_CLASSE.consolidacao);
 assert.deepEqual(l.barras[1].fatias.map((f) => [f.x, f.largura]), [[44, 173], [218, 173], [392, 232], [624, 0]]);
 const ultima = l.barras[1].fatias[2];
 assert.equal(ultima.x + ultima.largura, 640 - 16);

@@ -8,7 +8,7 @@ import {
   FRASE_RECORTE,
   estiloDaBarra,
   fraseDoAchado,
-  INTENSIDADE,
+  COR_CLASSE,
   ORDEM_CLASSE,
 } from "./finalidade.ts";
 
@@ -37,8 +37,13 @@ assert.match(fraseDoAchado(empate()) ?? "", /consolidação/i);
 assert.equal(fraseDoAchado(desconhecida()), null);
 assert.deepEqual(ORDEM_CLASSE.length, 4);
 assert.deepEqual(
-  ORDEM_CLASSE.map((classe) => INTENSIDADE[classe]),
-  [1, 0.72, 0.48, 0.28],
+  ORDEM_CLASSE.map((classe) => COR_CLASSE[classe]),
+  [
+    "var(--classe-consolidacao)",
+    "var(--classe-terreno-de-virada)",
+    "var(--classe-em-aberto)",
+    "var(--classe-sem-governador)",
+  ],
 );
 assert.equal(FRASE_RECORTE.includes("lista de municípios"), true);
 assert.equal(FRASE_MARGEM.includes("Brancos e nulos"), true);
@@ -50,10 +55,9 @@ assert.deepEqual(estiloDaBarra("consolidacao", 0), {
 });
 assert.deepEqual(estiloDaBarra("em_aberto", 10), {
   flexGrow: 10,
-  backgroundColor: "rgb(13, 111, 110)",
-  opacity: 0.48,
+  backgroundColor: "var(--classe-em-aberto)",
 });
-assert.equal(estiloDaBarra("outra", 4).opacity, 1);
+assert.equal(estiloDaBarra("outra", 4).backgroundColor, "var(--tinta-quente)");
 
 function zerada(): Composicao {
   return {

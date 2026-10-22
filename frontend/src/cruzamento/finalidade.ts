@@ -21,11 +21,12 @@ export const DEFINICOES: Record<ClasseCruzada, string> = {
     "Há líder na presidência e não há líder de governador nesse lugar.",
 };
 
-export const INTENSIDADE: Record<ClasseCruzada, number> = {
-  consolidacao: 1,
-  terreno_de_virada: 0.72,
-  em_aberto: 0.48,
-  sem_governador: 0.28,
+// Escala de um só matiz, validada contra o card nos dois temas; os valores ficam em globals.css.
+export const COR_CLASSE: Record<ClasseCruzada, string> = {
+  consolidacao: "var(--classe-consolidacao)",
+  terreno_de_virada: "var(--classe-terreno-de-virada)",
+  em_aberto: "var(--classe-em-aberto)",
+  sem_governador: "var(--classe-sem-governador)",
 };
 
 export const FRASE_FINALIDADE =
@@ -47,17 +48,14 @@ const FECHO: Record<ClasseCruzada, string> = {
 export function estiloDaBarra(classe: string, votos: number): {
   flexGrow: number;
   backgroundColor: string;
-  opacity?: number;
   minWidth?: number;
 } {
   if (votos <= 0) {
     return { flexGrow: votos, backgroundColor: "transparent", minWidth: 0 };
   }
-  const intensidade = eClasse(classe) ? INTENSIDADE[classe] : 1;
   return {
     flexGrow: votos,
-    backgroundColor: "rgb(13, 111, 110)",
-    opacity: intensidade,
+    backgroundColor: eClasse(classe) ? COR_CLASSE[classe] : "var(--tinta-quente)",
   };
 }
 
