@@ -33,7 +33,7 @@ export function DispersaoVerticalizacao({ id, dados }: DispersaoVerticalizacaoPr
       </section>
     );
   }
-  const resumo = `${dados.dispersao.pontos.length} municípios. Cada ponto é um município, com a fatia do ${rotuloPartido(partido)} em ${ROTULO_CARGO[x]} no eixo horizontal e em ${ROTULO_CARGO[y]} no vertical. ${medida}`;
+  const resumo = `${formatarInteiro(dados.dispersao.pontos.length)} municípios. Cada ponto é um município, com a fatia do ${rotuloPartido(partido)} em ${ROTULO_CARGO[x]} no eixo horizontal e em ${ROTULO_CARGO[y]} no vertical. ${medida}`;
   return (
     <figure className="folha-quieta flex flex-col gap-3">
       <figcaption>

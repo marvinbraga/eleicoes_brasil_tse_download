@@ -25,7 +25,6 @@ export const metadata: Metadata = {
 export const maxDuration = 600;
 
 const CHAVES_FILTRO = ["ano", "turno", "uf"];
-const MAXIMO_PARTIDO = 99;
 
 type ConsultaVerticalizacao = ConsultaRelatorio & {
   partido?: ValorConsulta;
@@ -86,19 +85,25 @@ async function DadosComConsulta({
       turno={lerTurno(consulta.turno)}
       uf={lerUf(consulta.uf)}
       partido={lerPartido(consulta.partido)}
-      cargoX={lerCargo(consulta.x, "deputadoFederal")}
-      cargoY={lerCargo(consulta.y, "governador")}
+      {...lerPar(consulta.x, consulta.y)}
     />
   );
 }
 
+// Um par igual (x = y) vindo da URL volta ao padrão em vez de derrubar o relatório.
+function lerPar(x: ValorConsulta, y: ValorConsulta): { cargoX: CargoVertical; cargoY: CargoVertical } {
+  const cargoX = lerCargo(x, "deputadoFederal");
+  const cargoY = lerCargo(y, "governador");
+  return cargoX === cargoY ? { cargoX: "deputadoFederal", cargoY: "governador" } : { cargoX, cargoY };
+}
+
 function lerPartido(valor: ValorConsulta): string | null {
   const bruto = Array.isArray(valor) ? valor[0] : valor;
+  // Até dois dígitos: 0..99, como o número de partido aceito pela API.
   if (bruto === undefined || !/^\d{1,2}$/.test(bruto)) {
     return null;
   }
-  const numero = Number(bruto);
-  return numero <= MAXIMO_PARTIDO ? String(numero) : null;
+  return String(Number(bruto));
 }
 
 function lerCargo(valor: ValorConsulta, padrao: CargoVertical): CargoVertical {

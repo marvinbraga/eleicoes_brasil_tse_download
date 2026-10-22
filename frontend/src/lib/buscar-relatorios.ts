@@ -1,4 +1,4 @@
-import { UF_TODAS, urlApi } from "@/lib/eleicoes";
+import { urlApi } from "@/lib/eleicoes";
 import { lerPlacarForca, RespostaForcaInvalidaError, type PlacarForca } from "@/lib/forca";
 import { lerMunicipais2024, type RelatorioMunicipais } from "@/lib/municipais-2024";
 import {
@@ -14,6 +14,7 @@ import {
   type RelatorioPerfis,
   type SimulacaoCadeiras,
 } from "@/lib/relatorios";
+import { UF_TODAS } from "@/lib/eleicoes";
 import { lerVerticalizacao, type RelatorioVerticalizacao } from "@/lib/verticalizacao";
 
 export type Resultado<T> =

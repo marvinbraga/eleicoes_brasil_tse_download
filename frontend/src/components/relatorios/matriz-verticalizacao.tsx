@@ -82,7 +82,10 @@ export function MatrizVerticalizacao({
           className="w-full sm:hidden"
         />
       </DicaGrafico>
-      <Legenda escala={escala} />
+      {/* Um div em volta: ".folha-quieta > .flex" (globals.css) achataria a legenda. */}
+      <div>
+        <Legenda escala={escala} />
+      </div>
     </figure>
   );
 }

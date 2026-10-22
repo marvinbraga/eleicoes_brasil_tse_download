@@ -1320,6 +1320,15 @@ Desenho:
 2. Rodar de novo a suíte inteira, backend (`uv run pytest -q`, `ruff`, `mypy`) e frontend (`tsc`, `eslint`, `verificar`).
 3. Siga só com zero achados Critical, High ou Medium. Depois, faça o commit com jarvis:commit, se o humano pedir.
 
+**Resultado (2026-10-22):** as revisões rodaram com um revisor focado por bloco (domínio, backend, frontend puro e componentes), e não com o conjunto completo do jarvis:codereview. Na revisão final apareceu um achado Medium, que foi corrigido. A legenda das matrizes era filha direta de `figure.folha-quieta`, e a regra `.folha-quieta > .flex` do `globals.css` a achatava em 0,7rem. Agora ela fica dentro de um `div`. Lows corrigidos:
+- Um `x = y` digitado na URL volta ao par padrão.
+- O partido escolhido entra nas opções mesmo quando está fora da lista.
+- A contagem de pontos no `<desc>` está formatada.
+- A checagem de partido redundante na página saiu.
+- O `import` de `UF_TODAS` em `buscar-relatorios.ts` ficou numa linha nova, só por adição.
+
+A suíte inteira passou: pytest, ruff, mypy, os 11 `verificar-*.ts`, `tsc` e `pnpm lint`. A verificação no navegador (Task 14, Step 3) e os Steps 1 e 6 da Task 8 ficam para o orquestrador.
+
 ---
 
 ## Perguntas em aberto

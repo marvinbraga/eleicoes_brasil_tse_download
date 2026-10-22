@@ -62,7 +62,8 @@ export function EscolhaDispersaoVerticalizacao({
     setYAtual(cargoY);
   }
   const iguais = xAtual === yAtual;
-  const opcoesPartido = partidos.map((numero) => ({
+  const numeros = partidos.includes(partido) ? partidos : [partido, ...partidos];
+  const opcoesPartido = numeros.map((numero) => ({
     value: String(numero),
     label: rotuloPartido(numero),
   }));
