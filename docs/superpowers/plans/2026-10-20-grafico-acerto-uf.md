@@ -72,7 +72,7 @@ Regras que a assinatura não fixa:
 - Retornar `null` quando não sobra nenhum ponto válido.
 - Resumo: `"{n} UFs. Maior acerto: {UFs empatadas no topo, juntas com vírgula e 'e'} com {acerto}. Menor: {UFs empatadas na base} com {acerto}. {k} de {n} UFs ficam abaixo da base da maioria ({base})."` Abaixo significa fração estritamente menor que a da base.
 
-- [ ] **Step 1: Write the failing verification script**
+- [x] **Step 1: Write the failing verification script**
 
 ```ts
 import assert from "node:assert/strict";
@@ -125,19 +125,19 @@ assert.equal(resumoAcertoUf({ ...base, porUf: [
 console.log("ok");
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `cd frontend && node --experimental-strip-types src/lib/verificar-grafico-acerto-uf.ts`
 Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `grafico-acerto-uf.ts`.
 
-- [ ] **Step 3: Implement `frontend/src/lib/grafico-acerto-uf.ts`** with the interfaces and rules above. Use `lerFatia` for every percentage; sort with `localeCompare("pt-BR")` for UF ties.
+- [x] **Step 3: Implement `frontend/src/lib/grafico-acerto-uf.ts`** with the interfaces and rules above. Use `lerFatia` for every percentage; sort with `localeCompare("pt-BR")` for UF ties.
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `cd frontend && node --experimental-strip-types src/lib/verificar-grafico-acerto-uf.ts && pnpm exec tsc --noEmit && pnpm exec eslint src/lib/grafico-acerto-uf.ts src/lib/verificar-grafico-acerto-uf.ts`
 Expected: `ok`, then no output from tsc/eslint.
 
-- [ ] **Step 5: No commit** (git-ignored dir).
+- [x] **Step 5: No commit** (git-ignored dir).
 
 ---
 
@@ -162,14 +162,14 @@ Desenho (valores fixos):
 - `<figcaption className="text-sm text-muted-foreground">`: `"Cada ponto é uma UF, do maior acerto para o menor. O tamanho acompanha o número de municípios. As linhas marcam o acerto geral e as duas linhas de base."`. Em seguida vem a legenda de tamanho, com dois círculos inline (raio mínimo e máximo) e os textos `"{menorMunicipios} município(s)"` e `"{maiorMunicipios} municípios"` (singular quando o valor é 1).
 - `DicaGrafico`: um `div` relativo em volta do SVG. Ele trata `pointermove` e `pointerdown` buscando `closest("[data-dica-uf]")` e mostra um tooltip `absolute` perto do ponteiro com `"{UF}"` em negrito, `"{acerto}"` e `"{municípios} municípios"`, todos como texto React, nunca HTML. O tooltip some em `pointerleave`. Visual: `rounded-md border bg-popover text-popover-foreground px-2 py-1 text-xs shadow-sm pointer-events-none`.
 
-- [ ] **Step 1: Implementar os dois componentes e o encaixe** conforme acima.
+- [x] **Step 1: Implementar os dois componentes e o encaixe** conforme acima.
 
-- [ ] **Step 2: Verificar tipos e lint**
+- [x] **Step 2: Verificar tipos e lint**
 
 Run: `cd frontend && pnpm exec tsc --noEmit && pnpm lint && node --experimental-strip-types src/lib/verificar-grafico-acerto-uf.ts`
 Expected: tudo limpo e `ok`.
 
-- [ ] **Step 3: Verificar no navegador (chrome-devtools)** com o Next na 14000 e a API na 15000. Abrir `/relatorios/classe-governador?ano=2026&turno=1&consultar=1` e conferir:
+- [x] **Step 3: Verificar no navegador (chrome-devtools)** com o Next na 14000 e a API na 15000. Abrir `/relatorios/classe-governador?ano=2026&turno=1&consultar=1` e conferir:
   - há 27 pontos; o primeiro é uma UF com 100,00% e o último é PI com 1,34%;
   - aparecem as três linhas com os rótulos "Acerto geral 50,48%", "Líder presidencial 51,75%" e "Maioria 62,61%", sem sobreposição;
   - o `<desc>` contém `"15 de 27 UFs ficam abaixo da base da maioria (62,61%)."`;
@@ -180,4 +180,4 @@ Expected: tudo limpo e `ok`.
 
   Salvar capturas claro e escuro no scratchpad.
 
-- [ ] **Step 4: No commit** (git-ignored dirs). Commit only this plan doc if the user asks.
+- [x] **Step 4: No commit** (git-ignored dirs). Commit only this plan doc if the user asks.
