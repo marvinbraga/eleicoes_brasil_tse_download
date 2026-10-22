@@ -34,7 +34,7 @@ export function FiltroSelect({
       <Label htmlFor={id} className="h-5 leading-5">
         {label}
       </Label>
-      <Select value={value} onValueChange={onChange}>
+      <Select name={id} value={value} onValueChange={onChange}>
         <SelectTrigger id={id} className="h-8 w-full">
           <SelectValue />
         </SelectTrigger>
