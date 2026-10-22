@@ -6,8 +6,9 @@ from collections.abc import Sequence
 
 import pytest
 
+from eleicoes.adapters.orm.migrate import head_revision
 from eleicoes.adapters.postgres_sink import PostgresTabularSink, connect_postgres
-from eleicoes.domain.errors import DatabaseConfigError, SchemaMismatchError
+from eleicoes.domain.errors import DatabaseConfigError, SchemaMismatchError, SchemaOutdatedError
 from eleicoes.domain.importing import ImportStatus, Provenance
 from eleicoes.domain.tabular_contract import CSEC
 
@@ -44,14 +45,44 @@ def test_replace_copies_latin1_and_records_the_load() -> None:
     assert connection.closed is True
 
 
-def test_ensure_model_creates_tables_and_views() -> None:
+def test_ensure_model_checks_the_revision_then_applies_only_views() -> None:
     connection = _Connection()
-    sink = PostgresTabularSink(lambda: connection)
+    seen: list[object] = []
+    sink = PostgresTabularSink(lambda: connection, seen.append)
     sink.ensure_model()
     text = "\n".join(statement for statement, _params in connection.cursor_obj.statements)
-    assert "CREATE TABLE IF NOT EXISTS raw.csec" in text
+    assert seen == [connection.cursor_obj]
+    assert "CREATE TABLE" not in text
     assert "CREATE OR REPLACE VIEW analise.secao" in text
     assert "CREATE OR REPLACE VIEW analise.resumo_uf" in text
+
+
+def test_default_check_rejects_a_database_without_alembic_version() -> None:
+    connection = _Connection()
+    connection.cursor_obj.rows = [[(False,)]]
+    sink = PostgresTabularSink(lambda: connection)
+    with pytest.raises(SchemaOutdatedError) as caught:
+        sink.ensure_model()
+    assert caught.value.current == ()
+    assert "VIEW" not in "\n".join(statement for statement, _ in connection.cursor_obj.statements)
+
+
+def test_default_check_rejects_an_old_revision() -> None:
+    connection = _Connection()
+    connection.cursor_obj.rows = [[(True,)], [("0001",)]]
+    with pytest.raises(SchemaOutdatedError) as caught:
+        PostgresTabularSink(lambda: connection).ensure_model()
+    assert caught.value.current == ("0001",)
+    assert caught.value.expected == head_revision()
+
+
+def test_default_check_accepts_the_head_revision() -> None:
+    connection = _Connection()
+    connection.cursor_obj.rows = [[(True,)], [(head_revision(),)]]
+    PostgresTabularSink(lambda: connection).ensure_model()
+    statements = [statement for statement, _ in connection.cursor_obj.statements]
+    assert statements[1] == "SELECT version_num FROM alembic_version"
+    assert any("CREATE OR REPLACE VIEW" in statement for statement in statements)
 
 
 def test_record_writes_an_ignored_audit_row() -> None:
@@ -125,6 +156,7 @@ class _Cursor:
     def __init__(self) -> None:
         self.statements: list[tuple[str, tuple[object, ...]]] = []
         self.copies: list[bytes] = []
+        self.rows: list[list[tuple[object, ...]]] = []
         self.rowcount = 0
 
     def execute(self, query: str, params: Sequence[object] | None = None) -> None:
@@ -132,6 +164,9 @@ class _Cursor:
         self.statements.append((query, bound))
         if query.startswith("INSERT INTO raw.csec") or query.startswith("INSERT INTO raw.ccont"):
             self.rowcount = 2
+
+    def fetchall(self) -> list[tuple[object, ...]]:
+        return self.rows.pop(0)
 
     def copy(self, statement: str) -> _Copy:
         self.statements.append((statement, ()))

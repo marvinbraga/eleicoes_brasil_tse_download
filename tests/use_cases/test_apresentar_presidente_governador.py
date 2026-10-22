@@ -8,7 +8,12 @@ from pathlib import Path
 import pytest
 
 from eleicoes.domain.boletim_consulta import BrancosNulos, PoderPartido
-from eleicoes.domain.errors import ElectionError, InvalidStoredReportError
+from eleicoes.domain.errors import (
+    SCHEMA_OUTDATED_HINT,
+    ElectionError,
+    InvalidStoredReportError,
+    SchemaOutdatedError,
+)
 from eleicoes.domain.presidente_governador import (
     CargoTally,
     CrossReportView,
@@ -511,3 +516,18 @@ def test_database_failure_names_the_chained_cause(
     assert code == 1
     assert captured.err == (f'{_REASON}cross report store failed (null value in column "html")\n')
     assert store.closed is True
+
+
+class _Outdated(_Broken):
+    def load(self, _ano: int, _turno: int) -> StoredCrossReport | None:
+        raise SchemaOutdatedError(("0001",), "0002")
+
+
+def test_outdated_schema_asks_for_the_migration(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    destino = tmp_path / "cruzado.html"
+    code = main(["--destino", str(destino)], reader=_Reader(), names=_Names({}), store=_Outdated())
+    assert code == 1
+    assert capsys.readouterr().err == SCHEMA_OUTDATED_HINT + "\n"

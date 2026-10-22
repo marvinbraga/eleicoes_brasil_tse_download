@@ -9,17 +9,12 @@ from eleicoes.domain.errors import DatabaseConfigError
 from eleicoes.domain.values import ElectionYear, Turno, Uf
 
 
-def test_ensure_model_adds_boletim_without_dropping_correspondence() -> None:
+def test_ensure_model_only_checks_the_revision() -> None:
     connection = _Connection()
-    PostgresBoletimSink(lambda: connection).ensure_model()
-    text = "\n".join(statement for statement, _params in connection.cursor_obj.statements)
-    assert "CREATE TABLE IF NOT EXISTS raw.csec" in text
-    assert "CREATE TABLE IF NOT EXISTS raw.ccont" in text
-    assert "CREATE TABLE IF NOT EXISTS raw.boletim" in text
-    assert "boletim_uf_cargo_numero_idx" in text
-    assert "boletim_secao_idx" in text
-    assert "COALESCE(partido, -1)" in text
-    assert "DROP TABLE" not in text
+    seen: list[object] = []
+    PostgresBoletimSink(lambda: connection, seen.append).ensure_model()
+    assert seen == [connection.cursor_obj]
+    assert connection.cursor_obj.statements == []
 
 
 def test_replace_deletes_only_the_requested_uf_and_copies_nulls() -> None:
@@ -65,7 +60,7 @@ def test_replace_without_votes_only_deletes_the_scope() -> None:
 
 
 def test_missing_database_settings_fail_before_a_socket() -> None:
-    sink = PostgresBoletimSink(lambda: connect_postgres({}))
+    sink = PostgresBoletimSink(lambda: connect_postgres({}), lambda _cursor: None)
     with pytest.raises(DatabaseConfigError):
         sink.ensure_model()
 

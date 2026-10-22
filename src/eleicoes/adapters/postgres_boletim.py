@@ -1,14 +1,18 @@
 """Grava boletins no Postgres. Uma transação substitui só a UF pedida."""
 
-from collections.abc import Iterator, Sequence
-from pathlib import Path
+from collections.abc import Sequence
 from typing import Final, Protocol
 
-from eleicoes.adapters.postgres_sink import ConnectionFactory, SqlConnection, SqlCursor
+from eleicoes.adapters.postgres_sink import (
+    ConnectionFactory,
+    CursorWork,
+    SqlConnection,
+    SqlCursor,
+    require_current_revision,
+)
 from eleicoes.domain.boletim import Boletim, VoteLine
 from eleicoes.domain.values import ElectionYear, Turno, Uf
 
-_TABLES_SQL = (Path(__file__).resolve().parent / "sql" / "tables.sql").read_text(encoding="utf-8")
 _COLUMNS: Final[tuple[str, ...]] = (
     "ano",
     "turno",
@@ -47,12 +51,13 @@ BoletimRow = tuple[BoletimCell, ...]
 
 
 class PostgresBoletimSink:
-    def __init__(self, connect: ConnectionFactory) -> None:
+    def __init__(self, connect: ConnectionFactory, schema: CursorWork | None = None) -> None:
         self._connect = connect
+        self._schema = schema if schema is not None else require_current_revision
         self._connection: SqlConnection | None = None
 
     def ensure_model(self) -> None:
-        self._run(lambda cursor: _execute_script(cursor, _TABLES_SQL))
+        self._run(self._schema)
 
     def replace_uf(
         self,
@@ -169,15 +174,3 @@ def _escape(value: str) -> str:
     return (
         value.replace("\\", "\\\\").replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
     )
-
-
-def _execute_script(cursor: SqlCursor, script: str) -> None:
-    for statement in _statements(script):
-        cursor.execute(statement)
-
-
-def _statements(script: str) -> Iterator[str]:
-    for chunk in script.split(";"):
-        statement = chunk.strip()
-        if statement:
-            yield statement

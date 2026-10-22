@@ -7,6 +7,7 @@ from pathlib import Path
 from re import compile as compile_pattern
 from typing import Protocol
 
+from eleicoes.adapters.orm.migrate import require_revisions
 from eleicoes.domain.errors import DatabaseConfigError, ElectionError, SchemaMismatchError
 from eleicoes.domain.importing import ImportStatus, Provenance
 from eleicoes.domain.tabular_contract import TabularContract
@@ -25,8 +26,9 @@ _STATUS_LABEL = {
     ImportStatus.IGNORED: "ignorado",
     ImportStatus.FAILED: "falhou",
 }
-_TABLES_SQL = (Path(__file__).resolve().parent / "sql" / "tables.sql").read_text(encoding="utf-8")
 _VIEWS_SQL = (Path(__file__).resolve().parent / "sql" / "views.sql").read_text(encoding="utf-8")
+_VERSIONED = "SELECT to_regclass('alembic_version') IS NOT NULL"
+_REVISIONS = "SELECT version_num FROM alembic_version"
 
 
 class SqlCopy(Protocol):
@@ -66,13 +68,17 @@ class SqlConnection(Protocol):
 
 
 class PostgresTabularSink:
-    def __init__(self, connect: "ConnectionFactory") -> None:
+    def __init__(
+        self,
+        connect: "ConnectionFactory",
+        schema: "CursorWork | None" = None,
+    ) -> None:
         self._connect = connect
+        self._schema = schema if schema is not None else require_current_revision
         self._connection: SqlConnection | None = None
 
     def ensure_model(self) -> None:
-        script = f"{_TABLES_SQL}\n{_VIEWS_SQL}"
-        self._run(lambda cursor: _execute_script(cursor, script))
+        self._run(self._views)
 
     def replace_member(
         self,
@@ -103,6 +109,10 @@ class PostgresTabularSink:
             self._connection.close()
             self._connection = None
 
+    def _views(self, cursor: SqlCursor) -> None:
+        self._schema(cursor)
+        _execute_script(cursor, _VIEWS_SQL)
+
     def _run(self, work: "CursorWork") -> None:
         connection = self._open()
         with connection.transaction(), connection.cursor() as cursor:
@@ -120,6 +130,18 @@ class ConnectionFactory(Protocol):
 
 class CursorWork(Protocol):
     def __call__(self, cursor: SqlCursor) -> None: ...
+
+
+def require_current_revision(cursor: SqlCursor) -> None:
+    require_revisions(_revisions(cursor))
+
+
+def _revisions(cursor: SqlCursor) -> tuple[str, ...]:
+    cursor.execute(_VERSIONED)
+    if not cursor.fetchall()[0][0]:
+        return ()
+    cursor.execute(_REVISIONS)
+    return tuple(str(row[0]) for row in cursor.fetchall())
 
 
 def connect_postgres(env: Mapping[str, str]) -> SqlConnection:

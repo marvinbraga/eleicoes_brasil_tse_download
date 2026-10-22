@@ -5,7 +5,12 @@ from pathlib import Path
 
 import pytest
 
-from eleicoes.domain.errors import ElectionError, InvalidStoredReportError
+from eleicoes.domain.errors import (
+    SCHEMA_OUTDATED_HINT,
+    ElectionError,
+    InvalidStoredReportError,
+    SchemaOutdatedError,
+)
 from eleicoes.domain.mapa import (
     Marca,
     MeshMissingError,
@@ -678,3 +683,22 @@ class _QuietNames:
 
     def close(self) -> None:
         self.closed = True
+
+
+class _OutdatedStore(_BrokenStore):
+    def load(self, _ano: int, _turno: int) -> StoredCrossReport | None:
+        raise SchemaOutdatedError((), "0002")
+
+
+def test_outdated_schema_asks_for_the_migration(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    code = main(
+        _command(tmp_path / "mapa.html"),
+        store=_OutdatedStore(),
+        assets=_Assets(),
+        collect=lambda _ano, _turno: (_bujari(),),
+    )
+    assert code == 1
+    assert capsys.readouterr().err == SCHEMA_OUTDATED_HINT + "\n"

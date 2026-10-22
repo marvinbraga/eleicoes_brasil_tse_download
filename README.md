@@ -42,6 +42,16 @@ make down
 
 > **Aviso:** preserve o volume `postgres_data`. Um `docker compose down -v` apaga os boletins já importados.
 
+## Atualizar o esquema do banco
+
+O Alembic versiona as tabelas dos esquemas `raw` e `analise`. Depois de `make up` e a cada versão nova do código, rode:
+
+```bash
+make migrate
+```
+
+No computador, o equivalente é `uv run python -m eleicoes migrar`. Um banco criado antes do Alembic é marcado na revisão `0001` sem recriar nada e recebe só as migrações seguintes. Para revisar o SQL sem tocar no banco, use `make migrate-sql` (banco já existente, a partir da `0001`) ou `make migrate-sql-vazio` (banco vazio). A importação e os relatórios recusam um banco fora da última revisão e pedem `make migrate`.
+
 Consulta direta:
 
 ```bash
@@ -366,7 +376,7 @@ A ausência de `imgbu.dat` deixa o relatório de poder inteiro. A ausência de `
 ## Seguir a sequência de 2026
 
 1. Copie `.env.example` para `.env` e confirme `ANO_ELEICAO=2026`.
-2. Suba o banco com `make up`.
+2. Suba o banco com `make up` e atualize o esquema com `make migrate`.
 3. Baixe os zips com `uv run python -m eleicoes download --ano 2026`.
 4. Importe as correspondências com `uv run python -m eleicoes import --ano 2026 --origem downloads/2026`.
 5. Baixe as urnas com `uv run python scripts/manter_urnas_2026.py`.

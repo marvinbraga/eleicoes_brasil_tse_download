@@ -6,7 +6,7 @@ from collections.abc import Callable
 from typing import Protocol
 
 from sqlalchemy import create_engine
-from sqlalchemy.engine import Connection, Engine
+from sqlalchemy.engine import Engine
 from sqlalchemy.exc import MultipleResultsFound, NoResultFound
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
@@ -35,9 +35,6 @@ class ScriptedSession:
 
     def begin(self) -> "_Begin":
         return _Begin(self)
-
-    def connection(self) -> Connection:
-        return empty_catalog_connection()
 
     def execute(self, statement: object) -> "_Result":
         if self.fail is not None:
@@ -149,29 +146,14 @@ class _AsyncBegin:
         return self._inner.__exit__(exc_type, exc, tb)
 
 
-_EMPTY_CATALOG: list[Engine] = []
-
-
-def empty_catalog_connection() -> Connection:
-    """An empty catalog: reflection sees a new database with no legacy columns."""
-    if not _EMPTY_CATALOG:
-        _EMPTY_CATALOG.append(_attached_engine()[0])
-    return _EMPTY_CATALOG[0].connect()
-
-
-def _attached_engine() -> tuple[Engine, sqlite3.Connection]:
+def memory_sessions() -> Callable[[], Session]:
+    """One SQLite connection with the raw and analise schema names the models use."""
     connection = sqlite3.connect(":memory:", check_same_thread=False)
     connection.execute("ATTACH DATABASE ':memory:' AS analise")
     connection.execute("ATTACH DATABASE ':memory:' AS raw")
     connection.execute("PRAGMA foreign_keys=ON")
     connection.commit()
     engine = create_engine("sqlite://", creator=lambda: connection, poolclass=StaticPool)
-    return engine, connection
-
-
-def memory_sessions() -> Callable[[], Session]:
-    """One SQLite connection with the raw and analise schema names the models use."""
-    engine, connection = _attached_engine()
 
     def open_session() -> Session:
         return Session(engine, expire_on_commit=False)

@@ -13,7 +13,12 @@ from typing import Final
 from dotenv import load_dotenv
 
 from eleicoes.adapters.html_mapa import html_do_mapa
-from eleicoes.domain.errors import ElectionError, InvalidStoredReportError
+from eleicoes.domain.errors import (
+    SCHEMA_OUTDATED_HINT,
+    ElectionError,
+    InvalidStoredReportError,
+    SchemaOutdatedError,
+)
 from eleicoes.domain.mapa import (
     BridgeMissingError,
     MarkMissingError,
@@ -128,6 +133,9 @@ def main(
         return EXIT_FAILURE
     except MarkMissingError as error:
         _print_marks(error)
+        return EXIT_FAILURE
+    except SchemaOutdatedError:
+        print(SCHEMA_OUTDATED_HINT, file=sys.stderr)
         return EXIT_FAILURE
     except ElectionError:
         print("Não foi possível apresentar o mapa.", file=sys.stderr)

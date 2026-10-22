@@ -12,9 +12,9 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import Executable, Select
 
+from eleicoes.adapters.orm.migrate import SchemaCheck, require_current_schema
 from eleicoes.adapters.orm.models import Base, PowerReportHeader, PowerReportLine
 from eleicoes.adapters.orm.schema import (
-    apply_tables,
     dialect_name,
     is_postgresql,
     require_clock,
@@ -33,8 +33,14 @@ _T = TypeVar("_T")
 
 
 class PostgresPowerReportStore:
-    def __init__(self, sessions: SyncSessionFactory) -> None:
+    def __init__(
+        self,
+        sessions: SyncSessionFactory,
+        schema: SchemaCheck | None = None,
+    ) -> None:
         self._sessions = sessions
+        self._schema = schema if schema is not None else require_current_schema
+        self._schema_checked = False
         self._session: Session | None = None
 
     def ensure_model(self) -> None:
@@ -42,8 +48,11 @@ class PostgresPowerReportStore:
         if not is_postgresql(session):
             Base.metadata.create_all(session.get_bind())
             return
+        if self._schema_checked:
+            return
         with session.begin():
-            apply_tables(session)
+            self._schema(session)
+        self._schema_checked = True
 
     def load(self, ano: int, turno: int, cargo: str) -> StoredReport | None:
         return self._guard(lambda: self._load(ano, turno, cargo))

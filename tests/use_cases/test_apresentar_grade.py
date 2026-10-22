@@ -6,7 +6,8 @@ from pathlib import Path
 import pytest
 
 from eleicoes.domain.boletim_consulta import PoderPartido
-from eleicoes.domain.grade import LugarVotos
+from eleicoes.domain.errors import SCHEMA_OUTDATED_HINT, SchemaOutdatedError
+from eleicoes.domain.grade import GradeDePoder, LugarVotos
 from eleicoes.use_cases.apresentar_grade import PresentPartyGrades, _production_store, main
 from eleicoes.use_cases.grade import BuildPartyShareGrid
 
@@ -194,3 +195,16 @@ def _install_store(monkeypatch: pytest.MonkeyPatch) -> _IdleStore:
 def _grade(nivel: str) -> object:
     place = LugarVotos("1392", "RIO BRANCO", (PoderPartido(1392, None, 15, 10, 0, 100),))
     return BuildPartyShareGrid().execute(2026, 1, "AC", "deputadoFederal", nivel, (place,))
+
+
+def test_outdated_schema_asks_for_the_migration(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def outdated(*_args: object) -> GradeDePoder:
+        raise SchemaOutdatedError((), "0002")
+
+    presenter = PresentPartyGrades(outdated, lambda _grades: "", lambda _path: True)
+    code = main(["--destino", str(tmp_path / "grade.html")], presenter=presenter)
+    assert code == 1
+    assert capsys.readouterr().err == SCHEMA_OUTDATED_HINT + "\n"

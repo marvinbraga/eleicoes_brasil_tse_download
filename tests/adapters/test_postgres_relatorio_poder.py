@@ -7,13 +7,13 @@ import psycopg
 import pytest
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.sql.dml import Delete, Insert
-from sqlalchemy.sql.elements import TextClause
 from sqlalchemy.sql.selectable import Select
 from tests.adapters.orm_fakes import ScriptedSession, memory_sessions
 
+import eleicoes.adapters.postgres_relatorio_poder as power_store
 from eleicoes.adapters.orm.sessions import open_sync_session
 from eleicoes.adapters.postgres_relatorio_poder import PostgresPowerReportStore
-from eleicoes.domain.errors import DatabaseConfigError, ElectionError
+from eleicoes.domain.errors import DatabaseConfigError, ElectionError, SchemaOutdatedError
 from eleicoes.domain.stored_grade import StoredCell
 from eleicoes.ports.relatorio_poder import StoredReport
 
@@ -25,25 +25,40 @@ _VOTES = StoredCell("uf", "AC", "Acre", 80, 15, 4, 1)
 _CITY = StoredCell("municipio", "1392", "RIO BRANCO", 100, 15, 10, 2)
 
 
-def test_ensure_model_creates_grade_tables_without_rendered_text() -> None:
+@pytest.fixture(autouse=True)
+def _schema_checks(monkeypatch: pytest.MonkeyPatch) -> list[object]:
+    seen: list[object] = []
+    monkeypatch.setattr(power_store, "require_current_schema", seen.append)
+    return seen
+
+
+def test_postgres_ensure_model_checks_the_revision_once_without_ddl(
+    _schema_checks: list[object],
+) -> None:
     session = ScriptedSession()
-    PostgresPowerReportStore(lambda: session).ensure_model()
-    text = "\n".join(item.text for _begin, item in session.executed if isinstance(item, TextClause))
-    report = text.split("CREATE TABLE IF NOT EXISTS analise.relatorio_poder", 1)[1]
-    assert "CREATE SCHEMA IF NOT EXISTS analise" in text
-    assert "CREATE TABLE IF NOT EXISTS analise.relatorio_poder_linha" in text
-    assert "PRIMARY KEY (ano, turno, cargo)" in text
-    assert "PRIMARY KEY (ano, turno, cargo, nivel, codigo, partido)" in text
-    assert "FOREIGN KEY (ano, turno, cargo)" in text
-    assert "REFERENCES analise.relatorio_poder (ano, turno, cargo)" in text
-    assert "votos_nominais integer NOT NULL" in text
-    assert "votos_legenda integer NOT NULL" in text
-    assert "comparecimento integer NOT NULL" in text
-    assert "html" not in text
-    assert "resumo" not in text
-    assert "fatia" not in text
-    assert "DROP" not in text
-    assert "uf " not in report
+    store = PostgresPowerReportStore(lambda: session)
+    store.ensure_model()
+    store.ensure_model()
+    assert _schema_checks == [session]
+    assert session.begins == 1
+    assert session.executed == []
+
+
+def test_injected_schema_check_replaces_the_default(_schema_checks: list[object]) -> None:
+    session = ScriptedSession()
+    seen: list[object] = []
+    PostgresPowerReportStore(lambda: session, seen.append).ensure_model()
+    assert seen == [session]
+    assert _schema_checks == []
+
+
+def test_outdated_schema_reaches_the_caller_as_is() -> None:
+    def outdated(_session: object) -> None:
+        raise SchemaOutdatedError((), "0002")
+
+    store = PostgresPowerReportStore(ScriptedSession, outdated)
+    with pytest.raises(SchemaOutdatedError):
+        store.load(2026, 1, "presidente")
 
 
 def test_load_reads_cells_after_ensuring_the_model() -> None:
@@ -191,7 +206,7 @@ def test_connection_is_reused_until_close_and_reopened_after() -> None:
     store.close()
     assert opened["count"] == 2
     assert session.closed == 2
-    assert session.begins == 6
+    assert session.begins == 4
 
 
 def _store(session: ScriptedSession) -> PostgresPowerReportStore:

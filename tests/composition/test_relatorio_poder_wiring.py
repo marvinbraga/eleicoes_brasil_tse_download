@@ -3,8 +3,6 @@
 from collections.abc import Mapping
 
 import pytest
-from sqlalchemy.engine import Connection
-from tests.adapters.orm_fakes import empty_catalog_connection
 
 from eleicoes.composition.grade import build_power_report_store
 
@@ -19,6 +17,10 @@ def test_builder_binds_the_given_settings_without_a_socket(
         return _Session()
 
     monkeypatch.setattr("eleicoes.composition.grade.open_sync_session", connect)
+    checks: list[object] = []
+    monkeypatch.setattr(
+        "eleicoes.adapters.postgres_relatorio_poder.require_current_schema", checks.append
+    )
     env = {
         "POSTGRES_HOST": "127.0.0.1",
         "POSTGRES_PORT": "25432",
@@ -32,6 +34,7 @@ def test_builder_binds_the_given_settings_without_a_socket(
     assert seen[0]["POSTGRES_HOST"] == "127.0.0.1"
     assert seen[0]["POSTGRES_PORT"] == "25432"
     assert seen[0]["POSTGRES_DB"] == "eleicoes"
+    assert len(checks) == 1
 
 
 def test_builder_without_arguments_reads_the_process_environment(
@@ -44,6 +47,10 @@ def test_builder_without_arguments_reads_the_process_environment(
         return _Session()
 
     monkeypatch.setattr("eleicoes.composition.grade.open_sync_session", connect)
+    checks: list[object] = []
+    monkeypatch.setattr(
+        "eleicoes.adapters.postgres_relatorio_poder.require_current_schema", checks.append
+    )
     monkeypatch.setattr("eleicoes.composition.grade.load_dotenv", lambda: None)
     monkeypatch.setenv("POSTGRES_HOST", "127.0.0.1")
     monkeypatch.setenv("POSTGRES_PORT", "25432")
@@ -75,9 +82,6 @@ class _Session:
 
     def execute(self, _statement: object) -> None:
         return None
-
-    def connection(self) -> Connection:
-        return empty_catalog_connection()
 
     def close(self) -> None:
         self.closed = True
