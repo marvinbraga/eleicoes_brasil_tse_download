@@ -578,8 +578,8 @@ const [respostaFederal, respostaEstadual] = await Promise.all(
   - para cada cargo, um `<section aria-labelledby>` com `<h2 className="leitura-titulo text-xl">` ("Deputado federal" ou "Deputado estadual"), seguido de `ErroRelatorio` se a resposta falhou, ou de `GraficoMarca`, `TabelaMarca` e `TabelaMarcaUf` se a marca existe, ou do texto "Sem votos gravados para este cargo." se a marca é `null`;
   - por fim, se as duas marcas existem e `comparacaoCargos(...).pares.length > 0`, o `GraficoMarcaCargos`.
 
-- [ ] **Step 1:** Implementar os cinco componentes.
-- [ ] **Step 2:** Run (de `frontend/`): `pnpm exec tsc --noEmit && pnpm exec eslint src/components/relatorios/*marca*.tsx && node --experimental-strip-types src/lib/verificar-grafico-marca.ts`. Expected: só `ok`.
+- [x] **Step 1:** Implementar os cinco componentes.
+- [x] **Step 2:** Run (de `frontend/`): `pnpm exec tsc --noEmit && pnpm exec eslint src/components/relatorios/*marca*.tsx && node --experimental-strip-types src/lib/verificar-grafico-marca.ts`. Expected: só `ok`.
 
 **If Task Fails:**
 1. Erro de tipo em `Promise.all` com `map`: tipe o retorno como `Promise<Resultado<GradeRelatorio>>[]` ou chame `buscarGrade` duas vezes, de forma explícita.
@@ -595,7 +595,7 @@ const [respostaFederal, respostaEstadual] = await Promise.all(
 - Modify: `frontend/src/components/layout/app-breadcrumb.tsx` (`TRILHAS`, linhas 20–33)
 - Modify: `frontend/src/app/page.tsx` (`DESTINOS`, linhas 10–36)
 
-- [ ] **Step 1:** Criar a página:
+- [x] **Step 1:** Criar a página:
 
 ```tsx
 import type { Metadata } from "next";
@@ -627,11 +627,11 @@ export default function MarcaPage() {
 }
 ```
 
-- [ ] **Step 2:** Navegação (uma entrada em cada arquivo). "Força da marca" é a 5ª do bloco dos seis planos, depois de "Classe do governador": fica depois de Força partidária, Cadeiras, Capilaridade e Verticalização, se existirem, e antes de "Municipais 2024" e "Mapa" (alinhado em 2026-10-22):
+- [x] **Step 2:** Navegação (uma entrada em cada arquivo). "Força da marca" é a 5ª do bloco dos seis planos, depois de "Classe do governador": fica depois de Força partidária, Cadeiras, Capilaridade e Verticalização, se existirem, e antes de "Municipais 2024" e "Mapa" (alinhado em 2026-10-22):
   - `app-sidebar.tsx`: `{ href: "/relatorios/marca", rotulo: "Força da marca" },`
   - `app-breadcrumb.tsx`: `"/relatorios/marca": { pagina: "Força da marca", relatorios: true },`
   - `app/page.tsx`: `{ href: "/relatorios/marca", titulo: "Força da marca", descricao: "Quanto do voto para deputado foi só no número do partido." },`
-- [ ] **Step 3:** Run: `pnpm exec tsc --noEmit && pnpm exec eslint src/app/relatorios/marca/page.tsx src/components/layout/app-sidebar.tsx src/components/layout/app-breadcrumb.tsx src/app/page.tsx`. Expected: nenhuma saída.
+- [x] **Step 3:** Run: `pnpm exec tsc --noEmit && pnpm exec eslint src/app/relatorios/marca/page.tsx src/components/layout/app-sidebar.tsx src/components/layout/app-breadcrumb.tsx src/app/page.tsx`. Expected: nenhuma saída.
 
 **If Task Fails:**
 1. Next 16 reclama da assinatura da página: leia `frontend/node_modules/next/dist/docs/` (veja `frontend/AGENTS.md`). A página não recebe `searchParams`.
@@ -672,6 +672,8 @@ export default function MarcaPage() {
 ### Task 8 (opcional): Mapa de calor partido × UF
 
 Faça esta task só se o humano confirmar (Q5). Ela é independente das Tasks 5 a 7.
+
+> **Não executada:** o usuário decidiu em 2026-10-22 que a página fica sem mapa de calor (seção "Decisões do usuário"). A `TabelaMarcaUf` é o indicador por UF.
 
 **Files:**
 - Modify: `frontend/src/lib/grafico-marca.ts`

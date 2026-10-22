@@ -25,6 +25,7 @@ const ITENS = [
   { href: "/relatorios/classe-governador", rotulo: "Classe do governador" },
   { href: "/relatorios/forca", rotulo: "Força partidária" },
   { href: "/relatorios/cadeiras", rotulo: "Cadeiras" },
+  { href: "/relatorios/marca", rotulo: "Força da marca" },
   { href: "/relatorios/municipais-2024", rotulo: "Municipais 2024" },
   { href: "/mapa", rotulo: "Mapa" },
 ] as const;
