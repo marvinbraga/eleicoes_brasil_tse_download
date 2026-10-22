@@ -132,3 +132,13 @@ def test_report_picks_the_scope_and_reports_missing_ones() -> None:
 def test_report_without_places_is_missing() -> None:
     with pytest.raises(MissingPowerReportError):
         build_report(2026, 1, "senador", MunicipalSet((), 3))
+
+
+def test_poucos_municipios_needs_half_of_the_votes_even_when_heavy() -> None:
+    short = replace(_BASE, top10=_share(Fraction(49, 100), Fraction(1, 10)))
+    assert classify(short).classe == "espalhado"
+
+
+def test_scope_whose_places_have_no_valid_vote_has_no_view() -> None:
+    empty = (Municipality("1", "M1 (AC)", "AC", {13: 0}),)
+    assert build_view(BRASIL, empty) is None

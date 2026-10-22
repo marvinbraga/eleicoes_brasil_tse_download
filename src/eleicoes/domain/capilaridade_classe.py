@@ -87,9 +87,9 @@ class CapillarityView:
 
 def build_view(scope: Scope, places: Sequence[Municipality]) -> CapillarityView | None:
     members = tuple(place for place in places if contains(scope, place))
-    if not members:
-        return None
     counted = tuple(place for place in members if place.validos > 0)
+    if not counted:
+        return None
     parties = sorted({party for place in counted for party, n in place.votos.items() if n > 0})
     built = (_classified(party, scope, members) for party in parties)
     ranked = tuple(sorted(built, key=_rank_key))

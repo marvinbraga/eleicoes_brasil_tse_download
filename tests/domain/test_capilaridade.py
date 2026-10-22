@@ -194,3 +194,34 @@ def test_top_count_rounds_up_and_is_at_least_one() -> None:
     found = party_metrics(13, Scope("uf", "SP", "São Paulo"), members)
     assert found.top10.municipios == 2
     assert [p.codigo for p in found.fortes][:2] == ["10", "9"]
+
+
+def test_strength_ties_fall_back_to_votes_then_numeric_code() -> None:
+    members = (_sp("10", 10, 90), _sp("9", 10, 90), _sp("8", 20, 180))
+    found = party_metrics(13, Scope("uf", "SP", "São Paulo"), members)
+    assert [p.codigo for p in found.fortes] == ["8", "9", "10"]
+    assert [p.codigo for p in found.maiores] == ["8", "9", "10"]
+
+
+def test_every_band_edge_is_inclusive() -> None:
+    # Party share 10% overall; places at 0.5x, 1.5x, 2x and 3x the mean, plus one filler.
+    members = (
+        _sp("1", 5, 95),
+        _sp("2", 15, 85),
+        _sp("3", 20, 80),
+        _sp("4", 30, 70),
+        _sp("5", 20, 480),
+    )
+    found = party_metrics(13, Scope("uf", "SP", "São Paulo"), members)
+    assert found.fatia == Fraction(1, 10)
+    by_key = {band.chave: band.municipios for band in found.faixas}
+    assert by_key["metade_a_media"] == 1
+    assert by_key["1_5_a_2"] == 1
+    assert by_key["2_a_3"] == 1
+    assert by_key["3_ou_mais"] == 1
+    assert by_key["ate_metade"] == 1
+
+
+def test_index_ignores_the_order_of_tied_shares() -> None:
+    rows = ((100, 10), (300, 30), (200, 0), (50, 40))
+    assert concentration_index(rows) == concentration_index(tuple(reversed(rows)))

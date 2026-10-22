@@ -335,8 +335,9 @@ def _top_count(total: int) -> int:
 
 
 def _by_strength(rows: Sequence[Municipality], partido: int) -> tuple[Municipality, ...]:
-    def key(place: Municipality) -> tuple[Fraction, int, str]:
-        return (-Fraction(place.of(partido), place.validos), -place.of(partido), place.codigo)
+    def key(place: Municipality) -> tuple[Fraction, int, tuple[int, str]]:
+        share = Fraction(place.of(partido), place.validos)
+        return (-share, -place.of(partido), code_order(place.codigo))
 
     return tuple(sorted(rows, key=key))
 
@@ -389,8 +390,13 @@ def _band_index(party: int, valid: int, party_total: int, valid_total: int) -> i
 
 def _largest(universe: Sequence[Municipality], partido: int) -> tuple[PlaceStrength, ...]:
     voted = (place for place in universe if place.of(partido) > 0)
-    ordered = sorted(voted, key=lambda place: (-place.of(partido), place.codigo))
+    ordered = sorted(voted, key=lambda place: (-place.of(partido), code_order(place.codigo)))
     return tuple(_strength(place, partido) for place in ordered[:DESTAQUES])
+
+
+def code_order(codigo: str) -> tuple[int, str]:
+    """Numeric order for TSE codes stored without leading zeros ("9" before "10")."""
+    return (len(codigo), codigo)
 
 
 def _strength(place: Municipality, partido: int) -> PlaceStrength:
