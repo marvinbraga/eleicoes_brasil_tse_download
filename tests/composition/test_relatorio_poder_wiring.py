@@ -3,6 +3,8 @@
 from collections.abc import Mapping
 
 import pytest
+from sqlalchemy.engine import Connection
+from tests.adapters.orm_fakes import empty_catalog_connection
 
 from eleicoes.composition.grade import build_power_report_store
 
@@ -73,6 +75,9 @@ class _Session:
 
     def execute(self, _statement: object) -> None:
         return None
+
+    def connection(self) -> Connection:
+        return empty_catalog_connection()
 
     def close(self) -> None:
         self.closed = True
