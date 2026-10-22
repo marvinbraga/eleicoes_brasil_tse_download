@@ -1,5 +1,5 @@
-import { FRASE_RECORTE } from "@/cruzamento/finalidade";
 import { ErroRelatorio } from "@/components/relatorios/erro-relatorio";
+import { GraficoPresidenteGovernador } from "@/components/relatorios/grafico-presidente-governador";
 import { SecaoComposicao } from "@/components/relatorios/secao-composicao";
 import { SecaoLeitura } from "@/components/relatorios/secao-leitura";
 import { buscarCruzamento } from "@/lib/buscar-relatorios";
@@ -12,6 +12,9 @@ import {
   type UfFiltro,
 } from "@/lib/eleicoes";
 import type { GrupoMunicipios } from "@/lib/relatorios";
+
+const FRASE_RECORTE =
+  "O filtro de UF muda só a lista de municípios abaixo. A composição, os gráficos e as tabelas por estado, por região e do país sempre reúnem todos os lugares apurados.";
 
 type DadosPresidenteGovernadorProps = {
   ano: Ano;
@@ -34,6 +37,7 @@ export async function DadosPresidenteGovernador({
   return (
     <div className="flex flex-col gap-10">
       <SecaoComposicao composicao={dados.composition} />
+      <GraficoPresidenteGovernador grupos={dados.municipalities} />
       <p className="text-sm text-muted-foreground">{FRASE_RECORTE}</p>
       {secoesMunicipio(dados.municipalities, uf, apoio)}
       <SecaoLeitura id="estado" titulo="Por estado" apoio={apoio} lugares={dados.states} />
