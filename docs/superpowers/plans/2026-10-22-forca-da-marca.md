@@ -504,6 +504,8 @@ Acrescente ao import do teste `itensRanking`, `layoutRanking`, `resumoRanking`, 
 2. **Handle findings by severity:** see jarvis:codereview severity rules.
 3. **Proceed only when:** zero Critical/High/Medium issues remain. Foco: exatidão (D5, D9, D10), `fora` nunca some, células vazias nunca viram 0%.
 
+> **Executada em 2026-10-22:** 8 revisores, nenhum problema de código acima de Low. A revisão de testes (por mutação) achou ramos não cobertos (desempate por número e por nome de UF, `sem-candidato`/`poucos` via `ufMarca`, `maisMuda` nulo, layout com partes zeradas); asserts acrescentados. Desvio aceito: `layoutRanking` passa `valor: 1` ao `layoutBarras` para manter as linhas mesmo com todas as partes zeradas.
+
 ---
 
 ### Task 5: Componentes
@@ -724,6 +726,8 @@ assert.equal(layoutCalor({ ...federal, ranking: [] }), null);
 1. **REQUIRED SUB-SKILL:** Use jarvis:codereview: dispatch all reviewers in parallel sobre todos os arquivos novos e modificados.
 2. **Handle findings by severity:** see jarvis:codereview severity rules.
 3. **Proceed only when:** zero Critical/High/Medium issues remain. Depois, `node --experimental-strip-types src/lib/verificar-grafico-marca.ts` (`ok`), `pnpm exec tsc --noEmit` e `pnpm exec eslint` (sem saída). Sem commit, a não ser que o usuário peça.
+
+> **Executada em 2026-10-22:** 8 revisores, todos PASS. Corrigidos: `CARGOS_MARCA` sem uso (agora no `Promise.all`), "100.000" fixo nos textos, rodapé "1,00×" com média zero, motivo `sr-only` na média de UF vazia, testes do meio exato e do rótulo oculto. Fica como dívida: a moldura do SVG de `grafico-marca.tsx` repete a de `grafico-poder.tsx` (estender `GraficoPoder` mexeria num componente compartilhado). A Task 7 (navegador) fica para o orquestrador.
 
 ## Perguntas em aberto
 
