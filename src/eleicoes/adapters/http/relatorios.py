@@ -7,10 +7,12 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse
 
 from eleicoes.adapters.http.dependencies import (
+    CapillarityJob,
     ClassJob,
     ProfileJob,
     clear_report_caches,
     get_boletim_reader,
+    get_capillarity_job,
     get_class_job,
     get_cross_store,
     get_municipal_reader,
@@ -20,6 +22,7 @@ from eleicoes.adapters.http.dependencies import (
     get_seat_store,
 )
 from eleicoes.adapters.http.schemas_cadeiras import CadeirasJson
+from eleicoes.adapters.http.schemas_capilaridade import CapilaridadeJson
 from eleicoes.adapters.http.schemas_municipais import MunicipaisJson
 from eleicoes.adapters.http.schemas_relatorios import (
     ClassJson,
@@ -256,3 +259,28 @@ async def presidente_governador_html(
     if atualizar:
         clear_report_caches()
     return HTMLResponse(content=html)
+
+
+CapillarityBuild = Annotated[CapillarityJob, Depends(get_capillarity_job)]
+_CAPILARIDADE = (
+    "Exige ano, turno e cargo. regiao (NO, NE, CO, SE, S) ou uf recorta; sem os dois, "
+    "é o Brasil. Lê só as células municipais gravadas do relatório de poder; "
+    "sem elas, responde 409."
+)
+
+
+@router.get(
+    "/relatorios/dados/capilaridade",
+    summary="Capilaridade partidária",
+    description=_CAPILARIDADE,
+)
+async def capilaridade(
+    ano: int,
+    turno: int,
+    cargo: str,
+    build: CapillarityBuild,
+    regiao: str | None = None,
+    uf: str | None = None,
+) -> CapilaridadeJson:
+    report = await asyncio.to_thread(build, ano, turno, cargo)
+    return CapilaridadeJson.from_domain(report, report.view(regiao, uf))
