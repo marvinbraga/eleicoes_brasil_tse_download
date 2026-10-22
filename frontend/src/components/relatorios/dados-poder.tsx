@@ -1,4 +1,6 @@
 import { ErroRelatorio } from "@/components/relatorios/erro-relatorio";
+import { ExplicacaoPoder } from "@/components/relatorios/explicacao-poder";
+import { GraficoPoder } from "@/components/relatorios/grafico-poder";
 import { TabelaPoder } from "@/components/relatorios/tabela-poder";
 import { buscarGrade } from "@/lib/buscar-relatorios";
 import {
@@ -13,6 +15,7 @@ import {
   type Turno,
   type UfFiltro,
 } from "@/lib/eleicoes";
+import { fatiasPoder, leituraPoder, liderancasPoder } from "@/lib/grafico-poder";
 import { linhasVisiveis, type LinhaGrade } from "@/lib/relatorios";
 
 type DadosPoderProps = {
@@ -32,8 +35,32 @@ export async function DadosPoder({ ano, turno, uf, cargo, nivel }: DadosPoderPro
   const apoio = `${rotuloCargoPoder(cargo)}, ${rotuloNivel(nivel).toLowerCase()}, ${ano}, turno ${turno}`;
   const visiveis = linhasVisiveis(grade.linhas, nivel, uf);
   const grupos = nivel === "municipio" ? gruposPorUf(visiveis) : [{ uf: "", linhas: visiveis }];
+  const liderancas = liderancasPoder(visiveis);
   return (
     <div className="flex flex-col gap-10">
+      <ExplicacaoPoder nivel={nivel} frases={leituraPoder(visiveis)} />
+      <div className="flex flex-col gap-6">
+        <GraficoPoder
+          id="grafico-poder-fatias"
+          titulo="Parte de cada partido nos votos válidos"
+          introducao={`Parte de cada partido no total de votos válidos do recorte (${apoio}).`}
+          legenda="Soma de todos os lugares do recorte, do maior para o menor. Os partidos menores entram juntos em Outros, sempre por último."
+          itens={fatiasPoder(visiveis)}
+        />
+        {liderancas.lugares > 1 ? (
+          <GraficoPoder
+            id="grafico-poder-liderancas"
+            titulo="Lugares em que cada partido lidera"
+            introducao={`Número de lugares em que cada partido teve mais votos válidos, de ${liderancas.lugares}.`}
+            legenda={
+              liderancas.empates > 0
+                ? "Cada barra conta os lugares em que o partido ficou em primeiro. Lugares com empate no topo não contam para ninguém."
+                : "Cada barra conta os lugares em que o partido ficou em primeiro."
+            }
+            itens={liderancas.itens}
+          />
+        ) : null}
+      </div>
       {grupos.map((grupo) => (
         <TabelaPoder
           key={grupo.uf === "" ? "recorte" : grupo.uf}
@@ -44,9 +71,6 @@ export async function DadosPoder({ ano, turno, uf, cargo, nivel }: DadosPoderPro
           escala={grade.linhas}
         />
       ))}
-      <p className="max-w-xl text-sm text-muted-foreground">
-        O percentual é o voto do partido sobre os votos válidos do lugar.
-      </p>
     </div>
   );
 }
