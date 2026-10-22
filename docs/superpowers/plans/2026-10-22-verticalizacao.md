@@ -1117,8 +1117,8 @@ export function buscarVerticalizacao(
 }
 ```
 
-- [ ] **Step 1:** Implementar.
-- [ ] **Step 2:** `cd frontend && pnpm exec tsc --noEmit && pnpm exec eslint src/lib/verticalizacao.ts src/lib/buscar-relatorios.ts`. Esperado: sem saída de erro.
+- [x] **Step 1:** Implementar.
+- [x] **Step 2:** `cd frontend && pnpm exec tsc --noEmit && pnpm exec eslint src/lib/verticalizacao.ts src/lib/buscar-relatorios.ts`. Esperado: sem saída de erro.
 
 ---
 
@@ -1168,7 +1168,7 @@ Regras:
   5. Se sobrarem casos além dos 3 de cada tipo: `Mais ${k} casos na tabela.`.
   - Os nomes de cargo nas frases vêm em minúsculas: "presidente", "governador", "senador", "deputado federal" e "deputado estadual".
 
-- [ ] **Step 1:** Escrever `verificar-grafico-verticalizacao.ts` com `node:assert/strict` e um `RelatorioVerticalizacao` montado à mão. Casos:
+- [x] **Step 1:** Escrever `verificar-grafico-verticalizacao.ts` com `node:assert/strict` e um `RelatorioVerticalizacao` montado à mão. Casos:
   - bordas de faixa (0,05 → 1; 0,0499 → 0; 0,35 → 4; null → null; r 0,2 → 1; −0,2 → −1; 0,19 → 0; 0,8 → 4);
   - célula ausente com "—" e faixa null;
   - célula sem eleição (`ufs_total === 0`) com "n/a", `semEleicao: true` e o tooltip próprio;
@@ -1180,9 +1180,9 @@ Regras:
   - ordem dos pontos por raio;
   - as 5 frases com texto exato, inclusive o singular "1 UF", o r nulo e o "e inversa";
   - `resumoMatriz` contém todos os valores.
-- [ ] **Step 2:** `cd frontend && node --experimental-strip-types src/lib/verificar-grafico-verticalizacao.ts`. Esperado: `ERR_MODULE_NOT_FOUND`.
-- [ ] **Step 3:** Implementar.
-- [ ] **Step 4:** Rodar até imprimir `ok`. Depois `pnpm exec tsc --noEmit` e `pnpm exec eslint src/lib/grafico-verticalizacao.ts src/lib/verificar-grafico-verticalizacao.ts`.
+- [x] **Step 2:** `cd frontend && node --experimental-strip-types src/lib/verificar-grafico-verticalizacao.ts`. Esperado: `ERR_MODULE_NOT_FOUND`.
+- [x] **Step 3:** Implementar.
+- [x] **Step 4:** Rodar até imprimir `ok`. Depois `pnpm exec tsc --noEmit` e `pnpm exec eslint src/lib/grafico-verticalizacao.ts src/lib/verificar-grafico-verticalizacao.ts`.
 
 **If Task Fails:** um import sem `.ts` quebra o `--experimental-strip-types`. Use `./fatia.ts`, `./partidos.ts` e assim por diante, como em `grafico-perfis.ts`.
 
@@ -1233,7 +1233,7 @@ Valores (validados em 2026-10-22 com `node <skill>/dataviz/scripts/validate_pale
 
 No escuro, a magnitude cresce para o claro, ou seja, o mais forte tem o maior contraste com a superfície. É uma escolha própria e não uma inversão automática. O tema escuro do app é a classe `.dark` (`globals.css:103`).
 
-- [ ] **Step 1:** Criar o arquivo. Rodar de novo o validador nas 6 rampas (teal claro e escuro, braço azul claro e escuro, braço vermelho claro e escuro, cada uma da faixa mais fraca para a mais forte) com `--ordinal`. Esperado: `ALL CHECKS PASS` nas 6. Rodar `node -e 'import("<skill>/scripts/validate_palette.js").then(m=>…contrast(tinta, fundo)…)'` nos 28 pares fundo/tinta. Esperado: todos ≥ 4,5. O caminho do skill é `/tmp/claude-1000/bundled-skills/2.1.308/b3ed5388aace147827b588d8cd073e96/dataviz/`, mas pode mudar: procure com `ls /tmp/claude-1000/bundled-skills/*/*/dataviz/scripts`.
+- [x] **Step 1:** Criar o arquivo. Rodar de novo o validador nas 6 rampas (teal claro e escuro, braço azul claro e escuro, braço vermelho claro e escuro, cada uma da faixa mais fraca para a mais forte) com `--ordinal`. Esperado: `ALL CHECKS PASS` nas 6. Rodar `node -e 'import("<skill>/scripts/validate_palette.js").then(m=>…contrast(tinta, fundo)…)'` nos 28 pares fundo/tinta. Esperado: todos ≥ 4,5. O caminho do skill é `/tmp/claude-1000/bundled-skills/2.1.308/b3ed5388aace147827b588d8cd073e96/dataviz/`, mas pode mudar: procure com `ls /tmp/claude-1000/bundled-skills/*/*/dataviz/scripts`.
 
 ---
 

@@ -1,4 +1,4 @@
-import { urlApi } from "@/lib/eleicoes";
+import { UF_TODAS, urlApi } from "@/lib/eleicoes";
 import { lerPlacarForca, RespostaForcaInvalidaError, type PlacarForca } from "@/lib/forca";
 import { lerMunicipais2024, type RelatorioMunicipais } from "@/lib/municipais-2024";
 import {
@@ -14,6 +14,7 @@ import {
   type RelatorioPerfis,
   type SimulacaoCadeiras,
 } from "@/lib/relatorios";
+import { lerVerticalizacao, type RelatorioVerticalizacao } from "@/lib/verticalizacao";
 
 export type Resultado<T> =
   | { ok: true; dados: T }
@@ -94,6 +95,24 @@ export function buscarMunicipais2024(uf: string | null): Promise<Resultado<Relat
     params.set("uf", uf);
   }
   return buscar("/relatorios/dados/municipais-2024", params, lerMunicipais2024);
+}
+
+export function buscarVerticalizacao(
+  ano: string,
+  turno: string,
+  uf: string,
+  partido: string | null,
+  cargoX: string,
+  cargoY: string,
+): Promise<Resultado<RelatorioVerticalizacao>> {
+  const params = new URLSearchParams({ ano, turno, cargo_x: cargoX, cargo_y: cargoY });
+  if (uf !== UF_TODAS) {
+    params.set("uf", uf);
+  }
+  if (partido !== null) {
+    params.set("partido", partido);
+  }
+  return buscar("/relatorios/dados/verticalizacao", params, lerVerticalizacao);
 }
 
 async function buscar<T>(
