@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from eleicoes.adapters.http.bundle import ReadPorts
 from eleicoes.adapters.orm.sessions import AsyncSessionMaker
 from eleicoes.adapters.postgres_boletim_consulta_async import AsyncPostgresBoletimReader
+from eleicoes.adapters.postgres_municipais_async import AsyncPostgresMunicipalReader
 from eleicoes.adapters.postgres_municipio_async import AsyncPostgresMunicipalityNames
 from eleicoes.adapters.postgres_relatorio_cadeiras_async import AsyncPostgresSeatVoteStore
 from eleicoes.adapters.postgres_relatorio_poder_async import AsyncPostgresPowerReportStore
@@ -22,6 +23,7 @@ from eleicoes.domain.perfis import ProfileReport, parse_group_span, require_prof
 from eleicoes.ports.async_sql import AsyncPool, AsyncSqlConnection
 from eleicoes.ports.boletim_consulta import AsyncBoletimReader
 from eleicoes.ports.grade import AsyncMunicipalityNames
+from eleicoes.ports.municipais import AsyncMunicipalResultsReader
 from eleicoes.ports.relatorio_cadeiras import AsyncSeatVoteStore
 from eleicoes.ports.relatorio_poder import AsyncRelatorioPoderStore
 from eleicoes.ports.relatorio_presidente_governador import AsyncRelatorioPresidenteGovernadorStore
@@ -93,6 +95,18 @@ async def get_seat_store(request: Request, session: SessionDep) -> AsyncSeatVote
             raise ElectionError("seat store is not installed")
         return installed.seat_store
     return AsyncPostgresSeatVoteStore(_required_session(session))
+
+
+async def get_municipal_reader(
+    request: Request,
+    connection: Connection,
+) -> AsyncMunicipalResultsReader:
+    installed = _installed(request)
+    if installed is not None:
+        if installed.municipais is None:
+            raise ElectionError("municipal reader is not installed")
+        return installed.municipais
+    return AsyncPostgresMunicipalReader(cast(AsyncSqlConnection, connection))
 
 
 def _installed(request: Request) -> ReadPorts | None:

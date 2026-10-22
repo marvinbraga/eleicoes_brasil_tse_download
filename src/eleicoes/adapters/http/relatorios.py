@@ -13,12 +13,14 @@ from eleicoes.adapters.http.dependencies import (
     get_boletim_reader,
     get_class_job,
     get_cross_store,
+    get_municipal_reader,
     get_municipality_names,
     get_power_store,
     get_profile_job,
     get_seat_store,
 )
 from eleicoes.adapters.http.schemas_cadeiras import CadeirasJson
+from eleicoes.adapters.http.schemas_municipais import MunicipaisJson
 from eleicoes.adapters.http.schemas_relatorios import (
     ClassJson,
     CrossReportJson,
@@ -27,9 +29,11 @@ from eleicoes.adapters.http.schemas_relatorios import (
 )
 from eleicoes.ports.boletim_consulta import AsyncBoletimReader
 from eleicoes.ports.grade import AsyncMunicipalityNames
+from eleicoes.ports.municipais import AsyncMunicipalResultsReader
 from eleicoes.ports.relatorio_cadeiras import AsyncSeatVoteStore
 from eleicoes.ports.relatorio_poder import AsyncRelatorioPoderStore
 from eleicoes.ports.relatorio_presidente_governador import AsyncRelatorioPresidenteGovernadorStore
+from eleicoes.use_cases.apresentar_municipais import MUNICIPAL_REPORT_YEAR, RenderMunicipalReport
 from eleicoes.use_cases.render_reports import RenderPowerReport, RenderPresidentGovernorReport
 from eleicoes.use_cases.simular_cadeiras import stored_simulation
 
@@ -41,6 +45,7 @@ CrossStore = Annotated[AsyncRelatorioPresidenteGovernadorStore, Depends(get_cros
 ProfileBuild = Annotated[ProfileJob, Depends(get_profile_job)]
 ClassBuild = Annotated[ClassJob, Depends(get_class_job)]
 SeatStore = Annotated[AsyncSeatVoteStore, Depends(get_seat_store)]
+MunicipalReader = Annotated[AsyncMunicipalResultsReader, Depends(get_municipal_reader)]
 _GRADE = (
     "Exige ano, turno, uf e cargo. nivel admite municipio, uf, regiao ou pais. "
     "A UF ancora o relatório, como na linha de comando, e não recorta um único estado "
@@ -157,6 +162,23 @@ _CADEIRAS = (
 )
 async def cadeiras(ano: int, turno: int, store: SeatStore) -> CadeirasJson:
     return CadeirasJson.from_domain(await stored_simulation(store, ano, turno))
+
+
+_MUNICIPAIS = (
+    "Prefeitos e vereadores eleitos em 2024 por partido, com o eleitorado apto dos municípios "
+    "governados e a sigla equivalente em 2026. uf é opcional; com uf, traz também os municípios. "
+    "Lê só as tabelas analise.municipal_*; sem importação, responde 409."
+)
+
+
+@router.get(
+    "/relatorios/dados/municipais-2024",
+    summary="Resultados municipais de 2024",
+    description=_MUNICIPAIS,
+)
+async def municipais_2024(reader: MunicipalReader, uf: str | None = None) -> MunicipaisJson:
+    report = await RenderMunicipalReport(reader).view(MUNICIPAL_REPORT_YEAR, uf)
+    return MunicipaisJson.from_domain(report)
 
 
 @router.get(
