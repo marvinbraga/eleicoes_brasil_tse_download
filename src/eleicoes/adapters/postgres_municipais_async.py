@@ -19,7 +19,7 @@ from eleicoes.domain.forca_municipal import (
     UfPartyCount,
     UfTotals,
 )
-from eleicoes.ports.async_sql import AsyncSqlConnection, AsyncSqlCursor
+from eleicoes.ports.async_sql import AsyncPool, AsyncSqlConnection, AsyncSqlCursor
 
 Row = Sequence[object]
 
@@ -285,3 +285,22 @@ def _text(value: object) -> str:
     if not isinstance(value, str):
         raise StoredReadError()
     return value
+
+
+class PooledMunicipalReader:
+    """AsyncMunicipalResultsReader that borrows a pooled connection only for each read.
+
+    The scoreboard reads 2024 counts once per request; holding a connection for the whole
+    request would tie up the small pool while the other reads and the CPU work run.
+    """
+
+    def __init__(self, pool: AsyncPool) -> None:
+        self._pool = pool
+
+    async def load(self, ano: int, uf: str | None) -> StoredMunicipalResults | None:
+        async with self._pool.connection() as connection:
+            return await AsyncPostgresMunicipalReader(connection).load(ano, uf)
+
+    async def party_counts_by_uf(self, ano: int) -> MunicipalCountsByUf | None:
+        async with self._pool.connection() as connection:
+            return await AsyncPostgresMunicipalReader(connection).party_counts_by_uf(ano)

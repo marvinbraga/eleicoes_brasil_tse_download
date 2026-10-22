@@ -1,7 +1,9 @@
 """HTTP read API. Fakes stand in for Postgres; no Docker and no network."""
 
 import asyncio
+from dataclasses import replace
 from datetime import UTC, datetime
+from typing import Any
 
 import httpx
 from fastapi import FastAPI
@@ -23,6 +25,13 @@ from eleicoes.domain.boletim_consulta import (
 from eleicoes.domain.errors import ElectionError
 from eleicoes.domain.presidente_governador import CargoTally, MunicipalPlace, PartyTally
 from eleicoes.domain.stored_grade import StoredCell
+from eleicoes.ports.cadeiras import (
+    CadeirasUnidade,
+    EstimativaCadeiras,
+    Federacao,
+    TotaisCadeiras,
+)
+from eleicoes.ports.municipal_2024 import Municipal2024, MunicipalPartido2024, TotaisMunicipal2024
 from eleicoes.ports.relatorio_poder import StoredReport
 from eleicoes.ports.relatorio_presidente_governador import StoredCrossReport
 
@@ -609,6 +618,8 @@ def test_forca_returns_integer_counts_and_lists_missing_offices() -> None:
     assert unidade["deputado_federal"] is None
     assert unidade["deputado_estadual"] == 35
     assert unidade["ufs_lider_estadual"] == 1
+    # Party-label votes: from the same rows as the totals; no federal source, so null.
+    assert (unidade["legenda_federal"], unidade["legenda_estadual"]) == (None, 5)
     assert unidade["municipal"]["lidera"] == 1
     assert unidade["municipal"]["presenca"] == [
         {"limiar": limiar, "municipios": 1} for limiar in (1, 2, 5, 10, 20)
@@ -619,6 +630,8 @@ def test_forca_returns_integer_counts_and_lists_missing_offices() -> None:
         "validos_deputado_estadual": 35,
         "ufs_deputado_estadual": 1,
         "municipal": {"municipios": 1, "validos": 35, "empates": 0},
+        "cadeiras": None,
+        "municipal_2024": None,
     }
     assert body["ufs"][0]["codigo"] == "AC"
     assert power.level_calls == [
@@ -641,3 +654,163 @@ def test_forca_rejects_an_unknown_reference_office() -> None:
     response = _get(create_app(ports=_ports()), f"{_FORCA}&cargo_referencia=deputadoDistrital")
     assert response.status_code == 422
     assert response.json()["detail"] == "Cargo inválido."
+
+
+class _SeatEstimates:
+    def __init__(self, estimate: EstimativaCadeiras | None) -> None:
+        self.estimate = estimate
+
+    async def load(self, _ano: int, _turno: int) -> EstimativaCadeiras | None:
+        return self.estimate
+
+
+def _seat_estimate() -> EstimativaCadeiras:
+    moment = datetime(2026, 10, 22, tzinfo=UTC)
+    return EstimativaCadeiras(
+        ano=2026,
+        turno=1,
+        gerado_em=moment,
+        federacoes=(Federacao("pl-x", "Federação PL X", (22, 99)),),
+        totais=TotaisCadeiras(camara=513, senado=54, governadores=27, assembleias=1059),
+        linhas=(
+            CadeirasUnidade("22", "AC", 4, 1, 1, 0, 9),
+            CadeirasUnidade("fed:pl-x", "AC", 4, 1, 1, 0, 9),
+            CadeirasUnidade("22", "BR", 119, 14, 3, 5, 200),
+            CadeirasUnidade("fed:pl-x", "BR", 119, 14, 3, 5, 200),
+        ),
+    )
+
+
+def _forca_with_seats(estimate: EstimativaCadeiras | None) -> Any:
+    ports = replace(_ports(power=_forca_power()), seat_estimates=_SeatEstimates(estimate))
+    response = _get(create_app(ports=ports), _FORCA)
+    assert response.status_code == 200
+    return response.json()
+
+
+def test_forca_with_seat_estimates_adds_seats_and_federation_rows() -> None:
+    body = _forca_with_seats(_seat_estimate())
+    assert body["cadeiras"] == {
+        "disponivel": True,
+        "comando": None,
+        "totais": {"camara": 513, "senado": 54, "governadores": 27, "assembleias": 1059},
+    }
+    pais = body["pais"]
+    (partido,) = pais["unidades"]
+    (federacao,) = pais["federadas"]
+    assert (partido["chave"], partido["tipo"], partido["nome"]) == ("22", "partido", None)
+    assert (federacao["chave"], federacao["tipo"]) == ("fed:pl-x", "federacao")
+    assert federacao["nome"] == "Federação PL X"
+    assert federacao["partidos"] == [22, 99]
+    assert federacao["camara"] == 119
+    assert pais["base_federada"]["cadeiras"] == body["cadeiras"]["totais"]
+    assert body["ufs"][0]["federadas"][0]["camara"] == 4
+    seats = ("camara", "senado", "governador_1t", "governador_2t", "assembleia")
+    assert [partido[campo] for campo in seats] == [119, 14, 3, 5, 200]
+    assert pais["base"]["cadeiras"] == body["cadeiras"]["totais"]
+    assert body["ufs"][0]["base"]["cadeiras"] == {
+        "camara": 4,
+        "senado": 1,
+        "governadores": 1,
+        "assembleias": 9,
+    }
+
+
+def test_forca_without_a_stored_estimate_flags_seats_unavailable() -> None:
+    body = _forca_with_seats(None)
+    assert body["cadeiras"] == {
+        "disponivel": False,
+        "comando": "uv run python scripts/relatorio_cadeiras.py",
+        "totais": None,
+    }
+    pais = body["pais"]
+    unidade = pais["unidades"][0]
+    assert unidade["camara"] is None
+    assert unidade["assembleia"] is None
+    assert pais["base"]["cadeiras"] is None
+
+
+def test_forca_without_the_seat_port_has_no_seat_block() -> None:
+    response = _get(create_app(ports=_ports(power=_forca_power())), _FORCA)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["cadeiras"] is None
+    assert body["pais"]["unidades"][0]["camara"] is None
+    assert body["pais"]["federadas"] == []
+    assert body["pais"]["base_federada"] is None
+    assert body["municipal_2024"] is None
+
+
+class _Municipal2024Port:
+    def __init__(self, found: Municipal2024 | None) -> None:
+        self.found = found
+
+    async def load(self) -> Municipal2024 | None:
+        return self.found
+
+
+def _forca_with_2024(found: Municipal2024 | None) -> Any:
+    ports = replace(_ports(power=_forca_power()), municipal_2024=_Municipal2024Port(found))
+    response = _get(create_app(ports=ports), _FORCA)
+    assert response.status_code == 200
+    return response.json()
+
+
+def test_forca_with_2024_results_adds_mayors_and_councillors() -> None:
+    moment = datetime(2026, 10, 1, 8, 30, tzinfo=UTC)
+    found = Municipal2024(
+        data_corte=moment,
+        importado_em=moment,
+        equivalencia_versao="v1",
+        totais=(
+            TotaisMunicipal2024("AC", 22, 22, 600, 230),
+            TotaisMunicipal2024("BR", 5569, 5560, 155912680, 58000),
+        ),
+        linhas=(
+            MunicipalPartido2024(22, "AC", 9, 300, 40),
+            MunicipalPartido2024(22, "BR", 500, 2000, 4000),
+        ),
+        sem_correspondencia=(),
+    )
+    body = _forca_with_2024(found)
+    totais_br = {
+        "municipios": 5569,
+        "com_prefeito": 5560,
+        "eleitorado": 155912680,
+        "vereadores": 58000,
+    }
+    assert body["municipal_2024"] == {
+        "disponivel": True,
+        "comando": None,
+        "data_corte": "2026-10-01T08:30:00Z",
+        "totais": totais_br,
+    }
+    pais = body["pais"]
+    unidade = pais["unidades"][0]
+    assert [unidade[k] for k in ("prefeitos", "eleitorado_governado", "vereadores")] == [
+        500,
+        2000,
+        4000,
+    ]
+    assert pais["base"]["municipal_2024"] == totais_br
+    acre = body["ufs"][0]
+    assert acre["base"]["municipal_2024"] == {
+        "municipios": 22,
+        "com_prefeito": 22,
+        "eleitorado": 600,
+        "vereadores": 230,
+    }
+    uf_unit = acre["unidades"][0]
+    assert [uf_unit[k] for k in ("prefeitos", "eleitorado_governado", "vereadores")] == [9, 300, 40]
+
+
+def test_forca_without_2024_import_flags_the_block() -> None:
+    body = _forca_with_2024(None)
+    assert body["municipal_2024"] == {
+        "disponivel": False,
+        "comando": "make download-municipais && make import-municipais",
+        "data_corte": None,
+        "totais": None,
+    }
+    assert body["pais"]["unidades"][0]["prefeitos"] is None
+    assert body["pais"]["base"]["municipal_2024"] is None

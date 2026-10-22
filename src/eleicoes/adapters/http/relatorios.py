@@ -13,10 +13,12 @@ from eleicoes.adapters.http.dependencies import (
     get_boletim_reader,
     get_class_job,
     get_cross_store,
+    get_municipal_2024,
     get_municipal_reader,
     get_municipality_names,
     get_power_store,
     get_profile_job,
+    get_seat_estimates,
     get_seat_store,
 )
 from eleicoes.adapters.http.schemas_cadeiras import CadeirasJson
@@ -29,8 +31,10 @@ from eleicoes.adapters.http.schemas_relatorios import (
     ProfileJson,
 )
 from eleicoes.ports.boletim_consulta import AsyncBoletimReader
+from eleicoes.ports.cadeiras import AsyncEstimativaCadeiras
 from eleicoes.ports.grade import AsyncMunicipalityNames
 from eleicoes.ports.municipais import AsyncMunicipalResultsReader
+from eleicoes.ports.municipal_2024 import AsyncMunicipal2024
 from eleicoes.ports.relatorio_cadeiras import AsyncSeatVoteStore
 from eleicoes.ports.relatorio_poder import AsyncRelatorioPoderStore
 from eleicoes.ports.relatorio_presidente_governador import AsyncRelatorioPresidenteGovernadorStore
@@ -48,6 +52,8 @@ ProfileBuild = Annotated[ProfileJob, Depends(get_profile_job)]
 ClassBuild = Annotated[ClassJob, Depends(get_class_job)]
 SeatStore = Annotated[AsyncSeatVoteStore, Depends(get_seat_store)]
 MunicipalReader = Annotated[AsyncMunicipalResultsReader, Depends(get_municipal_reader)]
+SeatEstimates = Annotated[AsyncEstimativaCadeiras | None, Depends(get_seat_estimates)]
+Municipal2024Port = Annotated[AsyncMunicipal2024 | None, Depends(get_municipal_2024)]
 _GRADE = (
     "Exige ano, turno, uf e cargo. nivel admite municipio, uf, regiao ou pais. "
     "A UF ancora o relatório, como na linha de comando, e não recorta um único estado "
@@ -152,7 +158,11 @@ _FORCA = (
     "Exige ano e turno. cargo_referencia escolhe o cargo dos indicadores municipais "
     "(padrão deputadoEstadual). Lê só as células gravadas do relatório de poder. "
     "Cargos sem gravação voltam em faltando, com o comando para gerar; "
-    "sem nenhum cargo gravado, responde 409."
+    "sem nenhum cargo gravado, responde 409. "
+    "Com a simulação de cadeiras gravada, traz as federações (votos e lideranças "
+    "recalculados) e as cadeiras; sem ela, cadeiras.disponivel é false. "
+    "Com os resultados municipais de 2024 importados, traz prefeitos, eleitorado governado "
+    "e vereadores; sem eles, municipal_2024.disponivel é false."
 )
 
 
@@ -161,9 +171,12 @@ async def forca(
     ano: int,
     turno: int,
     store: PowerStore,
+    seats: SeatEstimates,
+    municipal: Municipal2024Port,
     cargo_referencia: str = "deputadoEstadual",
 ) -> ForcaJson:
-    placar = await MontarPlacarForca(store).execute(ano, turno, cargo_referencia)
+    use_case = MontarPlacarForca(store, seats, municipal)
+    placar = await use_case.execute(ano, turno, cargo_referencia)
     return ForcaJson.from_domain(placar)
 
 

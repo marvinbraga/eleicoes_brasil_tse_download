@@ -15,8 +15,10 @@ from eleicoes.adapters.http.dependencies import (
     get_boletim_reader,
     get_connection,
     get_cross_store,
+    get_municipal_2024,
     get_municipality_names,
     get_power_store,
+    get_seat_estimates,
     get_session,
 )
 from eleicoes.adapters.orm.sessions import AsyncSessionMaker
@@ -28,6 +30,8 @@ from eleicoes.adapters.postgres_relatorio_presidente_governador_async import (
 )
 from eleicoes.composition.api import create_app
 from eleicoes.domain.errors import ElectionError
+from eleicoes.use_cases.estimativa_cadeiras import StoredSeatEstimates
+from eleicoes.use_cases.municipal_2024_placar import StoredMunicipal2024
 
 
 class _Checkout:
@@ -163,3 +167,40 @@ async def _get(application: FastAPI, path: str) -> httpx.Response:
     transport = httpx.ASGITransport(app=application)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         return await client.get(path)
+
+
+def test_scoreboard_sources_use_the_session_and_borrow_the_pool_lazily() -> None:
+    pool = _Pool(_Connection(_Script()))
+    application = create_app()
+    application.state.pool = pool
+    maker = AsyncSessionMaker(_url())
+    application.state.session_maker = maker
+    request = _request(application)
+
+    async def resolve() -> None:
+        sessions = get_session(request)
+        session = await anext(sessions)
+        try:
+            seats = await get_seat_estimates(request, session)
+            municipal = await get_municipal_2024(request)
+            assert isinstance(seats, StoredSeatEstimates)
+            assert isinstance(municipal, StoredMunicipal2024)
+        finally:
+            await sessions.aclose()
+            await maker.dispose()
+
+    asyncio.run(resolve())
+    # The 2024 source takes a pooled connection only when it reads.
+    assert pool.checkout.entered == 0
+
+
+def test_installed_ports_without_scoreboard_sources_give_none() -> None:
+    sentinel = object()
+    application = create_app(
+        ports=ReadPorts(
+            boletim=sentinel, names=sentinel, power_store=sentinel, cross_store=sentinel
+        )
+    )
+    request = _request(application)
+    assert asyncio.run(get_seat_estimates(request, None)) is None
+    assert asyncio.run(get_municipal_2024(request)) is None

@@ -3,8 +3,9 @@
 import re
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass
-from typing import Final
+from dataclasses import dataclass, replace
+from datetime import datetime
+from typing import Final, Literal
 
 from eleicoes.domain.errors import InvalidCargoError
 from eleicoes.domain.stored_grade import StoredCell
@@ -26,9 +27,22 @@ _PAIS_NIVEL: Final = "pais"
 _PAIS_NOME: Final = "Brasil"
 _SUFIXO: Final = re.compile(r" \(([A-Z]{2})\)$")
 _SEM_PARTIDO: Final = 100  # above every party number (1-99): units without members sort last
+PREFIXO_FEDERACAO: Final = "fed:"
 
 Chave = Callable[[int], str]
 Votos = dict[str, int]
+TipoUnidade = Literal["partido", "federacao"]
+PARTIDO: Final[TipoUnidade] = "partido"
+FEDERACAO: Final[TipoUnidade] = "federacao"
+
+
+@dataclass(frozen=True, slots=True)
+class FederacaoForca:
+    """A party federation: its row key is "fed:<codigo>", the same the seat estimate uses."""
+
+    codigo: str
+    nome: str
+    partidos: tuple[int, ...]
 
 
 def require_cargo_referencia(cargo: str) -> str:
@@ -87,6 +101,56 @@ class BaseMunicipal:
     empates: int
 
 
+@dataclass(frozen=True, slots=True)
+class Cadeiras:
+    """Seat estimate of one unit in one place (plano 2). Federation rows already add members."""
+
+    camara: int | None
+    senado: int | None
+    governador_1t: int | None
+    governador_2t: int | None
+    assembleia: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class BaseCadeiras:
+    camara: int
+    senado: int
+    governadores: int
+    assembleias: int
+
+
+@dataclass(frozen=True, slots=True)
+class BlocoCadeiras:
+    disponivel: bool
+    totais: BaseCadeiras | None
+
+
+@dataclass(frozen=True, slots=True)
+class Municipal2024Forca:
+    """Mayors, electorate they govern and councillors elected in 2024 (plano 6), 2026 numbers."""
+
+    prefeitos: int
+    eleitorado_governado: int
+    vereadores: int
+
+
+@dataclass(frozen=True, slots=True)
+class BaseMunicipal2024:
+    municipios: int
+    com_prefeito: int
+    eleitorado: int
+    vereadores: int
+
+
+@dataclass(frozen=True, slots=True)
+class BlocoMunicipal2024:
+    disponivel: bool
+    data_corte: datetime | None
+    totais: BaseMunicipal2024 | None
+
+
+MUNICIPAL_2024_VAZIO: Final = Municipal2024Forca(0, 0, 0)
 MUNICIPAL_VAZIO: Final = Municipal(0, 0, tuple(Presenca(limiar, 0) for limiar in LIMIARES))
 
 
@@ -178,6 +242,8 @@ class BaseRecorte:
     validos_deputado_estadual: int | None
     ufs_deputado_estadual: int | None
     municipal: BaseMunicipal | None
+    cadeiras: BaseCadeiras | None = None
+    municipal_2024: BaseMunicipal2024 | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -189,14 +255,27 @@ class ForcaUnidade:
     deputado_estadual: int | None
     ufs_lider_estadual: int | None
     municipal: Municipal | None
+    tipo: TipoUnidade = PARTIDO
+    nome: str | None = None
+    cadeiras: Cadeiras | None = None
+    municipal_2024: Municipal2024Forca | None = None
+    # Party-label votes (only the number of the party) for the two deputy offices (Task 20).
+    legenda_federal: int | None = None
+    legenda_estadual: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class Recorte:
+    """unidades: one row per party. federadas: the joined view (F18), where federations and
+    the parties outside them are ranked again against each other; empty without federations.
+    """
+
     codigo: str
     nome: str
     base: BaseRecorte
     unidades: tuple[ForcaUnidade, ...]
+    federadas: tuple[ForcaUnidade, ...] = ()
+    base_federada: BaseRecorte | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -208,15 +287,21 @@ class PlacarForca:
     pais: Recorte
     ufs: tuple[Recorte, ...]
     faltando: tuple[str, ...]
+    cadeiras: BlocoCadeiras | None = None
+    municipal_2024: BlocoMunicipal2024 | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class _Fonte:
     lugares: Mapping[tuple[str, str], Votos]
     presentes: frozenset[str]
+    legendas: Mapping[tuple[str, str], Votos]
 
     def votos(self, nivel: str, codigo: str) -> Votos | None:
         return self.lugares.get((nivel, codigo))
+
+    def legenda(self, nivel: str, codigo: str) -> Votos | None:
+        return self.legendas.get((nivel, codigo))
 
     def codigos(self, nivel: str) -> tuple[str, ...]:
         return tuple(codigo for chave_nivel, codigo in self.lugares if chave_nivel == nivel)
@@ -229,6 +314,8 @@ class _Lugar:
     deputado_estadual: Votos | None
     lideres_estaduais: Votos | None
     municipal: tuple[BaseMunicipal, dict[str, Municipal]] | None
+    legenda_federal: Votos | None = None
+    legenda_estadual: Votos | None = None
 
 
 def placar_forca(
@@ -275,6 +362,8 @@ class _Contexto:
             estadual,
             None if sem_fonte else _lideres(self._estaduais),
             self._municipal(None),
+            _legenda(self._fed, _PAIS_NIVEL, PAIS),
+            None if estadual is None else self._legenda_estadual(tuple(self._estaduais)),
         )
         quantas = None if sem_fonte else len(self._estaduais)
         return Recorte(PAIS, _PAIS_NOME, self._base(lugar, quantas), self._unidades(lugar))
@@ -287,9 +376,15 @@ class _Contexto:
             estadual,
             None if estadual is None else _lideres({uf: estadual}),
             self._municipal(uf),
+            _legenda(self._fed, _UF, uf),
+            None if estadual is None else self._legenda_estadual((uf,)),
         )
         quantas = None if estadual is None else 1
         return Recorte(uf, uf_name(uf), self._base(lugar, quantas), self._unidades(lugar))
+
+    def _legenda_estadual(self, ufs: tuple[str, ...]) -> Votos:
+        """D17 of plano 5: the sum of the UF rows (state deputies have no abroad vote)."""
+        return _soma(_legenda(self._est, _UF, uf) or {} for uf in ufs)
 
     def _municipal(self, uf: str | None) -> tuple[BaseMunicipal, dict[str, Municipal]] | None:
         if self._cidades is None:
@@ -315,7 +410,7 @@ class _Contexto:
         votos = (lugar.presidente, lugar.deputado_federal, lugar.deputado_estadual)
         chaves = _positivas(votos, municipais)
         unidades = (self._unidade(chave, lugar, municipais) for chave in chaves)
-        return tuple(sorted(unidades, key=_ordem_unidade))
+        return tuple(sorted(unidades, key=ordem_unidade))
 
     def _unidade(
         self,
@@ -331,6 +426,8 @@ class _Contexto:
             _valor(self._est, lugar.deputado_estadual, chave),
             _valor(self._est, lugar.lideres_estaduais, chave),
             _municipal_de(self._ref, municipais, chave),
+            legenda_federal=_valor(self._fed, lugar.legenda_federal, chave),
+            legenda_estadual=_valor(self._est, lugar.legenda_estadual, chave),
         )
 
 
@@ -338,13 +435,16 @@ def _fonte(cells: tuple[StoredCell, ...] | None, chave: Chave) -> _Fonte | None:
     if cells is None:
         return None
     lugares: dict[tuple[str, str], Votos] = {}
+    legendas: dict[tuple[str, str], Votos] = {}
     for cell in cells:
         if cell.nivel == _MUNICIPIO:
             continue
-        votos = lugares.setdefault((cell.nivel, cell.codigo), {})
         nome = chave(cell.partido)
+        votos = lugares.setdefault((cell.nivel, cell.codigo), {})
         votos[nome] = votos.get(nome, 0) + _validos_da_celula(cell)
-    return _Fonte(lugares, frozenset(chave(cell.partido) for cell in cells))
+        legenda = legendas.setdefault((cell.nivel, cell.codigo), {})
+        legenda[nome] = legenda.get(nome, 0) + cell.votos_legenda
+    return _Fonte(lugares, frozenset(chave(cell.partido) for cell in cells), legendas)
 
 
 def _estaduais(fonte: _Fonte | None) -> dict[str, Votos]:
@@ -380,6 +480,10 @@ def _membros(fontes: FontesForca, chave: Chave) -> dict[str, tuple[int, ...]]:
 
 def _at(fonte: _Fonte | None, nivel: str, codigo: str) -> Votos | None:
     return None if fonte is None else fonte.votos(nivel, codigo)
+
+
+def _legenda(fonte: _Fonte | None, nivel: str, codigo: str) -> Votos | None:
+    return None if fonte is None else fonte.legenda(nivel, codigo)
 
 
 def _soma(lista: Iterable[Votos]) -> Votos:
@@ -425,8 +529,9 @@ def _municipal_de(
     return municipais.get(chave, MUNICIPAL_VAZIO)
 
 
-def _ordem_unidade(unidade: ForcaUnidade) -> tuple[int, str]:
-    return (unidade.partidos[0] if unidade.partidos else _SEM_PARTIDO, unidade.chave)
+def ordem_unidade(unidade: ForcaUnidade) -> tuple[int, bool, str]:
+    primeiro = unidade.partidos[0] if unidade.partidos else _SEM_PARTIDO
+    return (primeiro, unidade.tipo == FEDERACAO, unidade.chave)
 
 
 def _faltando(cargo: str, fontes: FontesForca) -> tuple[str, ...]:
@@ -438,3 +543,74 @@ def _faltando(cargo: str, fontes: FontesForca) -> tuple[str, ...]:
     )
     faltam = {nome for nome, cells in pares if cells is None}
     return tuple(nome for nome in CARGOS_REFERENCIA if nome in faltam)
+
+
+def chave_federacao(codigo: str) -> str:
+    """Row key of a federation, shared with the seat estimate: "fed:<codigo>"."""
+    return f"{PREFIXO_FEDERACAO}{codigo}"
+
+
+def _por_federacao(federacoes: Iterable[FederacaoForca]) -> Chave:
+    mapa = {
+        partido: chave_federacao(item.codigo) for item in federacoes for partido in item.partidos
+    }
+
+    def chave(partido: int) -> str:
+        return mapa.get(partido, str(partido))
+
+    return chave
+
+
+def placar_com_federacoes(
+    ano: int,
+    turno: int,
+    cargo_referencia: str,
+    fontes: FontesForca,
+    federacoes: tuple[FederacaoForca, ...],
+) -> PlacarForca:
+    """Party rows plus the joined view (F18): member votes join per place before ranking,
+    so leaders, ties and presence are recomputed for federations and for their rivals.
+    """
+    partidos = placar_forca(ano, turno, cargo_referencia, fontes)
+    if not federacoes:
+        return partidos
+    juntas = placar_forca(ano, turno, cargo_referencia, fontes, _por_federacao(federacoes))
+    declaradas = {chave_federacao(item.codigo): item for item in federacoes}
+    pares = zip(partidos.ufs, juntas.ufs, strict=True)
+    return replace(
+        partidos,
+        pais=_com_federadas(partidos.pais, juntas.pais, declaradas),
+        ufs=tuple(_com_federadas(uf, junta, declaradas) for uf, junta in pares),
+    )
+
+
+def _com_federadas(
+    partidos: Recorte,
+    juntas: Recorte,
+    declaradas: Mapping[str, FederacaoForca],
+) -> Recorte:
+    federadas = (
+        _como_federacao(unidade, declaradas[unidade.chave])
+        if unidade.chave in declaradas
+        else unidade
+        for unidade in juntas.unidades
+    )
+    return replace(
+        partidos,
+        federadas=tuple(sorted(federadas, key=ordem_unidade)),
+        base_federada=juntas.base,
+    )
+
+
+def _como_federacao(unidade: ForcaUnidade, federacao: FederacaoForca) -> ForcaUnidade:
+    """Declared members (plano 2), not only those seen in 2026 cells. Label share is a
+    party measure, so federation rows leave it blank (Task 20).
+    """
+    return replace(
+        unidade,
+        tipo=FEDERACAO,
+        nome=federacao.nome,
+        partidos=tuple(sorted(federacao.partidos)),
+        legenda_federal=None,
+        legenda_estadual=None,
+    )

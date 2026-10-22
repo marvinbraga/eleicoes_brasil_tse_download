@@ -300,7 +300,7 @@ class MissingSeatReportError(ElectionError):
         listed = ", ".join(cargos)
         super().__init__(
             f"Os votos por candidato de {listed} ainda não foram gravados. "
-            "Gere com: uv run python scripts/relatorio_cadeiras.py"
+            f"Gere com: {comando_relatorio_cadeiras()}"
         )
 
 
@@ -329,3 +329,11 @@ class MissingMunicipalResultsError(ElectionError):
             f"Rode: python -m eleicoes download-municipais --ano {year} e "
             f"python -m eleicoes import-municipais --ano {year}."
         )
+
+
+def comando_relatorio_cadeiras() -> str:
+    return "uv run python scripts/relatorio_cadeiras.py"
+
+
+def comando_municipais_2024() -> str:
+    return "make download-municipais && make import-municipais"

@@ -1,5 +1,6 @@
 """JSON for the numbers behind the HTML reports."""
 
+from datetime import datetime
 from typing import Self
 
 from pydantic import BaseModel
@@ -8,10 +9,18 @@ from eleicoes.adapters.html_classe_governador import NOTES as CLASS_NOTES
 from eleicoes.adapters.html_classe_governador import texto_regra
 from eleicoes.adapters.html_perfis import NOTES as PROFILE_NOTES
 from eleicoes.domain.classe_governador import ClassOutcome, ClassReport, RuleCut, UfScore
-from eleicoes.domain.errors import comando_relatorio_poder
+from eleicoes.domain.errors import (
+    comando_municipais_2024,
+    comando_relatorio_cadeiras,
+    comando_relatorio_poder,
+)
 from eleicoes.domain.forca import (
+    BaseCadeiras,
     BaseMunicipal,
+    BaseMunicipal2024,
     BaseRecorte,
+    BlocoCadeiras,
+    BlocoMunicipal2024,
     ForcaUnidade,
     Municipal,
     PlacarForca,
@@ -356,12 +365,54 @@ class BaseMunicipalJson(BaseModel):
         return cls(municipios=base.municipios, validos=base.validos, empates=base.empates)
 
 
+class BaseCadeirasJson(BaseModel):
+    camara: int
+    senado: int
+    governadores: int
+    assembleias: int
+
+    @classmethod
+    def from_domain(cls, base: BaseCadeiras) -> Self:
+        return cls(
+            camara=base.camara,
+            senado=base.senado,
+            governadores=base.governadores,
+            assembleias=base.assembleias,
+        )
+
+
+def _base_cadeiras(base: BaseCadeiras | None) -> BaseCadeirasJson | None:
+    return None if base is None else BaseCadeirasJson.from_domain(base)
+
+
+class BaseMunicipal2024Json(BaseModel):
+    municipios: int
+    com_prefeito: int
+    eleitorado: int
+    vereadores: int
+
+    @classmethod
+    def from_domain(cls, base: BaseMunicipal2024) -> Self:
+        return cls(
+            municipios=base.municipios,
+            com_prefeito=base.com_prefeito,
+            eleitorado=base.eleitorado,
+            vereadores=base.vereadores,
+        )
+
+
+def _base_2024(base: BaseMunicipal2024 | None) -> BaseMunicipal2024Json | None:
+    return None if base is None else BaseMunicipal2024Json.from_domain(base)
+
+
 class BaseForcaJson(BaseModel):
     validos_presidente: int | None
     validos_deputado_federal: int | None
     validos_deputado_estadual: int | None
     ufs_deputado_estadual: int | None
     municipal: BaseMunicipalJson | None
+    cadeiras: BaseCadeirasJson | None
+    municipal_2024: BaseMunicipal2024Json | None
 
     @classmethod
     def from_domain(cls, base: BaseRecorte) -> Self:
@@ -373,6 +424,8 @@ class BaseForcaJson(BaseModel):
             validos_deputado_estadual=base.validos_deputado_estadual,
             ufs_deputado_estadual=base.ufs_deputado_estadual,
             municipal=municipal,
+            cadeiras=_base_cadeiras(base.cadeiras),
+            municipal_2024=_base_2024(base.municipal_2024),
         )
 
 
@@ -386,21 +439,43 @@ class UnidadeForcaJson(BaseModel):
     deputado_estadual: int | None
     ufs_lider_estadual: int | None
     municipal: MunicipalForcaJson | None
+    camara: int | None
+    senado: int | None
+    governador_1t: int | None
+    governador_2t: int | None
+    assembleia: int | None
+    prefeitos: int | None
+    eleitorado_governado: int | None
+    vereadores: int | None
+    legenda_federal: int | None
+    legenda_estadual: int | None
 
     @classmethod
     def from_domain(cls, item: ForcaUnidade) -> Self:
         found = item.municipal
         municipal = None if found is None else MunicipalForcaJson.from_domain(found)
+        seats = item.cadeiras
+        de_2024 = item.municipal_2024
         return cls(
             chave=item.chave,
-            tipo="partido",
-            nome=None,
+            tipo=item.tipo,
+            nome=item.nome,
             partidos=list(item.partidos),
             presidente=item.presidente,
             deputado_federal=item.deputado_federal,
             deputado_estadual=item.deputado_estadual,
             ufs_lider_estadual=item.ufs_lider_estadual,
             municipal=municipal,
+            camara=None if seats is None else seats.camara,
+            senado=None if seats is None else seats.senado,
+            governador_1t=None if seats is None else seats.governador_1t,
+            governador_2t=None if seats is None else seats.governador_2t,
+            assembleia=None if seats is None else seats.assembleia,
+            prefeitos=None if de_2024 is None else de_2024.prefeitos,
+            eleitorado_governado=None if de_2024 is None else de_2024.eleitorado_governado,
+            vereadores=None if de_2024 is None else de_2024.vereadores,
+            legenda_federal=item.legenda_federal,
+            legenda_estadual=item.legenda_estadual,
         )
 
 
@@ -409,20 +484,55 @@ class RecorteForcaJson(BaseModel):
     nome: str
     base: BaseForcaJson
     unidades: list[UnidadeForcaJson]
+    federadas: list[UnidadeForcaJson]
+    base_federada: BaseForcaJson | None
 
     @classmethod
     def from_domain(cls, recorte: Recorte) -> Self:
+        federada = recorte.base_federada
         return cls(
             codigo=recorte.codigo,
             nome=recorte.nome,
             base=BaseForcaJson.from_domain(recorte.base),
             unidades=[UnidadeForcaJson.from_domain(item) for item in recorte.unidades],
+            federadas=[UnidadeForcaJson.from_domain(item) for item in recorte.federadas],
+            base_federada=None if federada is None else BaseForcaJson.from_domain(federada),
         )
 
 
 class FaltandoJson(BaseModel):
     cargo: str
     comando: str
+
+
+class BlocoCadeirasJson(BaseModel):
+    disponivel: bool
+    comando: str | None
+    totais: BaseCadeirasJson | None
+
+    @classmethod
+    def from_domain(cls, bloco: BlocoCadeiras) -> Self:
+        return cls(
+            disponivel=bloco.disponivel,
+            comando=None if bloco.disponivel else comando_relatorio_cadeiras(),
+            totais=_base_cadeiras(bloco.totais),
+        )
+
+
+class BlocoMunicipal2024Json(BaseModel):
+    disponivel: bool
+    comando: str | None
+    data_corte: datetime | None
+    totais: BaseMunicipal2024Json | None
+
+    @classmethod
+    def from_domain(cls, bloco: BlocoMunicipal2024) -> Self:
+        return cls(
+            disponivel=bloco.disponivel,
+            comando=None if bloco.disponivel else comando_municipais_2024(),
+            data_corte=bloco.data_corte,
+            totais=_base_2024(bloco.totais),
+        )
 
 
 class ForcaJson(BaseModel):
@@ -433,6 +543,8 @@ class ForcaJson(BaseModel):
     faltando: list[FaltandoJson]
     pais: RecorteForcaJson
     ufs: list[RecorteForcaJson]
+    cadeiras: BlocoCadeirasJson | None
+    municipal_2024: BlocoMunicipal2024Json | None
 
     @classmethod
     def from_domain(cls, placar: PlacarForca) -> Self:
@@ -448,4 +560,10 @@ class ForcaJson(BaseModel):
             faltando=faltando,
             pais=RecorteForcaJson.from_domain(placar.pais),
             ufs=[RecorteForcaJson.from_domain(item) for item in placar.ufs],
+            cadeiras=None
+            if placar.cadeiras is None
+            else BlocoCadeirasJson.from_domain(placar.cadeiras),
+            municipal_2024=None
+            if placar.municipal_2024 is None
+            else BlocoMunicipal2024Json.from_domain(placar.municipal_2024),
         )

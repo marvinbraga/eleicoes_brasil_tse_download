@@ -1,5 +1,6 @@
 """Seat estimate for the API: stored votes in, pure simulation out. Never scans boletins."""
 
+import asyncio
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -33,4 +34,6 @@ async def stored_simulation(
         raise MissingSeatReportError(missing)
     votos = tuple(voto for item in stored for voto in item.votos)
     oldest = min(item.gerado_em for item in stored)
-    return SimulacaoGravada(simular_cadeiras(year, turn, votos, rules), oldest)
+    # CPU-bound: off the event loop, as the scoreboard does with its own computation.
+    simulacao = await asyncio.to_thread(simular_cadeiras, year, turn, votos, rules)
+    return SimulacaoGravada(simulacao, oldest)

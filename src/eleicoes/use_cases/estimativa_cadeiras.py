@@ -13,6 +13,7 @@ from eleicoes.domain.errors import (
     UnknownPartyRegistryError,
     UnsupportedSeatTurnError,
 )
+from eleicoes.domain.forca import chave_federacao
 from eleicoes.domain.simulacao_cadeiras import CasaSimulada
 from eleicoes.ports.cadeiras import (
     CadeirasUnidade,
@@ -24,7 +25,6 @@ from eleicoes.ports.relatorio_cadeiras import AsyncSeatVoteStore
 from eleicoes.use_cases.simular_cadeiras import SimulacaoGravada, stored_simulation
 
 PAIS: Final = "BR"
-_FED: Final = "fed:"
 _Key = tuple[int, str]
 
 
@@ -68,7 +68,7 @@ def estimativa_de(gravada: SimulacaoGravada) -> EstimativaCadeiras:
         for uf in lugares
     ]
     linhas.extend(
-        _linha(f"{_FED}{federacao.codigo}", federacao.partidos, uf, contagens)
+        _linha(chave_federacao(federacao.codigo), federacao.partidos, uf, contagens)
         for federacao in registro.federacoes
         for uf in lugares
     )

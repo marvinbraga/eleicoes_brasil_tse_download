@@ -10,7 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from eleicoes.adapters.http.bundle import ReadPorts
 from eleicoes.adapters.orm.sessions import AsyncSessionMaker
 from eleicoes.adapters.postgres_boletim_consulta_async import AsyncPostgresBoletimReader
-from eleicoes.adapters.postgres_municipais_async import AsyncPostgresMunicipalReader
+from eleicoes.adapters.postgres_municipais_async import (
+    AsyncPostgresMunicipalReader,
+    PooledMunicipalReader,
+)
 from eleicoes.adapters.postgres_municipio_async import AsyncPostgresMunicipalityNames
 from eleicoes.adapters.postgres_relatorio_cadeiras_async import AsyncPostgresSeatVoteStore
 from eleicoes.adapters.postgres_relatorio_poder_async import AsyncPostgresPowerReportStore
@@ -22,11 +25,15 @@ from eleicoes.domain.errors import ElectionError
 from eleicoes.domain.perfis import ProfileReport, parse_group_span, require_profile_cargo
 from eleicoes.ports.async_sql import AsyncPool, AsyncSqlConnection
 from eleicoes.ports.boletim_consulta import AsyncBoletimReader
+from eleicoes.ports.cadeiras import AsyncEstimativaCadeiras
 from eleicoes.ports.grade import AsyncMunicipalityNames
 from eleicoes.ports.municipais import AsyncMunicipalResultsReader
+from eleicoes.ports.municipal_2024 import AsyncMunicipal2024
 from eleicoes.ports.relatorio_cadeiras import AsyncSeatVoteStore
 from eleicoes.ports.relatorio_poder import AsyncRelatorioPoderStore
 from eleicoes.ports.relatorio_presidente_governador import AsyncRelatorioPresidenteGovernadorStore
+from eleicoes.use_cases.estimativa_cadeiras import StoredSeatEstimates
+from eleicoes.use_cases.municipal_2024_placar import StoredMunicipal2024
 
 
 async def get_connection(request: Request) -> AsyncIterator[AsyncSqlConnection | None]:
@@ -107,6 +114,32 @@ async def get_municipal_reader(
             raise ElectionError("municipal reader is not installed")
         return installed.municipais
     return AsyncPostgresMunicipalReader(cast(AsyncSqlConnection, connection))
+
+
+async def get_seat_estimates(
+    request: Request,
+    session: SessionDep,
+) -> AsyncEstimativaCadeiras | None:
+    """The scoreboard's optional seat source; installed ports may leave it out (None).
+
+    It shares the request session with get_power_store, so its reads must stay sequential
+    with the power reads (never asyncio.gather on one AsyncSession).
+    """
+    installed = _installed(request)
+    if installed is not None:
+        return installed.seat_estimates
+    return StoredSeatEstimates(AsyncPostgresSeatVoteStore(_required_session(session)))
+
+
+async def get_municipal_2024(request: Request) -> AsyncMunicipal2024 | None:
+    """The scoreboard's optional 2024 source; installed ports may leave it out (None).
+
+    It borrows a pooled connection only while it reads, not for the whole request.
+    """
+    installed = _installed(request)
+    if installed is not None:
+        return installed.municipal_2024
+    return StoredMunicipal2024(PooledMunicipalReader(_require_pool(request)))
 
 
 def _installed(request: Request) -> ReadPorts | None:
