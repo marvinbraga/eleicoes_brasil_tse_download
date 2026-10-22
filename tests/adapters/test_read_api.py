@@ -54,6 +54,7 @@ def test_health_and_openapi_advertise_the_read_routes() -> None:
         "/relatorios/dados/presidente-governador",
         "/relatorios/poder",
         "/relatorios/presidente-governador",
+        "/relatorios/dados/cadeiras",
     }
     assert expected <= set(paths)
     assert paths["/votos/cargos"]["get"]["summary"] == "Totais do cargo"

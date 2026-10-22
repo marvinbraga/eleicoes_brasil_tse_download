@@ -16,7 +16,9 @@ from eleicoes.adapters.http.dependencies import (
     get_municipality_names,
     get_power_store,
     get_profile_job,
+    get_seat_store,
 )
+from eleicoes.adapters.http.schemas_cadeiras import CadeirasJson
 from eleicoes.adapters.http.schemas_relatorios import (
     ClassJson,
     CrossReportJson,
@@ -25,9 +27,11 @@ from eleicoes.adapters.http.schemas_relatorios import (
 )
 from eleicoes.ports.boletim_consulta import AsyncBoletimReader
 from eleicoes.ports.grade import AsyncMunicipalityNames
+from eleicoes.ports.relatorio_cadeiras import AsyncSeatVoteStore
 from eleicoes.ports.relatorio_poder import AsyncRelatorioPoderStore
 from eleicoes.ports.relatorio_presidente_governador import AsyncRelatorioPresidenteGovernadorStore
 from eleicoes.use_cases.render_reports import RenderPowerReport, RenderPresidentGovernorReport
+from eleicoes.use_cases.simular_cadeiras import stored_simulation
 
 router = APIRouter(tags=["Relatórios"])
 Reader = Annotated[AsyncBoletimReader, Depends(get_boletim_reader)]
@@ -36,6 +40,7 @@ PowerStore = Annotated[AsyncRelatorioPoderStore, Depends(get_power_store)]
 CrossStore = Annotated[AsyncRelatorioPresidenteGovernadorStore, Depends(get_cross_store)]
 ProfileBuild = Annotated[ProfileJob, Depends(get_profile_job)]
 ClassBuild = Annotated[ClassJob, Depends(get_class_job)]
+SeatStore = Annotated[AsyncSeatVoteStore, Depends(get_seat_store)]
 _GRADE = (
     "Exige ano, turno, uf e cargo. nivel admite municipio, uf, regiao ou pais. "
     "A UF ancora o relatório, como na linha de comando, e não recorta um único estado "
@@ -134,6 +139,24 @@ async def perfis(
 async def classe_governador(ano: int, turno: int, build: ClassBuild) -> ClassJson:
     report = await asyncio.to_thread(build, ano, turno)
     return ClassJson.from_domain(report)
+
+
+_CADEIRAS = (
+    "Exige ano e turno; só o turno 1 vale, outro turno responde 422. Estima as "
+    "cadeiras da Câmara, das Assembleias e do Senado e o "
+    "resultado de governador com os votos do 1º turno gravados por candidato. "
+    "É uma estimativa, não o resultado oficial. Não lê os boletins: sem os votos "
+    "gravados, responde 409 com o comando que os grava."
+)
+
+
+@router.get(
+    "/relatorios/dados/cadeiras",
+    summary="Simulação de cadeiras",
+    description=_CADEIRAS,
+)
+async def cadeiras(ano: int, turno: int, store: SeatStore) -> CadeirasJson:
+    return CadeirasJson.from_domain(await stored_simulation(store, ano, turno))
 
 
 @router.get(

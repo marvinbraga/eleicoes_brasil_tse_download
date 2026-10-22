@@ -11,6 +11,7 @@ from eleicoes.adapters.http.bundle import ReadPorts
 from eleicoes.adapters.orm.sessions import AsyncSessionMaker
 from eleicoes.adapters.postgres_boletim_consulta_async import AsyncPostgresBoletimReader
 from eleicoes.adapters.postgres_municipio_async import AsyncPostgresMunicipalityNames
+from eleicoes.adapters.postgres_relatorio_cadeiras_async import AsyncPostgresSeatVoteStore
 from eleicoes.adapters.postgres_relatorio_poder_async import AsyncPostgresPowerReportStore
 from eleicoes.adapters.postgres_relatorio_presidente_governador_async import (
     AsyncPostgresPresidentGovernorStore,
@@ -21,6 +22,7 @@ from eleicoes.domain.perfis import ProfileReport, parse_group_span, require_prof
 from eleicoes.ports.async_sql import AsyncPool, AsyncSqlConnection
 from eleicoes.ports.boletim_consulta import AsyncBoletimReader
 from eleicoes.ports.grade import AsyncMunicipalityNames
+from eleicoes.ports.relatorio_cadeiras import AsyncSeatVoteStore
 from eleicoes.ports.relatorio_poder import AsyncRelatorioPoderStore
 from eleicoes.ports.relatorio_presidente_governador import AsyncRelatorioPresidenteGovernadorStore
 
@@ -82,6 +84,15 @@ async def get_cross_store(
     if installed is not None:
         return installed.cross_store
     return AsyncPostgresPresidentGovernorStore(_required_session(session))
+
+
+async def get_seat_store(request: Request, session: SessionDep) -> AsyncSeatVoteStore:
+    installed = _installed(request)
+    if installed is not None:
+        if installed.seat_store is None:
+            raise ElectionError("seat store is not installed")
+        return installed.seat_store
+    return AsyncPostgresSeatVoteStore(_required_session(session))
 
 
 def _installed(request: Request) -> ReadPorts | None:
