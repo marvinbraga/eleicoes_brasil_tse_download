@@ -1013,7 +1013,7 @@ async def verticalizacao(ano: int, turno: int, build: VerticalBuild, uf: str | N
 
 O schema tem os modelos `CargoVerticalJson`, `CoerenciaJson`, `UfComparacaoJson`, `SemCandidatoJson`, `ComparacaoJson`, `PartidoVerticalJson`, `PontoJson`, `DispersaoJson`, `LimiaresJson` e `VerticalJson`, com campos e ordem exatamente como em "Contrato". Cada um tem `from_domain`, no padrão de `schemas_relatorios.ClassJson`. Fatias e esperadas usam `format_percent`. `r` usa `format_decimal(r)`. `razao` usa `format_decimal(float(razao))`. Um `None` vira `null`. `limiares` = `{"razao": str(RAZAO), "diferenca": format_percent(DIFERENCA), "base_relevante": format_percent(BASE_RELEVANTE), "minimo_municipios": MINIMO_MUNICIPIOS}`. `notas = list(NOTES)`.
 
-- [ ] **Step 1: Testes que falham** (com `create_app(ports=_ports())` de `tests/adapters/test_read_api.py` e `application.dependency_overrides[get_vertical_job] = lambda: job`, como em `test_relatorios_agrupamentos.py:515`)
+- [x] **Step 1: Testes que falham** (com `create_app(ports=_ports())` de `tests/adapters/test_read_api.py` e `application.dependency_overrides[get_vertical_job] = lambda: job`, como em `test_relatorios_agrupamentos.py:515`)
   - A rota aparece no `/openapi.json` com `summary == "Verticalização"` e os parâmetros `{"ano","turno","uf","partido","cargo_x","cargo_y"}`.
   - Um job falso que devolve a `VerticalView` de uma base pequena dá 200, e o JSON tem as chaves do contrato, `cargos` com 5 itens, `coerencia` com 7 e `comparacoes` com 3. `r` nulo sai como `null`.
   - `uf=TODAS` e `uf=` chegam ao job como `None`. `uf=sp` chega como `"sp"` e o job normaliza.
@@ -1025,9 +1025,9 @@ O schema tem os modelos `CargoVerticalJson`, `CoerenciaJson`, `UfComparacaoJson`
     - (c) não guarda erro (como `test_stored_class_job_does_not_cache_an_error`);
     - (d) `clear_report_caches()` força uma nova leitura.
   - Use `clear_vertical_caches()` num fixture `autouse` para isolar os testes.
-- [ ] **Step 2:** rodar e ver falhar.
-- [ ] **Step 3:** implementar e encaixar (`api.py` e `dependencies.py`).
-- [ ] **Step 4:** `uv run pytest -q && uv run ruff check src tests && uv run ruff format --check src tests && uv run mypy src tests` → toda a suíte verde.
+- [x] **Step 2:** rodar e ver falhar.
+- [x] **Step 3:** implementar e encaixar (`api.py` e `dependencies.py`).
+- [x] **Step 4:** `uv run pytest -q && uv run ruff check src tests && uv run ruff format --check src tests && uv run mypy src tests` → toda a suíte verde.
 
 **If Task Fails:**
 - Se 409 virar 500, confira se `MissingPowerReportError` não foi embrulhado. `asyncio.to_thread` repassa a exceção original.
