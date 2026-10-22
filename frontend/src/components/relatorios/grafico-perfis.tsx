@@ -1,61 +1,41 @@
 import { DicaGrafico } from "@/components/relatorios/dica-grafico";
 import { formatarInteiro } from "@/lib/fracao";
 import {
-  ALTURA_BARRA,
-  CABECA,
-  ESQUERDA,
-  LARGURA_PESO,
-  PASSO,
+  MEDIDAS_ESTREITO,
   TONS,
-  X_PESO,
-  X_PESO_ROTULO,
   layoutPerfis,
   resumoPerfis,
   type BarraMistura,
   type BlocoPerfil,
   type EntradaPerfis,
+  type LayoutPerfis,
+  type MedidasPerfis,
 } from "@/lib/grafico-perfis";
 
 const ID_TITULO = "grafico-perfis-titulo";
 const ID_DESC = "grafico-perfis-desc";
-const RECUO = (PASSO - ALTURA_BARRA) / 2;
 
 export function GraficoPerfis({ partidos, grupos }: EntradaPerfis) {
   const entrada = { partidos, grupos };
   const layout = layoutPerfis(entrada);
-  if (layout === null) {
+  const estreito = layoutPerfis(entrada, MEDIDAS_ESTREITO);
+  if (layout === null || estreito === null) {
     return null;
   }
-  const { largura, altura, blocos, tetoTexto } = layout;
-  const legenda = blocos[0]?.barras ?? [];
+  const resumo = resumoPerfis(entrada);
+  const legenda = layout.blocos[0]?.barras ?? [];
   return (
     <figure className="folha-quieta flex flex-col gap-3">
       <DicaGrafico>
-        <div className="overflow-x-auto">
-          <svg
-            viewBox={`0 0 ${largura} ${altura}`}
-            className="w-full min-w-[560px]"
-            role="img"
-            aria-labelledby={`${ID_TITULO} ${ID_DESC}`}
-          >
-            <title id={ID_TITULO}>Mistura típica e peso de cada grupo</title>
-            <desc id={ID_DESC}>{resumoPerfis(entrada)}</desc>
-            <g fontSize={11} fill="currentColor" className="text-muted-foreground" pointerEvents="none">
-              <text x={ESQUERDA} y={14}>{`Mistura típica (votos válidos), de 0 a ${tetoTexto}`}</text>
-              <text x={X_PESO_ROTULO} y={14}>
-                Parte do total, de 0 a 100%
-              </text>
-            </g>
-            {blocos.map((bloco) => (
-              <Bloco key={bloco.numero} bloco={bloco} />
-            ))}
-          </svg>
+        <div className="hidden overflow-x-auto sm:block">
+          <Desenho layout={layout} resumo={resumo} sufixo="" className="w-full min-w-[560px]" />
         </div>
+        <Desenho layout={estreito} resumo={resumo} sufixo="-estreito" className="w-full sm:hidden" />
       </DicaGrafico>
       <figcaption className="text-sm text-muted-foreground">
         <p>
-          Cada bloco é um grupo. À esquerda, quanto cada partido costuma ter dos votos válidos num
-          município do grupo. À direita, quanto do total de municípios e de votantes cai no grupo.
+          Cada bloco é um grupo. As barras de partido mostram quanto cada um costuma ter dos votos
+          válidos num município do grupo. Municípios e Votantes mostram quanto do total cai no grupo.
         </p>
         <p className="mt-2 inline-flex flex-wrap items-center gap-x-4 gap-y-1">
           {legenda.map((barra) => (
@@ -72,9 +52,45 @@ export function GraficoPerfis({ partidos, grupos }: EntradaPerfis) {
   );
 }
 
-function Bloco({ bloco }: { bloco: BlocoPerfil }) {
-  const topoBarras = bloco.y + CABECA;
-  const fimBarras = topoBarras + bloco.barras.length * PASSO;
+type DesenhoProps = {
+  layout: LayoutPerfis;
+  resumo: string;
+  sufixo: string;
+  className: string;
+};
+
+function Desenho({ layout, resumo, sufixo, className }: DesenhoProps) {
+  const { medidas, largura, altura, blocos, tetoTexto } = layout;
+  const [mistura, peso] = medidas.cabecalhos;
+  const idTitulo = `${ID_TITULO}${sufixo}`;
+  const idDesc = `${ID_DESC}${sufixo}`;
+  return (
+    <svg
+      viewBox={`0 0 ${largura} ${altura}`}
+      className={className}
+      role="img"
+      aria-labelledby={`${idTitulo} ${idDesc}`}
+    >
+      <title id={idTitulo}>Mistura típica e peso de cada grupo</title>
+      <desc id={idDesc}>{resumo}</desc>
+      <g fontSize={medidas.fonte} fill="currentColor" className="text-muted-foreground" pointerEvents="none">
+        <text x={mistura.x} y={mistura.y}>{`Mistura típica (votos válidos), de 0 a ${tetoTexto}`}</text>
+        <text x={peso.x} y={peso.y}>
+          Parte do total, de 0 a 100%
+        </text>
+      </g>
+      {blocos.map((bloco) => (
+        <Bloco key={bloco.numero} bloco={bloco} medidas={medidas} />
+      ))}
+    </svg>
+  );
+}
+
+function Bloco({ bloco, medidas }: { bloco: BlocoPerfil; medidas: MedidasPerfis }) {
+  const { esquerda, cabeca, passo, alturaBarra, xPeso, xPesoRotulo, larguraPeso, fonte } = medidas;
+  const recuo = (passo - alturaBarra) / 2;
+  const topoBarras = bloco.y + cabeca;
+  const fimBarras = topoBarras + bloco.barras.length * passo;
   const [municipios, votantes] = bloco.peso;
   return (
     <g>
@@ -83,8 +99,8 @@ function Bloco({ bloco }: { bloco: BlocoPerfil }) {
           key={`alvo-${barra.chave}`}
           x={0}
           y={barra.y}
-          width={X_PESO_ROTULO - 8}
-          height={PASSO}
+          width={medidas.alvoMistura}
+          height={passo}
           fill="transparent"
           className="hover:fill-muted/60"
           data-dica-titulo={`Grupo ${bloco.numero} · ${barra.titulo}`}
@@ -93,10 +109,10 @@ function Bloco({ bloco }: { bloco: BlocoPerfil }) {
       ))}
       {municipios && votantes ? (
         <rect
-          x={X_PESO_ROTULO - 4}
+          x={medidas.alvoPeso.x}
           y={municipios.y}
-          width={X_PESO + LARGURA_PESO + 60 - X_PESO_ROTULO}
-          height={2 * PASSO}
+          width={medidas.alvoPeso.largura}
+          height={2 * passo}
           fill="transparent"
           className="hover:fill-muted/60"
           data-dica-titulo={`Grupo ${bloco.numero}`}
@@ -107,7 +123,7 @@ function Bloco({ bloco }: { bloco: BlocoPerfil }) {
         <text
           x={0}
           y={bloco.y + 14}
-          fontSize={13}
+          fontSize={medidas.fonteGrupo}
           fontWeight={600}
           fill="currentColor"
           className="text-foreground"
@@ -115,8 +131,8 @@ function Bloco({ bloco }: { bloco: BlocoPerfil }) {
           {`Grupo ${bloco.numero}`}
         </text>
         <line
-          x1={ESQUERDA}
-          x2={ESQUERDA}
+          x1={esquerda}
+          x2={esquerda}
           y1={topoBarras}
           y2={fimBarras}
           stroke="var(--border)"
@@ -125,11 +141,11 @@ function Bloco({ bloco }: { bloco: BlocoPerfil }) {
         {bloco.barras.map((barra) => (
           <g key={barra.chave}>
             <text
-              x={ESQUERDA - 8}
-              y={barra.y + PASSO / 2}
+              x={esquerda - 8}
+              y={barra.y + passo / 2}
               dy="0.35em"
               textAnchor="end"
-              fontSize={11}
+              fontSize={fonte}
               fill="currentColor"
               className={barra.tom === null ? "text-muted-foreground" : "text-foreground"}
             >
@@ -137,19 +153,19 @@ function Bloco({ bloco }: { bloco: BlocoPerfil }) {
             </text>
             {barra.largura > 0 ? (
               <rect
-                x={ESQUERDA}
-                y={barra.y + RECUO}
+                x={esquerda}
+                y={barra.y + recuo}
                 width={Math.max(barra.largura, 1.5)}
-                height={ALTURA_BARRA}
+                height={alturaBarra}
                 rx={2}
                 style={estilo(barra)}
               />
             ) : null}
             <text
-              x={ESQUERDA + barra.largura + 4}
-              y={barra.y + PASSO / 2}
+              x={esquerda + barra.largura + 4}
+              y={barra.y + passo / 2}
               dy="0.35em"
-              fontSize={11}
+              fontSize={fonte}
               fill="currentColor"
               className="text-foreground tabular-nums"
             >
@@ -160,38 +176,38 @@ function Bloco({ bloco }: { bloco: BlocoPerfil }) {
         {bloco.peso.map((peso) => (
           <g key={peso.rotulo}>
             <text
-              x={X_PESO_ROTULO}
-              y={peso.y + PASSO / 2}
+              x={xPesoRotulo}
+              y={peso.y + passo / 2}
               dy="0.35em"
-              fontSize={11}
+              fontSize={fonte}
               fill="currentColor"
               className="text-muted-foreground"
             >
               {peso.rotulo}
             </text>
             <rect
-              x={X_PESO}
-              y={peso.y + RECUO}
-              width={LARGURA_PESO}
-              height={ALTURA_BARRA}
+              x={xPeso}
+              y={peso.y + recuo}
+              width={larguraPeso}
+              height={alturaBarra}
               rx={2}
               fill="var(--muted)"
             />
             {peso.largura > 0 ? (
               <rect
-                x={X_PESO}
-                y={peso.y + RECUO}
+                x={xPeso}
+                y={peso.y + recuo}
                 width={Math.max(peso.largura, 1.5)}
-                height={ALTURA_BARRA}
+                height={alturaBarra}
                 rx={2}
                 fill="var(--tinta-quente)"
               />
             ) : null}
             <text
-              x={X_PESO + LARGURA_PESO + 6}
-              y={peso.y + PASSO / 2}
+              x={xPeso + larguraPeso + 6}
+              y={peso.y + passo / 2}
               dy="0.35em"
-              fontSize={11}
+              fontSize={fonte}
               fill="currentColor"
               className="text-foreground tabular-nums"
             >

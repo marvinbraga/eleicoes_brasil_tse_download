@@ -11,7 +11,11 @@ import {
   leituraPoder,
   liderancasPoder,
   resumoBarras,
+  MEDIDAS_ESTREITO,
+  MEDIDAS_PADRAO,
 } from "./grafico-poder.ts";
+import { larguraTexto } from "./largura-texto.ts";
+import { SIGLAS_PARTIDOS } from "./partidos.ts";
 import type { LinhaGrade } from "./relatorios.ts";
 
 function linha(nome: string, votos: Record<number, number>): LinhaGrade {
@@ -138,4 +142,30 @@ assert.deepEqual(fatiasPoder([]), []);
 assert.deepEqual(leituraPoder([]), []);
 assert.deepEqual(leituraPoder([vazio]), []);
 assert.equal(liderancasPoder([]).lugares, 0);
+// variante estreita: rótulo acima da barra, valor no fim sem passar da borda
+const CONTENTOR = 300;
+const estreito = layoutBarras(comOutros, MEDIDAS_ESTREITO)!;
+const me = estreito.medidas;
+assert.equal(estreito.largura, 340);
+assert.equal(layout.medidas, MEDIDAS_PADRAO);
+assert.ok((me.fonte * CONTENTOR) / estreito.largura >= 11);
+assert.equal(estreito.altura, me.topo + 9 * me.alturaLinha + me.base);
+const rotulosPartidos = [
+  ...Object.entries(SIGLAS_PARTIDOS).map(([numero, sigla]) => `${sigla} ${numero}`),
+  "Partido 999",
+  "Outros",
+];
+const maiorPartido = Math.max(...rotulosPartidos.map((r) => larguraTexto(r, me.fonte)));
+assert.ok(me.rotuloAcima);
+assert.ok(me.esquerda + 4 + maiorPartido <= estreito.largura);
+const cheioEstreito = layoutBarras(fatiasPoder([linha("Só", { 22: 500 })]), MEDIDAS_ESTREITO)!;
+assert.ok(me.esquerda + cheioEstreito.barras[0].largura + 6 + larguraTexto("100,00%", me.fonte) <= estreito.largura);
+const primeira = estreito.barras[0];
+assert.ok(primeira.y - me.alturaBarra / 2 - 5 - me.fonte >= 0);
+for (const [indice, barra] of estreito.barras.entries()) {
+  const topoLinha = me.topo + indice * me.alturaLinha;
+  assert.ok(barra.y - me.alturaBarra / 2 - 5 - me.fonte >= topoLinha);
+  assert.ok(barra.y + me.alturaBarra / 2 <= topoLinha + me.alturaLinha);
+}
+assert.equal(layout.barras[0].y, TOPO + ALTURA_LINHA / 2);
 console.log("ok");

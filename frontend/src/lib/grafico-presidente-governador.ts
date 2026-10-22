@@ -12,6 +12,48 @@ export const LARGURA = 640,
   BASE = 28,
   VAO = 1;
 
+export type MedidasComposicao = {
+  largura: number;
+  esquerdaUf: number;
+  esquerdaRegiao: number;
+  direita: number;
+  topo: number;
+  base: number;
+  alturaLinha: number;
+  alturaBarra: number;
+  descidaMarca: number;
+  fonte: number;
+  fonteMenor: number;
+};
+
+export const MEDIDAS_PADRAO: MedidasComposicao = {
+  largura: LARGURA,
+  esquerdaUf: ESQUERDA_UF,
+  esquerdaRegiao: ESQUERDA_REGIAO,
+  direita: DIREITA,
+  topo: TOPO,
+  base: BASE,
+  alturaLinha: ALTURA_LINHA,
+  alturaBarra: ALTURA_BARRA,
+  descidaMarca: 16,
+  fonte: 12,
+  fonteMenor: 11,
+};
+
+export const MEDIDAS_ESTREITO: MedidasComposicao = {
+  largura: 340,
+  esquerdaUf: 32,
+  esquerdaRegiao: 104,
+  direita: 18,
+  topo: 8,
+  base: 30,
+  alturaLinha: 26,
+  alturaBarra: 16,
+  descidaMarca: 18,
+  fonte: 13,
+  fonteMenor: 13,
+};
+
 const FRACOES_MARCAS = [0, 0.25, 0.5, 0.75, 1];
 
 export const ROTULOS: Record<ClasseCruzada, string> = {
@@ -62,6 +104,7 @@ export type FatiaBarra = {
 export type BarraLugar = { codigo: string; total: number; y: number; fatias: FatiaBarra[] };
 
 export type LayoutComposicao = {
+  medidas: MedidasComposicao;
   largura: number;
   altura: number;
   esquerda: number;
@@ -109,20 +152,23 @@ export function composicaoPorRegiao(porUf: readonly ComposicaoLugar[]): Composic
 export function layoutComposicao(
   lugares: readonly ComposicaoLugar[],
   esquerda: number,
+  medidas: MedidasComposicao = MEDIDAS_PADRAO,
 ): LayoutComposicao | null {
   if (lugares.length === 0) {
     return null;
   }
-  const plotagem = LARGURA - esquerda - DIREITA;
+  const { largura, topo, alturaLinha } = medidas;
+  const plotagem = largura - esquerda - medidas.direita;
   const barras = lugares.map((lugar, indice) => ({
     codigo: lugar.codigo,
     total: lugar.total,
-    y: TOPO + indice * ALTURA_LINHA + (ALTURA_LINHA - ALTURA_BARRA) / 2,
+    y: topo + indice * alturaLinha + (alturaLinha - medidas.alturaBarra) / 2,
     fatias: fatiasDe(lugar, esquerda, plotagem),
   }));
   return {
-    largura: LARGURA,
-    altura: TOPO + barras.length * ALTURA_LINHA + BASE,
+    medidas,
+    largura,
+    altura: topo + barras.length * alturaLinha + medidas.base,
     esquerda,
     barras,
     marcas: FRACOES_MARCAS.map((fracao) => ({

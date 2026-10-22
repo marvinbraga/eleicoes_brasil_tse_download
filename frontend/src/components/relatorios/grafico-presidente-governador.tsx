@@ -2,20 +2,17 @@ import { ORDEM_CLASSE, COR_CLASSE } from "@/cruzamento/finalidade";
 import { DicaGrafico } from "@/components/relatorios/dica-grafico";
 import { formatarInteiro } from "@/lib/fracao";
 import {
-  ALTURA_BARRA,
-  ALTURA_LINHA,
-  BASE,
-  DIREITA,
-  ESQUERDA_REGIAO,
-  ESQUERDA_UF,
+  MEDIDAS_ESTREITO,
+  MEDIDAS_PADRAO,
   ROTULOS,
-  TOPO,
   composicaoPorRegiao,
   composicaoPorUf,
   frasesComposicao,
   layoutComposicao,
   resumoComposicao,
   type ComposicaoLugar,
+  type LayoutComposicao,
+  type MedidasComposicao,
 } from "@/lib/grafico-presidente-governador";
 import type { GrupoMunicipios } from "@/lib/relatorios";
 
@@ -54,7 +51,6 @@ export function GraficoPresidenteGovernador({ grupos }: GraficoPresidenteGoverna
         titulo="Composição por UF"
         lugares={porUf}
         unidade="UFs"
-        esquerda={ESQUERDA_UF}
         nota="O Exterior fica de fora: lá não há governador."
       />
       {porRegiao.length === 0 ? null : (
@@ -63,7 +59,6 @@ export function GraficoPresidenteGovernador({ grupos }: GraficoPresidenteGoverna
           titulo="Composição por região"
           lugares={porRegiao}
           unidade="regiões"
-          esquerda={ESQUERDA_REGIAO}
           nota={frasesComposicao(porRegiao, "regiões").join(" ")}
         />
       )}
@@ -71,109 +66,48 @@ export function GraficoPresidenteGovernador({ grupos }: GraficoPresidenteGoverna
   );
 }
 
+type Unidade = "UFs" | "regiões";
+
 type FiguraComposicaoProps = {
   id: string;
   titulo: string;
   lugares: readonly ComposicaoLugar[];
-  unidade: "UFs" | "regiões";
-  esquerda: number;
+  unidade: Unidade;
   nota: string;
 };
 
-function FiguraComposicao({ id, titulo, lugares, unidade, esquerda, nota }: FiguraComposicaoProps) {
-  const layout = layoutComposicao(lugares, esquerda);
-  if (layout === null) {
+function layoutDa(lugares: readonly ComposicaoLugar[], unidade: Unidade, medidas: MedidasComposicao) {
+  return layoutComposicao(lugares, unidade === "UFs" ? medidas.esquerdaUf : medidas.esquerdaRegiao, medidas);
+}
+
+function FiguraComposicao({ id, titulo, lugares, unidade, nota }: FiguraComposicaoProps) {
+  const layout = layoutDa(lugares, unidade, MEDIDAS_PADRAO);
+  const estreito = layoutDa(lugares, unidade, MEDIDAS_ESTREITO);
+  if (layout === null || estreito === null) {
     return null;
   }
-  const { largura, altura, barras, marcas } = layout;
-  const fimPlotagem = altura - BASE;
-  const idTitulo = `${id}-titulo`;
-  const idDesc = `${id}-desc`;
+  const resumo = resumoComposicao(lugares, unidade);
   return (
     <figure className="folha-quieta flex flex-col gap-3">
       <DicaGrafico>
-        <div className="overflow-x-auto">
-          <svg
-            viewBox={`0 0 ${largura} ${altura}`}
+        <div className="hidden overflow-x-auto sm:block">
+          <Desenho
+            layout={layout}
+            id={id}
+            sufixo=""
+            titulo={titulo}
+            resumo={resumo}
             className="w-full min-w-[480px]"
-            role="img"
-            aria-labelledby={`${idTitulo} ${idDesc}`}
-          >
-            <title id={idTitulo}>{titulo}</title>
-            <desc id={idDesc}>{resumoComposicao(lugares, unidade)}</desc>
-            {marcas.map((marca) => (
-              <g key={marca.rotulo} pointerEvents="none">
-                <line
-                  x1={marca.x}
-                  x2={marca.x}
-                  y1={TOPO}
-                  y2={fimPlotagem}
-                  stroke="var(--border)"
-                  strokeWidth={1}
-                />
-                <text
-                  x={marca.x}
-                  y={fimPlotagem + 16}
-                  textAnchor="middle"
-                  fontSize={11}
-                  fill="currentColor"
-                  className="text-muted-foreground"
-                >
-                  {marca.rotulo}
-                </text>
-              </g>
-            ))}
-            {barras.map((barra) => (
-              <g key={barra.codigo}>
-                <rect
-                  x={0}
-                  y={barra.y - (ALTURA_LINHA - ALTURA_BARRA) / 2}
-                  width={largura}
-                  height={ALTURA_LINHA}
-                  fill="transparent"
-                  className="hover:fill-muted/60"
-                  data-dica-titulo={barra.codigo}
-                  data-dica-linhas={[
-                    ...barra.fatias.map((fatia) => `${ROTULOS[fatia.classe]} ${fatia.fatiaTexto}`),
-                    `${formatarInteiro(barra.total)} votos válidos`,
-                  ].join("\n")}
-                />
-                <g pointerEvents="none">
-                  <text
-                    x={esquerda - 8}
-                    y={barra.y + ALTURA_BARRA / 2}
-                    dy="0.35em"
-                    textAnchor="end"
-                    fontSize={12}
-                    fill="currentColor"
-                    className="text-foreground"
-                  >
-                    {barra.codigo}
-                  </text>
-                  <rect
-                    x={esquerda}
-                    y={barra.y}
-                    width={largura - esquerda - DIREITA}
-                    height={ALTURA_BARRA}
-                    fill="var(--tinta-frio)"
-                  />
-                  {barra.fatias.map((fatia) =>
-                    fatia.largura > 0 ? (
-                      <rect
-                        key={fatia.classe}
-                        x={fatia.x}
-                        y={barra.y}
-                        width={fatia.largura}
-                        height={ALTURA_BARRA}
-                        fill={fatia.cor}
-                      />
-                    ) : null,
-                  )}
-                </g>
-              </g>
-            ))}
-          </svg>
+          />
         </div>
+        <Desenho
+          layout={estreito}
+          id={id}
+          sufixo="-estreito"
+          titulo={titulo}
+          resumo={resumo}
+          className="w-full sm:hidden"
+        />
       </DicaGrafico>
       <figcaption className="text-sm text-muted-foreground">
         <p className="inline-flex flex-wrap items-center gap-x-4 gap-y-1">
@@ -193,5 +127,104 @@ function FiguraComposicao({ id, titulo, lugares, unidade, esquerda, nota }: Figu
         <p className="mt-2">{nota}</p>
       </figcaption>
     </figure>
+  );
+}
+
+type DesenhoProps = {
+  layout: LayoutComposicao;
+  id: string;
+  sufixo: string;
+  titulo: string;
+  resumo: string;
+  className: string;
+};
+
+function Desenho({ layout, id, sufixo, titulo, resumo, className }: DesenhoProps) {
+  const { medidas, largura, altura, esquerda, barras, marcas } = layout;
+  const { topo, alturaLinha, alturaBarra } = medidas;
+  const fimPlotagem = altura - medidas.base;
+  const idTitulo = `${id}-titulo${sufixo}`;
+  const idDesc = `${id}-desc${sufixo}`;
+  return (
+    <svg
+      viewBox={`0 0 ${largura} ${altura}`}
+      className={className}
+      role="img"
+      aria-labelledby={`${idTitulo} ${idDesc}`}
+    >
+      <title id={idTitulo}>{titulo}</title>
+      <desc id={idDesc}>{resumo}</desc>
+      {marcas.map((marca) => (
+        <g key={marca.rotulo} pointerEvents="none">
+          <line
+            x1={marca.x}
+            x2={marca.x}
+            y1={topo}
+            y2={fimPlotagem}
+            stroke="var(--border)"
+            strokeWidth={1}
+          />
+          <text
+            x={marca.x}
+            y={fimPlotagem + medidas.descidaMarca}
+            textAnchor="middle"
+            fontSize={medidas.fonteMenor}
+            fill="currentColor"
+            className="text-muted-foreground"
+          >
+            {marca.rotulo}
+          </text>
+        </g>
+      ))}
+      {barras.map((barra) => (
+        <g key={barra.codigo}>
+          <rect
+            x={0}
+            y={barra.y - (alturaLinha - alturaBarra) / 2}
+            width={largura}
+            height={alturaLinha}
+            fill="transparent"
+            className="hover:fill-muted/60"
+            data-dica-titulo={barra.codigo}
+            data-dica-linhas={[
+              ...barra.fatias.map((fatia) => `${ROTULOS[fatia.classe]} ${fatia.fatiaTexto}`),
+              `${formatarInteiro(barra.total)} votos válidos`,
+            ].join("\n")}
+          />
+          <g pointerEvents="none">
+            <text
+              x={esquerda - 8}
+              y={barra.y + alturaBarra / 2}
+              dy="0.35em"
+              textAnchor="end"
+              fontSize={medidas.fonte}
+              fill="currentColor"
+              className="text-foreground"
+            >
+              {barra.codigo}
+            </text>
+            <rect
+              x={esquerda}
+              y={barra.y}
+              width={largura - esquerda - medidas.direita}
+              height={alturaBarra}
+              fill="var(--tinta-frio)"
+            />
+            {barra.fatias.map((fatia) =>
+              fatia.largura > 0 ? (
+                <rect
+                  key={fatia.classe}
+                  x={fatia.x}
+                  y={barra.y}
+                  width={fatia.largura}
+                  height={alturaBarra}
+                  fill={fatia.cor}
+                />
+              ) : null,
+            )}
+          </g>
+        </g>
+      ))}
+    </svg>
   );
 }

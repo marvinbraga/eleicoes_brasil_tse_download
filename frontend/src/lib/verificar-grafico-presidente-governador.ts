@@ -4,6 +4,8 @@ import {
   ALTURA_LINHA,
   BASE,
   ESQUERDA_UF,
+  MEDIDAS_ESTREITO,
+  MEDIDAS_PADRAO,
   TOPO,
   composicaoPorRegiao,
   composicaoPorUf,
@@ -11,6 +13,7 @@ import {
   layoutComposicao,
   resumoComposicao,
 } from "./grafico-presidente-governador.ts";
+import { larguraTexto } from "./largura-texto.ts";
 import type { GrupoMunicipios, LeituraLugar } from "./relatorios.ts";
 
 function lugar(classe: string, valid: number): LeituraLugar {
@@ -91,4 +94,26 @@ assert.equal(
   resumoComposicao(porUf, "UFs"),
   `4 UFs, da maior para a menor fatia de consolidação. ${frasesComposicao(porUf, "UFs").join(" ")}`,
 );
+// variante estreita
+const CONTENTOR = 300;
+const me = MEDIDAS_ESTREITO;
+const eUf = layoutComposicao(porUf, me.esquerdaUf, me)!;
+const eRegiao = layoutComposicao(porRegiao, me.esquerdaRegiao, me)!;
+assert.equal(eUf.largura, 340);
+assert.equal(l.medidas, MEDIDAS_PADRAO);
+assert.ok((Math.min(me.fonte, me.fonteMenor) * CONTENTOR) / eUf.largura >= 11);
+assert.ok(me.esquerdaUf - 8 >= larguraTexto("AC", me.fonte));
+const regioes = ["Norte", "Nordeste", "Centro-Oeste", "Sudeste", "Sul"];
+assert.ok(me.esquerdaRegiao - 8 >= Math.max(...regioes.map((r) => larguraTexto(r, me.fonte))));
+for (const layout of [eUf, eRegiao]) {
+  const fim = layout.marcas[layout.marcas.length - 1];
+  assert.ok(fim.x + larguraTexto(fim.rotulo, me.fonteMenor) / 2 <= layout.largura);
+  assert.ok(layout.marcas[0].x - larguraTexto(layout.marcas[0].rotulo, me.fonteMenor) / 2 >= 0);
+  for (const barra of layout.barras) {
+    const ultimaFatia = barra.fatias.filter((f) => f.largura > 0).at(-1)!;
+    assert.equal(ultimaFatia.x + ultimaFatia.largura, layout.largura - me.direita);
+  }
+}
+assert.equal(eUf.altura, me.topo + 4 * me.alturaLinha + me.base);
+assert.equal(eUf.barras[0].y, me.topo + (me.alturaLinha - me.alturaBarra) / 2);
 console.log("ok");

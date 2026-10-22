@@ -9,8 +9,11 @@ import {
   DIREITA,
   ESQUERDA,
   LARGURA,
+  MEDIDAS_ESTREITO,
+  MEDIDAS_PADRAO,
   TOPO,
 } from "./grafico-acerto-classe.ts";
+import { larguraTexto } from "./largura-texto.ts";
 
 const linha = (classe: string, rotulo: string, apoio: number, recall: string) => ({
   classe,
@@ -105,4 +108,28 @@ assert.equal(frasesClasse({ ...real, linhas: [linha("em_aberto", "Em aberto", 4,
   "O modelo acertou 50,00% em todas as situações.");
 assert.equal(frasesClasse({ ...real, linhas: [real.linhas[2]] }).length, 3);
 assert.equal(frasesClasse({ ...real, linhas: [] }).length, 2);
+// variante estreita
+const CONTENTOR = 300;
+const e = layoutAcertoClasse(real, MEDIDAS_ESTREITO)!;
+const me = e.medidas;
+assert.equal(e.largura, 340);
+assert.equal(l.medidas, MEDIDAS_PADRAO);
+assert.ok((Math.min(me.fonte, me.fonteMenor) * CONTENTOR) / e.largura >= 11);
+const rotulos = ["Consolidação", "Terreno de virada", "Em aberto", "Sem governador"];
+const maiorRotulo = Math.max(...rotulos.map((r) => larguraTexto(r, me.fonte)));
+assert.ok(me.esquerda - 10 >= maiorRotulo);
+assert.ok(me.esquerda - 10 >= larguraTexto("5.571 municípios", me.fonteMenor));
+const cheia = layoutAcertoClasse({ ...real, linhas: [linha("em_aberto", "Em aberto", 7, "100,00%")] }, MEDIDAS_ESTREITO)!;
+assert.ok(cheia.barras[0].x + cheia.barras[0].largura + 6 + larguraTexto("100,00%", me.fonte) <= e.largura);
+assert.deepEqual(e.marcas.map((m) => m.rotulo), ["0%", "50%", "100%"]);
+const marcaFinal = e.marcas[e.marcas.length - 1];
+assert.ok(marcaFinal.x + larguraTexto(marcaFinal.rotulo, me.fonteMenor) / 2 <= e.largura);
+for (const acerto of ["50,48%", "0,00%", "30,00%", "70,00%", "95,00%", "100,00%"]) {
+  const referencia = layoutAcertoClasse({ ...real, acerto }, MEDIDAS_ESTREITO)!.referencia!;
+  const largura = larguraTexto(`Acerto geral ${referencia.valorTexto}`, me.fonteMenor);
+  const inicio = referencia.ancora === "start" ? referencia.xTexto : referencia.xTexto - largura;
+  assert.ok(inicio >= 0 && inicio + largura <= e.largura, acerto);
+}
+assert.equal(l.referencia!.xTexto, l.referencia!.x + 4);
+assert.equal(layoutAcertoClasse({ ...real, acerto: "95,00%" })!.referencia!.xTexto, ESQUERDA + 0.95 * PLOTAGEM - 4);
 console.log("ok");

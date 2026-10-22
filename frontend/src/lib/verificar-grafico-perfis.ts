@@ -8,11 +8,15 @@ import {
   LARGURA_PESO,
   PASSO,
   TOPO,
+  MEDIDAS_ESTREITO,
+  MEDIDAS_PADRAO,
   layoutPerfis,
   leituraSeparacao,
   principaisPerfis,
   resumoPerfis,
 } from "./grafico-perfis.ts";
+import { larguraTexto } from "./largura-texto.ts";
+import { SIGLAS_PARTIDOS } from "./partidos.ts";
 
 const partidos = [10, 13, 22, 30, 40, 50, 70];
 const grupos = [
@@ -95,4 +99,36 @@ assert.equal(leituraSeparacao("0,7200"), "A separação entre os grupos é 0,72,
 assert.equal(leituraSeparacao("-0,0500"), "A separação entre os grupos é −0,05, abaixo de zero: os grupos se confundem.");
 assert.equal(leituraSeparacao(null), null);
 assert.equal(leituraSeparacao("x"), null);
+// variante estreita: peso empilhado embaixo da mistura
+const CONTENTOR = 300;
+const e = layoutPerfis(entrada, MEDIDAS_ESTREITO)!;
+const me = e.medidas;
+assert.equal(e.largura, 340);
+assert.equal(l.medidas, MEDIDAS_PADRAO);
+assert.ok((me.fonte * CONTENTOR) / e.largura >= 11);
+assert.ok(me.pesoAbaixo);
+const rotulosPartidos = [
+  ...Object.entries(SIGLAS_PARTIDOS).map(([numero, sigla]) => `${sigla} ${numero}`),
+  "Partido 999",
+  "Outros",
+];
+assert.ok(me.esquerda - 8 >= Math.max(...rotulosPartidos.map((r) => larguraTexto(r, me.fonte))));
+assert.ok(me.esquerda + me.larguraMistura + 4 + larguraTexto("100,00%", me.fonte) <= e.largura);
+assert.ok(me.xPeso + me.larguraPeso + 6 + larguraTexto("100,00%", me.fonte) <= e.largura);
+assert.ok(me.xPesoRotulo + larguraTexto("Municípios", me.fonte) + 8 <= me.xPeso);
+for (const cabecalho of me.cabecalhos) {
+  assert.ok(cabecalho.x >= 0);
+}
+assert.ok(me.cabecalhos[0].x + larguraTexto("Mistura típica (votos válidos), de 0 a 100%", me.fonte) <= e.largura);
+assert.ok(me.cabecalhos[1].x + larguraTexto("Parte do total, de 0 a 100%", me.fonte) <= e.largura);
+assert.ok(me.cabecalhos[1].y - me.cabecalhos[0].y >= me.fonte);
+const [e1, e2] = e.blocos;
+const ultimaMistura = e1.barras[e1.barras.length - 1];
+assert.equal(e1.peso[0].y, ultimaMistura.y + me.passo + me.vaoPeso);
+assert.equal(e1.peso[1].y, e1.peso[0].y + me.passo);
+assert.ok(e2.y >= e1.peso[1].y + me.passo + me.espaco);
+assert.ok(Math.abs(e1.barras[0].largura - (0.6 / 0.7) * me.larguraMistura) < 1e-9);
+assert.ok(Math.abs(e2.peso[1].largura - 0.1 * me.larguraPeso) < 1e-9);
+assert.equal(e.altura, e2.peso[1].y + me.passo + me.base);
+assert.ok(e1.y + 14 - me.fonteGrupo >= me.cabecalhos[1].y);
 console.log("ok");

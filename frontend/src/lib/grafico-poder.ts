@@ -11,6 +11,45 @@ export const LARGURA = 640,
   BASE = 4,
   LIMITE_PARTIDOS = 8;
 
+export type MedidasBarras = {
+  largura: number;
+  esquerda: number;
+  direita: number;
+  topo: number;
+  base: number;
+  alturaLinha: number;
+  alturaBarra: number;
+  descida: number;
+  rotuloAcima: boolean;
+  fonte: number;
+};
+
+export const MEDIDAS_PADRAO: MedidasBarras = {
+  largura: LARGURA,
+  esquerda: ESQUERDA,
+  direita: DIREITA,
+  topo: TOPO,
+  base: BASE,
+  alturaLinha: ALTURA_LINHA,
+  alturaBarra: ALTURA_BARRA,
+  descida: 0,
+  rotuloAcima: false,
+  fonte: 12,
+};
+
+export const MEDIDAS_ESTREITO: MedidasBarras = {
+  largura: 340,
+  esquerda: 2,
+  direita: 62,
+  topo: 4,
+  base: 4,
+  alturaLinha: 42,
+  alturaBarra: 16,
+  descida: 8,
+  rotuloAcima: true,
+  fonte: 13,
+};
+
 export type ItemBarra = {
   chave: string;
   rotulo: string;
@@ -22,7 +61,12 @@ export type ItemBarra = {
 
 export type Barra = ItemBarra & { y: number; largura: number };
 
-export type LayoutBarras = { largura: number; altura: number; barras: Barra[] };
+export type LayoutBarras = {
+  medidas: MedidasBarras;
+  largura: number;
+  altura: number;
+  barras: Barra[];
+};
 
 type Contagem = { partido: number; valor: number };
 
@@ -94,18 +138,23 @@ export function liderancasPoder(linhas: readonly LinhaGrade[]): {
   return { itens, lugares, empates };
 }
 
-export function layoutBarras(itens: readonly ItemBarra[]): LayoutBarras | null {
+export function layoutBarras(
+  itens: readonly ItemBarra[],
+  medidas: MedidasBarras = MEDIDAS_PADRAO,
+): LayoutBarras | null {
   const maior = Math.max(0, ...itens.map((item) => item.valor));
   if (itens.length === 0 || maior <= 0) {
     return null;
   }
-  const util = LARGURA - ESQUERDA - DIREITA;
+  const { largura, topo, alturaLinha } = medidas;
+  const util = largura - medidas.esquerda - medidas.direita;
   return {
-    largura: LARGURA,
-    altura: TOPO + itens.length * ALTURA_LINHA + BASE,
+    medidas,
+    largura,
+    altura: topo + itens.length * alturaLinha + medidas.base,
     barras: itens.map((item, indice) => ({
       ...item,
-      y: TOPO + indice * ALTURA_LINHA + ALTURA_LINHA / 2,
+      y: topo + indice * alturaLinha + alturaLinha / 2 + medidas.descida,
       largura: (Math.max(0, item.valor) / maior) * util,
     })),
   };

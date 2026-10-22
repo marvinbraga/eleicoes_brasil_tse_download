@@ -20,6 +20,78 @@ export const LARGURA = 680,
 
 export const TONS = [100, 78, 56, 36, 18] as const;
 
+export type MedidasPerfis = {
+  largura: number;
+  esquerda: number;
+  larguraMistura: number;
+  xPesoRotulo: number;
+  xPeso: number;
+  larguraPeso: number;
+  topo: number;
+  cabeca: number;
+  passo: number;
+  alturaBarra: number;
+  espaco: number;
+  base: number;
+  vaoPeso: number;
+  pesoAbaixo: boolean;
+  fonte: number;
+  fonteGrupo: number;
+  cabecalhos: readonly [{ x: number; y: number }, { x: number; y: number }];
+  alvoMistura: number;
+  alvoPeso: { x: number; largura: number };
+};
+
+export const MEDIDAS_PADRAO: MedidasPerfis = {
+  largura: LARGURA,
+  esquerda: ESQUERDA,
+  larguraMistura: LARGURA_MISTURA,
+  xPesoRotulo: X_PESO_ROTULO,
+  xPeso: X_PESO,
+  larguraPeso: LARGURA_PESO,
+  topo: TOPO,
+  cabeca: CABECA,
+  passo: PASSO,
+  alturaBarra: ALTURA_BARRA,
+  espaco: ESPACO,
+  base: BASE,
+  vaoPeso: 0,
+  pesoAbaixo: false,
+  fonte: 11,
+  fonteGrupo: 13,
+  cabecalhos: [
+    { x: ESQUERDA, y: 14 },
+    { x: X_PESO_ROTULO, y: 14 },
+  ],
+  alvoMistura: X_PESO_ROTULO - 8,
+  alvoPeso: { x: X_PESO_ROTULO - 4, largura: X_PESO + LARGURA_PESO + 60 - X_PESO_ROTULO },
+};
+
+export const MEDIDAS_ESTREITO: MedidasPerfis = {
+  largura: 340,
+  esquerda: 134,
+  larguraMistura: 144,
+  xPesoRotulo: 0,
+  xPeso: 134,
+  larguraPeso: 144,
+  topo: 44,
+  cabeca: 24,
+  passo: 20,
+  alturaBarra: 13,
+  espaco: 18,
+  base: 8,
+  vaoPeso: 8,
+  pesoAbaixo: true,
+  fonte: 13,
+  fonteGrupo: 14,
+  cabecalhos: [
+    { x: 0, y: 14 },
+    { x: 0, y: 31 },
+  ],
+  alvoMistura: 340,
+  alvoPeso: { x: 0, largura: 340 },
+};
+
 export type EntradaPerfis = {
   partidos: readonly number[];
   grupos: readonly GrupoPerfil[];
@@ -55,6 +127,7 @@ export type BlocoPerfil = {
 };
 
 export type LayoutPerfis = {
+  medidas: MedidasPerfis;
   largura: number;
   altura: number;
   teto: number;
@@ -69,7 +142,10 @@ export function principaisPerfis(entrada: EntradaPerfis): number[] {
   return indicesPrincipais(entrada).map((indice) => entrada.partidos[indice] ?? 0);
 }
 
-export function layoutPerfis(entrada: EntradaPerfis): LayoutPerfis | null {
+export function layoutPerfis(
+  entrada: EntradaPerfis,
+  medidas: MedidasPerfis = MEDIDAS_PADRAO,
+): LayoutPerfis | null {
   const { partidos, grupos } = entrada;
   if (partidos.length === 0 || grupos.length === 0) {
     return null;
@@ -82,7 +158,10 @@ export function layoutPerfis(entrada: EntradaPerfis): LayoutPerfis | null {
   );
   const comOutros = somasResto.some((soma) => soma > 0);
   const linhas = principais.length + (comOutros ? 1 : 0);
-  const alturaBloco = CABECA + Math.max(linhas, ALTURA_BLOCO_BASE) * PASSO;
+  const { topo, cabeca, passo, espaco } = medidas;
+  const alturaBloco = medidas.pesoAbaixo
+    ? cabeca + (linhas + 2) * passo + medidas.vaoPeso
+    : cabeca + Math.max(linhas, ALTURA_BLOCO_BASE) * passo;
   const totalMunicipios = grupos.reduce((soma, grupo) => soma + grupo.municipios, 0);
   const totalComparecimento = grupos.reduce((soma, grupo) => soma + grupo.comparecimento, 0);
 
@@ -114,16 +193,17 @@ export function layoutPerfis(entrada: EntradaPerfis): LayoutPerfis | null {
   const teto = Math.min(1, Math.max(0.1, Math.ceil(Math.round(maior * 1e6) / 1e5) / 10));
 
   const blocos = grupos.map((grupo, posicao) => {
-    const y = TOPO + posicao * (alturaBloco + ESPACO);
-    const linhaY = (linha: number) => y + CABECA + linha * PASSO;
+    const y = topo + posicao * (alturaBloco + espaco);
+    const linhaY = (linha: number) => y + cabeca + linha * passo;
     const barras = (brutos[posicao] ?? []).map((barra, linha) => ({
       ...barra,
       y: linhaY(linha),
-      largura: (barra.fracao / teto) * LARGURA_MISTURA,
+      largura: (barra.fracao / teto) * medidas.larguraMistura,
     }));
+    const yPeso = medidas.pesoAbaixo ? linhaY(linhas) + medidas.vaoPeso : linhaY(0);
     const peso: BarraPeso[] = [
-      pesoDe("Municípios", grupo.municipios, totalMunicipios, linhaY(0)),
-      pesoDe("Votantes", grupo.comparecimento, totalComparecimento, linhaY(1)),
+      pesoDe("Municípios", grupo.municipios, totalMunicipios, yPeso, medidas.larguraPeso),
+      pesoDe("Votantes", grupo.comparecimento, totalComparecimento, yPeso + passo, medidas.larguraPeso),
     ];
     return {
       numero: grupo.numero,
@@ -136,8 +216,9 @@ export function layoutPerfis(entrada: EntradaPerfis): LayoutPerfis | null {
   });
 
   return {
-    largura: LARGURA,
-    altura: TOPO + grupos.length * alturaBloco + (grupos.length - 1) * ESPACO + BASE,
+    medidas,
+    largura: medidas.largura,
+    altura: topo + grupos.length * alturaBloco + (grupos.length - 1) * espaco + medidas.base,
     teto,
     tetoTexto: `${Math.round(teto * 100)}%`,
     restantes: resto.length,
@@ -250,7 +331,13 @@ function fatiaDe(grupo: GrupoPerfil, indice: number): Fatia {
   return { texto, fracao };
 }
 
-function pesoDe(rotulo: BarraPeso["rotulo"], contagem: number, total: number, y: number): BarraPeso {
+function pesoDe(
+  rotulo: BarraPeso["rotulo"],
+  contagem: number,
+  total: number,
+  y: number,
+  larguraPeso: number,
+): BarraPeso {
   const fracao = total > 0 ? contagem / total : 0;
   return {
     rotulo,
@@ -258,7 +345,7 @@ function pesoDe(rotulo: BarraPeso["rotulo"], contagem: number, total: number, y:
     contagem,
     fracao,
     y,
-    largura: fracao * LARGURA_PESO,
+    largura: fracao * larguraPeso,
   };
 }
 

@@ -1,5 +1,6 @@
 import { lerFatia } from "./fatia.ts";
 import { formatarInteiro } from "./fracao.ts";
+import { ancorarRotulo } from "./largura-texto.ts";
 import type { LinhaClasseGovernador } from "./relatorios.ts";
 
 export const LARGURA = 640,
@@ -10,8 +11,57 @@ export const LARGURA = 640,
   ALTURA_LINHA = 44,
   ALTURA_BARRA = 18;
 
-const LIMITE_ANCORA_FIM = LARGURA - DIREITA - 110;
-const FRACOES_MARCAS = [0, 0.25, 0.5, 0.75, 1];
+export type MedidasAcertoClasse = {
+  largura: number;
+  esquerda: number;
+  direita: number;
+  topo: number;
+  base: number;
+  alturaLinha: number;
+  alturaBarra: number;
+  limiteAncoraFim: number | null;
+  fracoesMarcas: readonly number[];
+  descidaMarca: number;
+  deslocRotulo: number;
+  deslocContagem: number;
+  fonte: number;
+  fonteMenor: number;
+};
+
+export const MEDIDAS_PADRAO: MedidasAcertoClasse = {
+  largura: LARGURA,
+  esquerda: ESQUERDA,
+  direita: DIREITA,
+  topo: TOPO,
+  base: BASE,
+  alturaLinha: ALTURA_LINHA,
+  alturaBarra: ALTURA_BARRA,
+  limiteAncoraFim: LARGURA - DIREITA - 110,
+  fracoesMarcas: [0, 0.25, 0.5, 0.75, 1],
+  descidaMarca: 16,
+  deslocRotulo: -7,
+  deslocContagem: 8,
+  fonte: 12,
+  fonteMenor: 11,
+};
+
+export const MEDIDAS_ESTREITO: MedidasAcertoClasse = {
+  largura: 340,
+  esquerda: 144,
+  direita: 62,
+  topo: 40,
+  base: 30,
+  alturaLinha: 50,
+  alturaBarra: 18,
+  limiteAncoraFim: null,
+  fracoesMarcas: [0, 0.5, 1],
+  descidaMarca: 18,
+  deslocRotulo: -8,
+  deslocContagem: 9,
+  fonte: 13,
+  fonteMenor: 13,
+};
+
 const MAIORIA = "marcar sempre a situação mais comum";
 const LIDER = "seguir o partido que lidera para presidente";
 
@@ -33,9 +83,15 @@ export type BarraClasse = {
   y: number;
 };
 
-export type ReferenciaClasse = { x: number; valorTexto: string; ancora: "start" | "end" };
+export type ReferenciaClasse = {
+  x: number;
+  valorTexto: string;
+  ancora: "start" | "end";
+  xTexto: number;
+};
 
 export type LayoutAcertoClasse = {
+  medidas: MedidasAcertoClasse;
   largura: number;
   altura: number;
   barras: BarraClasse[];
@@ -47,32 +103,51 @@ export type LayoutAcertoClasse = {
 type ClasseValida = Omit<BarraClasse, "x" | "largura" | "y">;
 type Relacao = "menos do que" | "o mesmo que" | "mais do que";
 
-export function layoutAcertoClasse(entrada: EntradaGraficoClasse): LayoutAcertoClasse | null {
+export function layoutAcertoClasse(
+  entrada: EntradaGraficoClasse,
+  medidas: MedidasAcertoClasse = MEDIDAS_PADRAO,
+): LayoutAcertoClasse | null {
   const validas = classesValidas(entrada.linhas);
   if (validas.length === 0) {
     return null;
   }
+  const { esquerda, topo, alturaLinha, alturaBarra } = medidas;
   const geral = lerFatia(entrada.acerto);
   return {
-    largura: LARGURA,
-    altura: TOPO + validas.length * ALTURA_LINHA + BASE,
+    medidas,
+    largura: medidas.largura,
+    altura: topo + validas.length * alturaLinha + medidas.base,
     barras: validas.map((linha, indice) => ({
       ...linha,
-      x: ESQUERDA,
-      largura: posicaoX(linha.fracao) - ESQUERDA,
-      y: TOPO + indice * ALTURA_LINHA + ALTURA_LINHA / 2 - ALTURA_BARRA / 2,
+      x: esquerda,
+      largura: posicaoX(linha.fracao, medidas) - esquerda,
+      y: topo + indice * alturaLinha + alturaLinha / 2 - alturaBarra / 2,
     })),
     referencia:
       geral === null
         ? null
         : {
-            x: posicaoX(geral),
+            x: posicaoX(geral, medidas),
             valorTexto: entrada.acerto,
-            ancora: posicaoX(geral) > LIMITE_ANCORA_FIM ? "end" : "start",
+            ...ancorar(posicaoX(geral, medidas), `Acerto geral ${entrada.acerto}`, medidas),
           },
-    marcas: FRACOES_MARCAS.map((fracao) => ({ x: posicaoX(fracao), rotulo: `${fracao * 100}%` })),
+    marcas: medidas.fracoesMarcas.map((fracao) => ({
+      x: posicaoX(fracao, medidas),
+      rotulo: `${fracao * 100}%`,
+    })),
     descartadas: entrada.linhas.length - validas.length,
   };
+}
+
+function ancorar(
+  x: number,
+  texto: string,
+  medidas: MedidasAcertoClasse,
+): { ancora: "start" | "end"; xTexto: number } {
+  if (medidas.limiteAncoraFim === null) {
+    return ancorarRotulo(x, medidas.largura, texto, medidas.fonteMenor);
+  }
+  return x > medidas.limiteAncoraFim ? { ancora: "end", xTexto: x - 4 } : { ancora: "start", xTexto: x + 4 };
 }
 
 export function frasesClasse(entrada: EntradaGraficoClasse): string[] {
@@ -136,8 +211,9 @@ function classesValidas(linhas: readonly LinhaClasseGovernador[]): ClasseValida[
     .map((item) => item.linha);
 }
 
-function posicaoX(fracao: number): number {
-  return ESQUERDA + Math.min(1, Math.max(0, fracao)) * (LARGURA - ESQUERDA - DIREITA);
+function posicaoX(fracao: number, medidas: MedidasAcertoClasse): number {
+  const { esquerda, largura, direita } = medidas;
+  return esquerda + Math.min(1, Math.max(0, fracao)) * (largura - esquerda - direita);
 }
 
 function fraseBases(geral: number, entrada: EntradaGraficoClasse): string | null {
