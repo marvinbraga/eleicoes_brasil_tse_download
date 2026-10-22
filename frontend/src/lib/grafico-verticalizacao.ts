@@ -184,7 +184,8 @@ export function resumoMatriz(layout: LayoutMatriz): string {
         .map((celula) => `${layout.colunas[celula.coluna]?.nome ?? ""} ${celula.texto}`);
       return `${linha.nome}: ${valores.join("; ")}.`;
     })
-    .join(" ");
+    .join(" ")
+    .concat(layout.canto === "r" ? " Valores de r de Pearson." : " Valores em %.");
 }
 
 function montarMatriz(
@@ -293,7 +294,7 @@ function celulaCoerencia(
 ): ConteudoCelula {
   const x = par?.cargo_x ?? "deputadoFederal";
   const y = par?.cargo_y ?? "presidente";
-  const r = lerDecimal(par?.r ?? null);
+  const r = par === undefined || par.r === null ? null : rExibido(par.r);
   const municipios = par?.municipios ?? 0;
   const contagem = `${formatarInteiro(municipios)} ${municipios === 1 ? "município" : "municípios"}`;
   const base = {
@@ -432,12 +433,8 @@ function tetoEixo(maximoCentesimos: number): { teto: number; marcas: number[] } 
       };
     }
   }
-  const passo = PASSOS_EIXO[PASSOS_EIXO.length - 1];
-  const intervalos = Math.ceil(maximoCentesimos / (passo * 100));
-  return {
-    teto: intervalos * passo,
-    marcas: Array.from({ length: intervalos + 1 }, (_item, indice) => indice * passo),
-  };
+  // Fatias não passam de 100%, e 100% cabe em 4 passos de 25 pp.
+  return { teto: 100, marcas: [0, 25, 50, 75, 100] };
 }
 
 type Caso = { partido: PartidoVertical; comparacao: Comparacao };
@@ -480,7 +477,7 @@ function ordemRazao(a: Caso, b: Caso, nula: number): number {
 function fraseCoerencia(dados: RelatorioVerticalizacao): string {
   const { partido, cargo_x: x, cargo_y: y, coerencia } = dados.dispersao;
   const rotulo = rotuloPartido(partido);
-  const r = lerDecimal(coerencia.r);
+  const r = coerencia.r === null ? null : rExibido(coerencia.r);
   const entre = `${MINUSCULO_CARGO[x]} e ${MINUSCULO_CARGO[y]}`;
   if (coerencia.r === null || r === null) {
     return coerencia.municipios < dados.limiares.minimo_municipios
@@ -554,9 +551,19 @@ function centesimos(texto: string): number | null {
   return arredondarEscala(lido, 2);
 }
 
+// A força, o sentido e a faixa saem do r como o leitor o vê (2 casas): 0,2996 é "0,30".
+function rExibido(texto: string): number | null {
+  return lerDecimal(formatarR(texto).replace(MENOS, "-"));
+}
+
 // r com 2 casas e o sinal de menos U+2212: "-0,1500" → "−0,15"; "-0,0012" → "0,00".
 export function formatarR(texto: string): string {
   return arredondarTexto(texto, 2) ?? TRACO;
+}
+
+// Razão com 1 casa: "2,6974" → "2,7"; null → "—".
+export function formatarRazao(texto: string | null): string {
+  return texto === null ? TRACO : (arredondarTexto(texto, 1) ?? TRACO);
 }
 
 type NumeroTexto = { negativo: boolean; digitos: number; casas: number };

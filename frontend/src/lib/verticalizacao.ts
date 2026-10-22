@@ -119,6 +119,7 @@ export function lerDecimal(texto: string | null): number | null {
   if (texto === null) {
     return null;
   }
+  // O contrato manda vírgula decimal; o ponto é só separador de milhar ("1.234,5000").
   const corpo = texto.trim().replace(/\./g, "").replace(",", ".");
   if (!/^-?\d+(?:\.\d+)?$/.test(corpo)) {
     return null;
@@ -127,7 +128,25 @@ export function lerDecimal(texto: string | null): number | null {
   return Number.isFinite(valor) ? valor : null;
 }
 
+const PARES_COERENCIA = 7;
+const PARES_CANONICOS = 3;
+
 export function lerVerticalizacao(valor: unknown): RelatorioVerticalizacao {
+  const relatorio = lerRelatorio(valor);
+  const ordem = relatorio.cargos.join(",");
+  for (const partido of relatorio.partidos) {
+    if (
+      partido.cargos.map((item) => item.cargo).join(",") !== ordem ||
+      partido.coerencia.length !== PARES_COERENCIA ||
+      partido.comparacoes.length !== PARES_CANONICOS
+    ) {
+      throw new RespostaVerticalizacaoInvalidaError();
+    }
+  }
+  return relatorio;
+}
+
+function lerRelatorio(valor: unknown): RelatorioVerticalizacao {
   const dados = exigirRegistro(valor);
   return {
     ano: exigirInteiro(dados.ano),

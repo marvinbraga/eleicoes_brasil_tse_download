@@ -4,6 +4,8 @@ import {
   corR,
   faixaFatia,
   faixaR,
+  formatarR,
+  formatarRazao,
   frasesVerticalizacao,
   layoutDispersao,
   LIMITES_FATIA,
@@ -444,5 +446,34 @@ assert.equal(poucos.length, 3);
 assert.ok(!poucos.some((frase) => frase.startsWith("Mais")));
 const doisMais = frasesVerticalizacao({ ...dados, partidos: [pl, pt, republicanos, psd, partido(20, { comparacoes: comparacoes([{ razao: "2,0000", classe: "puxador" }]) })] });
 assert.equal(doisMais.at(-1), "Mais 2 casos na tabela.");
+
+assert.equal(formatarRazao("2,6974"), "2,7");
+assert.equal(formatarRazao("1.234,5600"), "1.234,6");
+assert.equal(formatarRazao(null), "—");
+assert.equal(formatarR("-0,0049"), "0,00");
+assert.equal(formatarR("-0,0050"), "\u22120,01");
+assert.equal(formatarR("1,0000"), "1,00");
+
+// força, sentido e faixa seguem o r arredondado que o leitor vê
+assert.equal(
+  comDispersao({ cargo_x: "deputadoEstadual", cargo_y: "senador", r: "0,2996", municipios: 30 }),
+  "Dentro de cada UF, onde o PT 13 vai melhor para deputado estadual ele também vai melhor para senador? A coerência é moderada (r = 0,30, 30 municípios).",
+);
+assert.equal(
+  comDispersao({ cargo_x: "deputadoEstadual", cargo_y: "senador", r: "-0,0012", municipios: 30 }),
+  "Dentro de cada UF, onde o PT 13 vai melhor para deputado estadual ele também vai melhor para senador? A coerência é fraca (r = 0,00, 30 municípios).",
+);
+const borda = matrizCoerencia({ ...dados, partidos: [partido(13, { coerencia: coerencias(["0,1996"]) })] });
+assert.ok(borda !== null);
+assert.equal(borda.celulas[0].texto, "0,20");
+assert.equal(borda.celulas[0].faixa, 1);
+assert.ok(resumo.endsWith("Valores em %."));
+// a leitura recusa cargos fora de ordem ou listas incompletas
+assert.throws(() =>
+  lerVerticalizacao({ ...dados, partidos: [{ ...pl, cargos: [...pl.cargos].reverse() }] }),
+);
+assert.throws(() =>
+  lerVerticalizacao({ ...dados, partidos: [{ ...pl, coerencia: pl.coerencia.slice(1) }] }),
+);
 
 console.log("ok");

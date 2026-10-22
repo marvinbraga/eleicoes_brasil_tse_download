@@ -1243,6 +1243,16 @@ No escuro, a magnitude cresce para o claro, ou seja, o mais forte tem o maior co
 2. Foco: as frases batem com D11 e D12, nenhum null vira 0 e a acessibilidade do `<desc>` está completa.
 3. Siga só com zero achados Critical, High ou Medium.
 
+**Resultado (2026-10-22):** um achado Medium, corrigido. A força ("forte", "moderada", "fraca"), o "e inversa" e a faixa de cor do r usavam o valor cru, e não o valor de 2 casas que o leitor vê: 0,2996 aparecia como "fraca (r = 0,30)". Agora saem do r arredondado, e o verificador cobre 0,2996, −0,0012 e 0,1996. Lows corrigidos: a leitura recusa partidos com cargos fora da ordem de `cargos` ou sem os 7 pares e as 3 comparações, e o `<desc>` diz a unidade. Desvios registrados:
+- `RespostaVerticalizacaoInvalidaError` local, com a mesma mensagem, porque `relatorios.ts` importa com o alias `@/` e quebra o `node --experimental-strip-types`.
+- Na variante estreita, a sigla longa é cortada com "…" ("REPUBLICA…", "SOLIDARIE…") para caber em `esquerda − 6`. O nome inteiro fica no tooltip e no `<desc>`.
+- `MEDIDAS_COERENCIA_ESTREITO` usa fonte 11 (cabeçalho 10), porque com 7 colunas em 340 px a célula tem 33 px e "−0,15" com fonte 12 não cabe.
+- Os cabeçalhos da coerência vão em duas linhas ("Fed.×" / "Pres."), e "Ref." fica acima da última.
+- A célula ausente mostra no tooltip "Não concorreu em nenhuma das N UFs" em vez de "No recorte todo: 0,00%".
+- Com r nulo e municípios suficientes, a frase é "Não há variação suficiente para medir…".
+- "Mais 1 caso na tabela." usa o singular.
+- `formatarRazao` e `formatarR` ficam exportados para a tabela e a dispersão.
+
 ---
 
 ### Task 14: Componentes, página e navegador
@@ -1279,8 +1289,8 @@ Desenho:
   - "Puxador é o partido cuja candidatura majoritária teve pelo menos o dobro do esperado pela força em deputado, com 10 pontos ou mais de diferença. Base sem cabeça forte é o contrário. O esperado é a fatia que o partido teria se os votos da majoritária seguissem os de deputado entre os partidos que lançaram candidato."
 - **`page.tsx`** copia `classe-governador/page.tsx` com `import "./verticalizacao.css"`, `metadata.title = "Verticalização"`, `maxDuration = 600` e `CHAVES_FILTRO = ["ano", "turno", "uf"]`. Usa `<FiltrosRelatorio ano turno uf />` sem cargo nem nível. Esse modo já existe: `relatorio-pagina.tsx:54` o usa na página presidente-governador, e lá o botão de HTML fica desabilitado. `ConsultaRelatorio` (`lib/eleicoes.ts:93`) não tem `partido`, `x` nem `y`, então declare no próprio `page.tsx` o tipo `type ConsultaVerticalizacao = ConsultaRelatorio & { partido?: ValorConsulta; x?: ValorConsulta; y?: ValorConsulta }` e use-o em `searchParams: Promise<ConsultaVerticalizacao>`, sem mexer no tipo compartilhado. Lê `partido` (inteiro 0..99 ou null), `x` e `y` (válidos em `CARGOS_VERTICAIS`, com padrão `deputadoFederal` e `governador`) e passa tudo a `DadosVerticalizacao`.
 
-- [ ] **Step 1:** Implementar os componentes, a página e o item da sidebar.
-- [ ] **Step 2:** `cd frontend && pnpm exec tsc --noEmit && pnpm exec eslint src/components/relatorios/*verticalizacao*.tsx src/app/relatorios/verticalizacao/page.tsx src/components/layout/app-sidebar.tsx src/components/layout/app-breadcrumb.tsx src/app/page.tsx && node --experimental-strip-types src/lib/verificar-grafico-verticalizacao.ts`. Esperado: sem erros e `ok`.
+- [x] **Step 1:** Implementar os componentes, a página e o item da sidebar.
+- [x] **Step 2:** `cd frontend && pnpm exec tsc --noEmit && pnpm exec eslint src/components/relatorios/*verticalizacao*.tsx src/app/relatorios/verticalizacao/page.tsx src/components/layout/app-sidebar.tsx src/components/layout/app-breadcrumb.tsx src/app/page.tsx && node --experimental-strip-types src/lib/verificar-grafico-verticalizacao.ts`. Esperado: sem erros e `ok`.
 - [ ] **Step 3:** Conferir no navegador (chrome-devtools, aba própria `isolatedContext: "verticalizacao"`, com o `pnpm dev` do frontend e a API da Task 8):
   - `/relatorios/verticalizacao?ano=2026&turno=1&uf=TODAS&consultar=1`: as frases, as duas matrizes, a dispersão padrão e a tabela aparecem;
   - `uf=SP`: as fatias mudam e a coerência vale só para SP;
@@ -1296,7 +1306,7 @@ Desenho:
   - item "Verticalização" ativo na sidebar.
 
   Salvar as capturas `verticalizacao-*.png` no scratchpad.
-- [ ] **Step 4:** Sem commit nesta task.
+- [x] **Step 4:** Sem commit nesta task.
 
 **If Task Fails:**
 - Se o `import "./verticalizacao.css"` falhar no build, mova o import para um `layout.tsx` novo em `app/relatorios/verticalizacao/`. O App Router aceita CSS global em layout e page.
