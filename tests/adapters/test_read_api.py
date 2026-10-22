@@ -495,3 +495,48 @@ def test_database_error_stays_a_client_message() -> None:
     response = _get(create_app(ports=_ports(reader)), f"/votos/poder?{_SCOPE}")
     assert response.status_code == 500
     assert "database" not in response.text
+
+
+_MISSING_POWER = (
+    "O relatório de poder de presidente ainda não foi gravado. "
+    "Gere com: uv run python scripts/relatorio_poder.py --cargo presidente --sem-navegador"
+)
+
+
+def test_grade_somente_gravado_returns_the_stored_cells() -> None:
+    reader = _Reader()
+    power = _PowerStore()
+    power.stored = StoredReport(
+        (StoredCell("uf", "SE", "Do cache", 20, 13, 5, 1),),
+        datetime(2026, 10, 4, tzinfo=UTC),
+    )
+    application = create_app(ports=_ports(reader, power=power))
+    grade = _get(application, f"/relatorios/dados/grade?{_SCOPE}&nivel=uf&somente_gravado=true")
+    assert grade.status_code == 200
+    assert grade.json()["linhas"][0]["nome"] == "Do cache"
+    assert reader.calls == []
+
+
+def test_grade_somente_gravado_without_a_row_is_409_and_skips_the_reader() -> None:
+    for stored in (None, StoredReport((), datetime(2026, 10, 4, tzinfo=UTC))):
+        reader = _Reader()
+        power = _PowerStore()
+        power.stored = stored
+        application = create_app(ports=_ports(reader, power=power))
+        grade = _get(application, f"/relatorios/dados/grade?{_SCOPE}&somente_gravado=true")
+        assert grade.status_code == 409
+        assert grade.json()["detail"] == _MISSING_POWER
+        assert reader.calls == []
+        assert power.saves == []
+
+
+def test_grade_without_somente_gravado_still_reads_the_ballots() -> None:
+    reader = _Reader()
+    power = _PowerStore()
+    power.stored = None
+    application = create_app(ports=_ports(reader, power=power))
+    grade = _get(application, f"/relatorios/dados/grade?{_SCOPE}&somente_gravado=false")
+    assert grade.status_code == 200
+    assert grade.json()["linhas"][0]["codigo"] == "1120"
+    assert any(name == "party_power" for name, *_rest in reader.calls)
+    assert power.saves == []

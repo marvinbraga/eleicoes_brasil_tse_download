@@ -35,6 +35,7 @@ from eleicoes.domain.errors import (
     InvalidTurnoError,
     InvalidUfError,
     MissingCrossReportError,
+    MissingPowerReportError,
     StoredReadError,
     UnusableGroupCountError,
 )
@@ -68,6 +69,13 @@ def test_each_domain_error_has_a_portuguese_status() -> None:
             MissingCrossReportError(),
             409,
             "Gere o relatório presidente × governador antes.",
+        ),
+        (
+            MissingPowerReportError("deputadoEstadual"),
+            409,
+            "O relatório de poder de deputadoEstadual ainda não foi gravado. "
+            "Gere com: uv run python scripts/relatorio_poder.py "
+            "--cargo deputadoEstadual --sem-navegador",
         ),
         (
             CargoSemCelulasError("O cargo deputado federal não tem células gravadas."),

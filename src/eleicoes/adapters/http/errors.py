@@ -25,6 +25,7 @@ from eleicoes.domain.errors import (
     InvalidTurnoError,
     InvalidUfError,
     MissingCrossReportError,
+    MissingPowerReportError,
     StoredReadError,
     UnusableGroupCountError,
 )
@@ -49,6 +50,7 @@ _OWN_TEXT: tuple[tuple[type[ElectionError], int], ...] = (
     (FewClassesError, 409),
     (FewStatesError, 409),
     (MissingCrossReportError, 409),
+    (MissingPowerReportError, 409),
     (CargoSemCelulasError, 409),
     (InconsistentCellError, 409),
     (StoredReadError, 500),

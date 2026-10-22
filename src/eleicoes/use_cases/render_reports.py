@@ -3,7 +3,7 @@
 from eleicoes.adapters.html_grade import html_das_grades
 from eleicoes.adapters.html_presidente_governador import html_presidente_governador
 from eleicoes.domain.boletim_consulta import require_cargo
-from eleicoes.domain.errors import ElectionError
+from eleicoes.domain.errors import ElectionError, MissingPowerReportError
 from eleicoes.domain.grade import GradeDePoder, GradeLevel
 from eleicoes.domain.presidente_governador import CrossReportView, view_from_places
 from eleicoes.domain.stored_grade import cells_from_grades, grades_from_cells
@@ -52,6 +52,8 @@ class RenderPowerReport:
         uf: str,
         cargo: str,
         nivel: str = "municipio",
+        *,
+        somente_gravado: bool = False,
     ) -> GradeDePoder:
         level = GradeLevel(nivel).value
         year, turn, code, office = _power_scope(ano, turno, uf, cargo)
@@ -59,6 +61,8 @@ class RenderPowerReport:
         if stored is not None and stored.cells:
             selected = tuple(cell for cell in stored.cells if cell.nivel == level)
             return _grade_for(grades_from_cells(year, turn, code, office, selected), level)
+        if somente_gravado:
+            raise MissingPowerReportError(office)
         return await build_party_share_grid(
             self._reader,
             self._names,

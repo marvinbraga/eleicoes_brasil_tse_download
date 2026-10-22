@@ -212,6 +212,15 @@ class MissingCrossReportError(ElectionError):
         super().__init__("Gere o relatório presidente × governador antes.")
 
 
+class MissingPowerReportError(ElectionError):
+    def __init__(self, cargo: str) -> None:
+        self.cargo = cargo
+        super().__init__(
+            f"O relatório de poder de {cargo} ainda não foi gravado. "
+            f"Gere com: uv run python scripts/relatorio_poder.py --cargo {cargo} --sem-navegador"
+        )
+
+
 class FewStatesError(ElectionError):
     def __init__(self) -> None:
         super().__init__("Menos de 2 UFs para validar.")

@@ -40,7 +40,8 @@ _GRADE = (
     "Exige ano, turno, uf e cargo. nivel admite municipio, uf, regiao ou pais. "
     "A UF ancora o relatório, como na linha de comando, e não recorta um único estado "
     "quando o nível percorre as UF apuradas. "
-    "Se o relatório estiver gravado, devolve essas células; senão, lê os boletins."
+    "Se o relatório estiver gravado, devolve essas células; senão, lê os boletins. "
+    "Com somente_gravado=true, não lê os boletins: sem relatório gravado, responde 409."
 )
 _CROSS_SCOPE = (
     "Exige ano, turno e uf. A UF valida o recorte, como no apresentador; "
@@ -75,8 +76,16 @@ async def grade(
     names: Names,
     store: PowerStore,
     nivel: str = "municipio",
+    somente_gravado: bool = False,
 ) -> GradeJson:
-    built = await RenderPowerReport(reader, names, store).grade(ano, turno, uf, cargo, nivel)
+    built = await RenderPowerReport(reader, names, store).grade(
+        ano,
+        turno,
+        uf,
+        cargo,
+        nivel,
+        somente_gravado=somente_gravado,
+    )
     return GradeJson.from_domain(built)
 
 

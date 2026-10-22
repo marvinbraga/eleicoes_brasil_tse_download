@@ -38,7 +38,14 @@ export function buscarGrade(
   cargo: string,
   nivel: string,
 ): Promise<Resultado<GradeRelatorio>> {
-  const params = new URLSearchParams({ ano, turno, uf, cargo, nivel });
+  const params = new URLSearchParams({
+    ano,
+    turno,
+    uf,
+    cargo,
+    nivel,
+    somente_gravado: "true",
+  });
   return buscar("/relatorios/dados/grade", params, lerGrade);
 }
 
