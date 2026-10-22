@@ -21,3 +21,19 @@ def test_gedai_and_correspondence_keep_their_own_collections() -> None:
 def test_unknown_zip_stays_out_of_the_uf_tree() -> None:
     location = locate("perfil_eleitorado.zip")
     assert location.relative_path.as_posix() == "outros/perfil_eleitorado.zip"
+
+
+def test_municipal_zips_go_to_the_municipais_folder_without_turno_or_uf() -> None:
+    found = locate("consulta_cand_2024.zip")
+    assert (found.collection, found.turno, found.uf) == ("municipais", "", "")
+    assert found.relative_path.as_posix() == "municipais/consulta_cand_2024.zip"
+    assert locate("detalhe_votacao_munzona_2024.zip").collection == "municipais"
+    assert locate("consulta_vagas_2024.zip").collection == "municipais"
+    assert locate("foto_cand2024_AC_div.zip").collection == ""
+
+
+def test_general_election_years_keep_the_same_names_out_of_municipais() -> None:
+    assert locate("detalhe_votacao_munzona_2022.zip").collection == ""
+    assert (
+        locate("consulta_cand_2026.zip").relative_path.as_posix() == "outros/consulta_cand_2026.zip"
+    )

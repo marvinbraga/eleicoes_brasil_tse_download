@@ -19,6 +19,10 @@ _GEDAI: Pattern[str] = compile_pattern(
 _CORRESPONDENCIA: Pattern[str] = compile_pattern(
     r"^CESP_(?P<turno>[12])t_(?P<uf>[A-Za-z]{2})(?:_.*)?\.zip$"
 )
+_MUNICIPAL: Pattern[str] = compile_pattern(
+    r"^(?:consulta_cand|consulta_vagas|detalhe_votacao_munzona)_(?P<ano>\d{4})\.zip$"
+)
+_MUNICIPAL_CYCLE = 4
 _STATUS_LABEL = {
     TransferStatus.DOWNLOADED: "baixado",
     TransferStatus.SKIPPED: "ignorado",
@@ -37,6 +41,8 @@ class ArchiveLocation:
     def relative_path(self) -> Path:
         if self.collection == "":
             return Path("outros") / self.filename
+        if self.turno == "":
+            return Path(self.collection) / self.filename
         return Path(self.collection) / f"turno-{self.turno}" / self.uf / self.filename
 
 
@@ -55,6 +61,9 @@ def locate(filename: str) -> ArchiveLocation:
             correspondencia.group("uf"),
             filename,
         )
+    municipal = _MUNICIPAL.fullmatch(filename)
+    if municipal is not None and int(municipal.group("ano")) % _MUNICIPAL_CYCLE == 0:
+        return ArchiveLocation("municipais", "", "", filename)
     return ArchiveLocation("", "", "", filename)
 
 

@@ -288,3 +288,30 @@ class MissingSeatReportError(ElectionError):
             f"Os votos por candidato de {listed} ainda não foram gravados. "
             "Gere com: uv run python scripts/relatorio_cadeiras.py"
         )
+
+
+class InvalidMunicipalYearError(InvalidElectionYearError):
+    """Ano válido, mas sem eleição municipal (o ciclo municipal é múltiplo de 4)."""
+
+
+class DuplicateMayorError(ElectionError):
+    def __init__(self, uf: str, ue: str) -> None:
+        self.uf = uf
+        self.ue = ue
+        super().__init__(f"more than one elected mayor in {uf} {ue}")
+
+
+class InvalidMunicipalRowError(ElectionError):
+    def __init__(self, field: str) -> None:
+        self.field = field
+        super().__init__(f"invalid municipal row field: {field}")
+
+
+class MissingMunicipalResultsError(ElectionError):
+    def __init__(self, year: int) -> None:
+        self.year = year
+        super().__init__(
+            f"Os resultados municipais de {year} ainda não foram importados. "
+            f"Rode: python -m eleicoes download-municipais --ano {year} e "
+            f"python -m eleicoes import-municipais --ano {year}."
+        )
