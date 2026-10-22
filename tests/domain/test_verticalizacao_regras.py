@@ -93,3 +93,15 @@ def test_running_only_where_the_proportional_is_missing_is_not_sem_candidato() -
     assert pt.classe is None
     assert [item.uf for item in pt.sem_candidato] == ["SP"]
     assert compare(base, ("SP",), 13, *_PAIR).classe == SEM_CANDIDATO
+
+
+def test_state_without_the_majoritarian_is_not_sem_candidato() -> None:
+    lines = (
+        *_state("SP", {13: 60, 22: 40}, {13: 50, 22: 50}),
+        *every_cargo("DF", skip=_PAIR),
+        *uf_lines(DEPUTADO_ESTADUAL, "DF", {13: 50, 22: 50}),
+    )
+    base = vertical_base(2026, 1, lines)
+    pt = compare(base, base.scope(None), 13, *_PAIR)
+    assert pt.sem_candidato == ()
+    assert [row.uf for row in pt.por_uf] == ["SP"]

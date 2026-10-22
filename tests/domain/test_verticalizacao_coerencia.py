@@ -153,6 +153,9 @@ def test_single_city_state_is_out_of_n_but_in_the_scatter() -> None:
     assert len(points) == 11
     [df] = [point for point in points if point.uf == "DF"]
     assert (df.x, df.y, df.comparecimento) == (Fraction(30, 100), Fraction(40, 100), 1000)
+    alone = coherence(base, ("DF",), _PT, _X, _Y)
+    assert (alone.r, alone.municipios) == (None, 0)
+    assert len(scatter_points(base, ("DF",), _PT, _X, _Y)) == 1
 
 
 def test_state_where_the_party_did_not_run_is_left_out() -> None:

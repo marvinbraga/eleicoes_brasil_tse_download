@@ -9,6 +9,7 @@ from eleicoes.domain.verticalizacao import (
     CARGOS,
     DEPUTADO_ESTADUAL,
     DEPUTADO_FEDERAL,
+    MAX_PARTIDO,
     CargoShare,
     VerticalBase,
     cargo_share,
@@ -32,7 +33,6 @@ from eleicoes.domain.verticalizacao_regras import (
 PERFIL_MISTO: Final = "misto"
 SEM_COMPARACAO: Final = "sem_comparacao"
 _CROSS_PAIRS: Final = len(PARES_COERENCIA) - 1
-_MAX_PARTIDO: Final = 99
 _COMPARABLE: Final = frozenset({PUXADOR, BASE, ALINHADO})
 NOTES: Final[tuple[str, ...]] = (
     "Lê só as células gravadas do relatório de poder; não lê os boletins.",
@@ -180,6 +180,6 @@ def _chosen_party(report: VerticalReport, partido: int | None) -> int:
         return report.partidos[0].partido
     if isinstance(partido, bool) or not isinstance(partido, int):
         raise InvalidNumeroError(partido)
-    if not 0 <= partido <= _MAX_PARTIDO:
+    if not 0 <= partido <= MAX_PARTIDO:
         raise InvalidNumeroError(partido)
     return partido

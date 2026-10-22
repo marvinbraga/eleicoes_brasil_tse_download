@@ -26,7 +26,7 @@ PROPORCIONAIS: Final[tuple[str, ...]] = (DEPUTADO_FEDERAL, DEPUTADO_ESTADUAL)
 EXTERIOR: Final = "ZZ"
 _MUNICIPIO: Final = "municipio"
 _UF: Final = "uf"
-_MAX_PARTIDO: Final = 99
+MAX_PARTIDO: Final = 99
 _SUFIXO: Final = re.compile(r"\(([A-Z]{2})\)\s*$")
 _STATES: Final = frozenset(UF_CODES) - {EXTERIOR}
 
@@ -51,7 +51,7 @@ class VerticalLine:
         _count(self.comparecimento)
         _count(self.votos)
         _count(self.partido)
-        if self.partido > _MAX_PARTIDO:
+        if self.partido > MAX_PARTIDO:
             raise InconsistentCellError()
 
 

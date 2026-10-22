@@ -97,7 +97,7 @@
 }
 ```
 
-`classe: null` aparece quando o partido não concorreu nem à majoritária nem à proporcional do par no recorte.
+`classe: null` aparece quando o partido não concorreu nem à majoritária nem à proporcional do par no recorte. Também aparece quando ele concorreu à majoritária no recorte, mas só em UF sem a proporcional gravada (como governador só no DF): não há comparação e isso não é "sem candidato" (D12, ajuste da revisão da Task 5). Uma UF sem a majoritária gravada também não gera "sem candidato".
 
 ## Global Constraints
 
@@ -139,7 +139,7 @@
 - Consumes: `ElectionYear`, `Turno`, `UF_CODES` (`domain/values.py`), e `InconsistentCellError`, `InvalidUfError`, `MissingPowerReportError` (`domain/errors.py`).
 - Produces: `CARGOS`, `MAJORITARIOS`, `PROPORCIONAIS`, as constantes de cargo, `EXTERIOR`, `VerticalLine`, `MunicipioVertical`, `VerticalBase`, `CargoShare`, `municipal_uf`, `vertical_base` e `cargo_share`.
 
-- [ ] **Step 1: Escrever os testes que falham**
+- [x] **Step 1: Escrever os testes que falham**
 
 ```python
 """Vertical base: stored lines become per-UF and per-city votes. No ballot is read."""
@@ -234,12 +234,12 @@ def test_scope_rejects_exterior_and_unknown_states() -> None:
             base.scope(uf)
 ```
 
-- [ ] **Step 2: Rodar e ver falhar**
+- [x] **Step 2: Rodar e ver falhar**
 
 Run: `uv run pytest tests/domain/test_verticalizacao.py -q`
 Expected: `ModuleNotFoundError: No module named 'eleicoes.domain.verticalizacao'`.
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 ```python
 """Party strength across offices, read from the stored power cells. No ballot is read."""
@@ -466,7 +466,7 @@ def _count(value: int) -> None:
         raise InconsistentCellError()
 ```
 
-- [ ] **Step 4: Rodar até passar**
+- [x] **Step 4: Rodar até passar**
 
 Run: `uv run pytest tests/domain/test_verticalizacao.py -q && uv run mypy src/eleicoes/domain/verticalizacao.py tests/domain/test_verticalizacao.py && uv run ruff check src/eleicoes/domain/verticalizacao.py tests/domain/test_verticalizacao.py`
 Expected: `5 passed`, `Success: no issues found in 2 source files`, `All checks passed!`.
@@ -485,7 +485,7 @@ Expected: `5 passed`, `Success: no issues found in 2 source files`, `All checks 
 - Consumes: `VerticalBase` e as constantes da Task 1.
 - Produces: `RAZAO`, `DIFERENCA`, `BASE_RELEVANTE`, `PUXADOR`, `BASE`, `ALINHADO`, `SEM_CANDIDATO`, `PARES_CANONICOS`, `classify`, `UfComparison`, `AbsentState`, `Comparison` e `compare`.
 
-- [ ] **Step 1: Testes que falham**
+- [x] **Step 1: Testes que falham**
 
 ```python
 """Puxador / base rules. Thresholds count at the boundary."""
@@ -555,9 +555,9 @@ def test_pooled_share_weights_states_by_majoritarian_valid_votes() -> None:
 
 Inclua `VerticalLine` no import de `eleicoes.domain.verticalizacao`. Conta conferida: em MG, a majoritária é 10% e a esperada 25%; como 25 ≥ 2 × 10 e a diferença é de 15 pp, a classe é base. Em SP, 60% contra 50% dá alinhado. A soma das UF dá 35% contra 37,5%, também alinhado.
 
-- [ ] **Step 2:** `uv run pytest tests/domain/test_verticalizacao_regras.py -q` → `ModuleNotFoundError`.
+- [x] **Step 2:** `uv run pytest tests/domain/test_verticalizacao_regras.py -q` → `ModuleNotFoundError`.
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 ```python
 """Puxador / base: the majoritarian share against what the proportional base predicts."""
@@ -697,7 +697,7 @@ def _absent(
     return AbsentState(uf, Fraction(base.votos_uf(uf, proporcional)[partido], valid))
 ```
 
-- [ ] **Step 4:** `uv run pytest tests/domain/test_verticalizacao_regras.py -q && uv run mypy src tests && uv run ruff check src tests` → tudo verde.
+- [x] **Step 4:** `uv run pytest tests/domain/test_verticalizacao_regras.py -q && uv run mypy src tests && uv run ruff check src tests` → tudo verde.
 
 **If Task Fails:** se a esperada der 0/0, confira o `pool == 0`. Se a soma dos pesos estiver errada, imprima `weights` no teste e compare com os válidos da UF.
 
@@ -713,7 +713,7 @@ def _absent(
 - Consumes: `VerticalBase`, `MunicipioVertical` e as constantes.
 - Produces: `MINIMO_MUNICIPIOS`, `PARES_COERENCIA`, `Coherence`, `ScatterPoint`, `coherence` e `scatter_points`.
 
-- [ ] **Step 1: Testes que falham** (com fixture de municípios via `city_lines` e linhas de UF com votos > 0 nos dois cargos)
+- [x] **Step 1: Testes que falham** (com fixture de municípios via `city_lines` e linhas de UF com votos > 0 nos dois cargos)
   1. **Offsets entre UF não contam.** Em SP há 5 municípios com x = 5, 10, 15, 20, 25% e y = 2x (10 a 50%). Em MG há 5 municípios com o mesmo x e y = 2x + 30 pp (40 a 80%). Toda fatia fica abaixo de 100%. Monte cada município com votos inteiros sobre 100 válidos por cargo, colocando o resto num partido 99. O r intra-UF é `pytest.approx(1.0)`, mesmo com o r agregado menor. Confira o agregado no teste com `numpy.corrcoef` para provar que ele é diferente.
   2. **Inverso.** y = 60% − x em 10 municípios de uma UF → `approx(-1.0)`.
   3. **Peso.** Em 12 municípios com comparecimentos diferentes, `r == approx(_ref)`. A referência vem de `numpy.cov(x, y, aweights=w)` calculado por UF depois de centrar. O numpy já está no `.venv` por causa do sklearn, mas só no teste.
@@ -723,9 +723,9 @@ def _absent(
   7. **Variância nula.** x igual em todos → `None`.
   8. **UF sem o cargo.** Uma UF sem linhas de Dep. estadual (como o DF) não entra no par Dep. estadual × Governador, e os pontos dela não aparecem.
 
-- [ ] **Step 2:** `uv run pytest tests/domain/test_verticalizacao_coerencia.py -q` → `ModuleNotFoundError`.
+- [x] **Step 2:** `uv run pytest tests/domain/test_verticalizacao_coerencia.py -q` → `ModuleNotFoundError`.
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 ```python
 """Within-state coherence: weighted Pearson on shares centred per UF."""
@@ -841,7 +841,7 @@ def _within(
 
 Aqui o caminho quente usa float e não `Fraction` (30 partidos × 7 pares × 5.570 municípios). Só os pontos da dispersão, que são poucos, usam `Fraction`.
 
-- [ ] **Step 4:** `uv run pytest tests/domain/test_verticalizacao_coerencia.py -q && uv run mypy src tests && uv run ruff check src tests` → verde.
+- [x] **Step 4:** `uv run pytest tests/domain/test_verticalizacao_coerencia.py -q && uv run mypy src tests && uv run ruff check src tests` → verde.
 
 **If Task Fails:** um r fora de [-1, 1] indica centragem errada. Confira se a média é por UF. Um `KeyError` em `city.votos[x]` aparece se `_paired` deixou passar um município sem o cargo, e o filtro `validos.get(x, 0) > 0` evita isso.
 
@@ -886,15 +886,15 @@ Regras:
   7. "O esperado é a fatia que o partido teria na majoritária se os votos seguissem a força dele na proporcional, entre os partidos que lançaram candidato."
   8. "O Distrito Federal não tem deputado estadual gravado. Por isso fica fora do par governador e deputado estadual e da coerência com deputado estadual."
 
-- [ ] **Step 1: Testes que falham**
+- [x] **Step 1: Testes que falham**
   - `profile` com {puxador, alinhado} → `puxador`; {puxador, base} → `misto`; {sem_candidato, None} → `sem_comparacao`; {alinhado} → `alinhado`.
   - Ordem D14 com empate de deputado federal resolvido pelo deputado estadual.
   - `vertical_report(base, "SP").uf == "SP"`, e `vertical_report(base, None).municipios` soma as UF.
   - `scatter_view` padrão escolhe o primeiro partido. `cargo_x == cargo_y` dá `InvalidCargoError`, `"vereador"` dá `InvalidCargoError`, e `partido=100` dá `InvalidNumeroError`.
   - `coerencia_mediana` ignora a referência Fed × Est (um teste em que só a referência tem r não nulo dá `None`).
-- [ ] **Step 2:** rodar e ver falhar.
-- [ ] **Step 3:** implementar.
-- [ ] **Step 4:** `uv run pytest tests/domain -q -k verticalizacao && uv run mypy src tests && uv run ruff check src tests` → verde.
+- [x] **Step 2:** rodar e ver falhar.
+- [x] **Step 3:** implementar.
+- [x] **Step 4:** `uv run pytest tests/domain -q -k verticalizacao && uv run mypy src tests && uv run ruff check src tests` → verde.
 
 **If Task Fails:** um erro de import circular indica que `verticalizacao_relatorio` só pode importar dos três módulos anteriores, e nunca o contrário.
 
@@ -962,15 +962,15 @@ Cada linha vira `VerticalLine(*row)`, com 7 colunas. Com outra largura, a linha 
 
 `build_vertical_base` valida `ElectionYear` e `Turno` antes de ler, e depois chama `vertical_base(year, turn, source.vertical_lines(year, turn))`. `_production_reader` copia `apresentar_classe_governador._production_reader` (com `load_dotenv`, `_host_settings` e `open_sync_session`) e devolve `PostgresVerticalLines`.
 
-- [ ] **Step 1: Testes que falham** (`ScriptedSession` de `tests/adapters/orm_fakes.py`)
+- [x] **Step 1: Testes que falham** (`ScriptedSession` de `tests/adapters/orm_fakes.py`)
   - Uma linha empurrada `("governador", "uf", "SP", "SP", 100, 13, 40)` vira `VerticalLine` igual. Há só 1 `Select`, e o SQL compilado em postgresql contém `analise.relatorio_poder_linha` e não contém `boletim`, `secoes` nem `raw.`. Os parâmetros incluem `municipio`, `uf` e os 5 cargos. A soma `votos_nominais + votos_legenda` aparece no SELECT e no WHERE.
   - Uma linha de 6 colunas dá `InconsistentCellError`.
   - `SQLAlchemyError` na execução dá `StoredReadError`.
   - `close()` fecha a sessão uma vez.
   - Caso de uso: uma fonte falsa com `turno=9` dá `InvalidTurnoError` sem chamar `vertical_lines`. Uma fonte falsa válida devolve `VerticalBase` com `ano == 2026`.
-- [ ] **Step 2:** rodar e ver falhar.
-- [ ] **Step 3:** implementar.
-- [ ] **Step 4:** `uv run pytest tests/adapters/test_postgres_verticalizacao.py tests/use_cases/test_verticalizacao.py -q && uv run mypy src tests && uv run ruff check src tests` → verde.
+- [x] **Step 2:** rodar e ver falhar.
+- [x] **Step 3:** implementar.
+- [x] **Step 4:** `uv run pytest tests/adapters/test_postgres_verticalizacao.py tests/use_cases/test_verticalizacao.py -q && uv run mypy src tests && uv run ruff check src tests` → verde.
 
 **If Task Fails:** se o `ScriptedSession` não devolver as linhas, leia `tests/adapters/orm_fakes.py:51` (`_rows`), que espera `push` antes de `execute`.
 

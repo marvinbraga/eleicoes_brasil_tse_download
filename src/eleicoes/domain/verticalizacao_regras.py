@@ -130,7 +130,9 @@ def _absent(
     majoritario: str,
     proporcional: str,
 ) -> AbsentState | None:
-    if base.concorreu(uf, majoritario, partido) or not base.concorreu(uf, proporcional, partido):
+    if base.validos_uf(uf, majoritario) == 0 or base.concorreu(uf, majoritario, partido):
+        return None
+    if not base.concorreu(uf, proporcional, partido):
         return None
     valid = base.validos_uf(uf, proporcional)
     return AbsentState(uf, Fraction(base.votos_uf(uf, proporcional)[partido], valid))
