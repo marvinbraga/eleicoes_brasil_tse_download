@@ -329,3 +329,15 @@ class MissingMunicipalResultsError(ElectionError):
             f"Rode: python -m eleicoes download-municipais --ano {year} e "
             f"python -m eleicoes import-municipais --ano {year}."
         )
+
+
+class InvalidRecorteError(ElectionError):
+    def __init__(self) -> None:
+        super().__init__("Recorte inválido. Use regiao (NO, NE, CO, SE ou S) ou uf, não os dois.")
+
+
+class EmptyRecorteError(ElectionError):
+    def __init__(self, recorte: str, cargo: str) -> None:
+        self.recorte = recorte
+        self.cargo = cargo
+        super().__init__(f"Não há municípios gravados para {cargo} no recorte {recorte}.")
