@@ -9,6 +9,7 @@ from eleicoes.domain.verticalizacao import VerticalBase
 from eleicoes.domain.verticalizacao_relatorio import (
     VerticalReport,
     VerticalView,
+    require_scatter,
     scatter_view,
     vertical_report,
 )
@@ -39,6 +40,7 @@ def _stored_vertical(
     year = ElectionYear(ano).value
     turn = Turno(turno).value
     code = None if uf is None else Uf(uf).code
+    require_scatter(partido, cargo_x, cargo_y)
     report = _vertical_report(year, turn, code)
     scatter = scatter_view(_vertical_base(year, turn), report, partido, cargo_x, cargo_y)
     return VerticalView(report, scatter)

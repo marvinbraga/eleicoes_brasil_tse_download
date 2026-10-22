@@ -906,6 +906,8 @@ Regras:
 2. Foco: D3, D7, D9, D11 e D12 conferidos contra o código. Bordas dos limiares. Nenhuma ausência vira zero.
 3. Siga para a próxima task só com zero achados Critical, High ou Medium.
 
+**Resultado (2026-10-22):** zero achados Critical, High ou Medium. Correções vindas da revisão: (a) na soma, `sem_candidato` só vale se o partido não concorreu à majoritária em nenhuma UF do recorte (D12); quem concorreu só onde a proporcional não está gravada (governador só no DF) fica com `classe: null`; (b) uma UF sem a majoritária gravada não gera "sem candidato"; (c) testes de borda com exatamente 2× e exatamente 10 pp; (d) o r é limitado a [−1, 1] contra arredondamento; (e) `MAX_PARTIDO` passou a ser compartilhado.
+
 ---
 
 ### Task 6: Porta, adaptador SQL e caso de uso
@@ -915,7 +917,7 @@ Regras:
 - Create: `src/eleicoes/adapters/postgres_verticalizacao.py`
 - Create: `src/eleicoes/use_cases/verticalizacao.py`
 - Test: `tests/adapters/test_postgres_verticalizacao.py`
-- Test: `tests/use_cases/test_verticalizacao.py`
+- Test: `tests/use_cases/test_verticalizacao_base.py` (o nome `test_verticalizacao.py` colide com `tests/domain/test_verticalizacao.py`, porque as pastas de teste não têm `__init__.py`)
 
 **Interfaces:**
 ```python
@@ -1071,6 +1073,8 @@ O schema tem os modelos `CargoVerticalJson`, `CoerenciaJson`, `UfComparacaoJson`
 1. **REQUIRED SUB-SKILL:** jarvis:codereview com todos os revisores, sobre o diff do backend.
 2. Foco: o contrato bate com "Contrato", os anexos nos arquivos compartilhados são mínimos e o cache é limpo.
 3. Siga para a próxima task só com zero achados Critical, High ou Medium.
+
+**Resultado (2026-10-22):** zero achados Critical, High ou Medium. Dois Low foram corrigidos: a validação do par de cargos e do partido (`require_scatter`) agora roda antes da carga em cache, e há testes HTTP com o job real para `uf=ZZ`, cargo x = y e `partido=100`. Ficam como limites conhecidos o build em dobro quando dois pedidos chegam a frio ao mesmo tempo (igual ao `ClassJob`) e o relatório em cache que sobrevive à base (`maxsize=2`).
 
 ---
 

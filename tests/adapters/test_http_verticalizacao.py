@@ -324,3 +324,20 @@ def test_clear_report_caches_forces_a_new_read(monkeypatch: pytest.MonkeyPatch) 
     clear_report_caches()
     get_vertical_job()(2026, 1, None, None, DEPUTADO_FEDERAL, GOVERNADOR)
     assert len(opened) == 2
+
+
+@pytest.mark.parametrize(
+    ("query", "detail"),
+    [
+        ("&uf=ZZ", "UF inválida."),
+        ("&cargo_x=governador", "Cargo inválido."),
+        ("&partido=100", "Número inválido."),
+    ],
+)
+def test_real_job_answers_422(monkeypatch: pytest.MonkeyPatch, query: str, detail: str) -> None:
+    opened: list[_Reader] = []
+    _patch_reader(monkeypatch, opened)
+    response = _get(create_app(ports=_ports()), f"{_ROUTE}?ano=2026&turno=1{query}")
+    assert response.status_code == 422
+    assert response.json() == {"detail": detail}
+    assert len(opened) == (1 if query == "&uf=ZZ" else 0)

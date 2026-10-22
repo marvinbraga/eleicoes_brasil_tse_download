@@ -125,7 +125,7 @@ def scatter_view(
     cargo_x: str,
     cargo_y: str,
 ) -> ScatterView:
-    _require_pair(cargo_x, cargo_y)
+    require_scatter(partido, cargo_x, cargo_y)
     chosen = _chosen_party(report, partido)
     ufs = base.scope(report.uf)
     return ScatterView(
@@ -166,20 +166,22 @@ def _order(party: PartyVertical) -> tuple[int, int, int, int]:
     )
 
 
-def _require_pair(cargo_x: str, cargo_y: str) -> None:
+def require_scatter(partido: int | None, cargo_x: str, cargo_y: str) -> None:
     if cargo_x not in CARGOS:
         raise InvalidCargoError(cargo_x)
     if cargo_y not in CARGOS or cargo_y == cargo_x:
         raise InvalidCargoError(cargo_y)
-
-
-def _chosen_party(report: VerticalReport, partido: int | None) -> int:
     if partido is None:
-        if not report.partidos:
-            raise EmptyStoredCellsError()
-        return report.partidos[0].partido
+        return
     if isinstance(partido, bool) or not isinstance(partido, int):
         raise InvalidNumeroError(partido)
     if not 0 <= partido <= MAX_PARTIDO:
         raise InvalidNumeroError(partido)
-    return partido
+
+
+def _chosen_party(report: VerticalReport, partido: int | None) -> int:
+    if partido is not None:
+        return partido
+    if not report.partidos:
+        raise EmptyStoredCellsError()
+    return report.partidos[0].partido
