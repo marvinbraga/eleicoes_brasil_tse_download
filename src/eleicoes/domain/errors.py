@@ -1,5 +1,17 @@
 """Erros de domínio. Mensagens internas em inglês; o CLI traduz para o usuário."""
 
+from typing import Final
+
+# Nome do cargo como aparece nas mensagens ao leitor ("deputadoEstadual" → "deputado estadual").
+CARGO_TEXT: Final[dict[str, str]] = {
+    "presidente": "presidente",
+    "governador": "governador",
+    "senador": "senador",
+    "deputadoFederal": "deputado federal",
+    "deputadoEstadual": "deputado estadual",
+    "deputadoDistrital": "deputado distrital",
+}
+
 
 class ElectionError(Exception):
     """Falha esperada do domínio ou da borda de IO traduzida para o domínio."""
@@ -348,4 +360,5 @@ class EmptyRecorteError(ElectionError):
     def __init__(self, recorte: str, cargo: str) -> None:
         self.recorte = recorte
         self.cargo = cargo
-        super().__init__(f"Não há municípios gravados para {cargo} no recorte {recorte}.")
+        texto = CARGO_TEXT.get(cargo, cargo)
+        super().__init__(f"Não há municípios gravados para {texto} no recorte {recorte}.")

@@ -142,3 +142,18 @@ def test_poucos_municipios_needs_half_of_the_votes_even_when_heavy() -> None:
 def test_scope_whose_places_have_no_valid_vote_has_no_view() -> None:
     empty = (Municipality("1", "M1 (AC)", "AC", {13: 0}),)
     assert build_view(BRASIL, empty) is None
+
+
+@pytest.mark.parametrize(
+    ("cargo", "texto"),
+    [
+        ("deputadoEstadual", "deputado estadual"),
+        ("deputadoFederal", "deputado federal"),
+        ("deputadoDistrital", "deputado distrital"),
+        ("governador", "governador"),
+    ],
+)
+def test_empty_scope_message_uses_the_readable_cargo(cargo: str, texto: str) -> None:
+    erro = EmptyRecorteError("São Paulo", cargo)
+    assert str(erro) == f"Não há municípios gravados para {texto} no recorte São Paulo."
+    assert erro.cargo == cargo
