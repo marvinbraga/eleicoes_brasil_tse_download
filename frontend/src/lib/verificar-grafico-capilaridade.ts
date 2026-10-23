@@ -17,7 +17,10 @@ import {
   leituraCapilaridade,
   resumoFaixas,
   resumoRanking,
+  textosFaixas,
+  textosRanking,
 } from "./grafico-capilaridade.ts";
+import { problemasEstreito } from "./texto-svg.ts";
 
 function faixas(municipios: number[], votos: number[]): FaixaCapilaridade[] {
   return CHAVES_FAIXA.map((chave, i) => ({
@@ -121,6 +124,43 @@ const utilEstreito =
   MEDIDAS_RANKING_ESTREITO.direita;
 assert.equal(estreito.barras[1]?.largura, utilEstreito / 2);
 
+// Telefone (~301 px de desenho): ≥ 11 px CSS, nada fora do viewBox, nada sobreposto. A classe
+// longa desce para linhas próprias em vez de alargar o viewBox (o que encolheria a fonte).
+const LONGOS = [
+  partido(77, 100, "poucos_municipios", "Concentrado em poucos municípios"),
+  partido(10, 0, "regional", "Concentrado em uma UF (Rio Grande do Norte)"),
+  partido(36, 55, "poucos_municipios", "Concentrado em poucos municípios"),
+  ...PARTIDOS,
+];
+for (const [nome, lista] of [["ranking", PARTIDOS], ["ranking com classes longas", LONGOS]] as const) {
+  const layout = layoutRanking(lista, 22, href, MEDIDAS_RANKING_ESTREITO);
+  assert.ok(layout !== null);
+  assert.equal(layout.largura, 340, nome);
+  assert.deepEqual(problemasEstreito(textosRanking(layout), layout.largura, layout.altura), [], nome);
+}
+const longos = layoutRanking(LONGOS, 22, href, MEDIDAS_RANKING_ESTREITO);
+assert.ok(longos !== null);
+const solidariedade = longos.barras[0];
+assert.ok(solidariedade !== undefined);
+assert.equal(solidariedade.classeNaLinha, false);
+assert.equal(solidariedade.linhasClasse.join(" "), "Concentrado em poucos municípios");
+assert.equal(solidariedade.alturaLinha, MEDIDAS_RANKING_ESTREITO.alturaLinha + 15 * solidariedade.linhasClasse.length);
+longos.barras.slice(1).forEach((barra, i) => {
+  const anterior = longos.barras[i];
+  assert.ok(anterior !== undefined);
+  assert.equal(barra.topoLinha, anterior.topoLinha + anterior.alturaLinha);
+});
+assert.equal(estreito.barras.every((barra) => barra.classeNaLinha), true);
+// o "0" da escala inteiro dentro do desenho
+const zero = textosRanking(estreito).find((texto) => texto.chave === "marca-0");
+assert.ok(zero !== undefined && zero.x - (0.6 * zero.fonte) / 2 >= 0);
+// largo sem mudança: escala com fonte 11, rótulo à esquerda da barra, sem linhas de classe
+const textosLargos = textosRanking(ranking);
+assert.equal(textosLargos.find((texto) => texto.chave === "marca-0")?.fonte, 11);
+assert.equal(textosLargos.find((texto) => texto.chave === "rotulo-22")?.x, MEDIDAS_RANKING.esquerda - 8);
+assert.equal(ranking.barras[1]?.y, MEDIDAS_RANKING.topo + MEDIDAS_RANKING.alturaLinha);
+assert.equal(ranking.altura, MEDIDAS_RANKING.topo + 3 * MEDIDAS_RANKING.alturaLinha + MEDIDAS_RANKING.base);
+
 const resumo = resumoRanking(PARTIDOS);
 for (const texto of ["PSOL 50", "62", "PL 22", "50", "PT 13", "20", "Concentrado nas capitais"]) {
   assert.ok(resumo.includes(texto), `resumo sem ${texto}: ${resumo}`);
@@ -153,6 +193,24 @@ assert.equal(layoutFaixas(faixas([], []), "municipios"), null);
 assert.equal(layoutFaixas(faixas([3], []), "votos"), null);
 const faixasEstreito = layoutFaixas(base.faixas, "municipios", MEDIDAS_FAIXAS_ESTREITO);
 assert.equal(faixasEstreito?.largura, 340);
+for (const [nome, lista] of [
+  ["faixas", base.faixas],
+  ["faixas com 100%", faixas([0, 0, 0, 0, 0, 0, 5571], [0, 0, 0, 0, 0, 0, 999])],
+  ["faixas com valores longos", faixas([1111, 1111, 1111, 1111, 1, 1, 1125], [333, 333, 333, 1, 0, 0, 0])],
+] as const) {
+  for (const medida of ["municipios", "votos"] as const) {
+    const layout = layoutFaixas(lista, medida, MEDIDAS_FAIXAS_ESTREITO);
+    assert.ok(layout !== null, `${nome} ${medida}`);
+    assert.deepEqual(problemasEstreito(textosFaixas(layout), layout.largura, layout.altura), [], `${nome} ${medida}`);
+  }
+}
+// largo sem mudança: valor e título do eixo com fonte 10, rótulo da faixa 14 abaixo do chão
+const faixasLargas = layoutFaixas(base.faixas, "municipios");
+assert.ok(faixasLargas !== null);
+const textosFaixasLargas = textosFaixas(faixasLargas);
+assert.equal(textosFaixasLargas.find((texto) => texto.chave === "eixo")?.fonte, 10);
+assert.equal(textosFaixasLargas.find((texto) => texto.chave === "valor-zero")?.fonte, 10);
+assert.equal(textosFaixasLargas.find((texto) => texto.chave === "faixa-zero")?.y, MEDIDAS_FAIXAS.altura - MEDIDAS_FAIXAS.base + 14);
 assert.equal(ROTULOS_FAIXA["3_ou_mais"].curto, "3+");
 assert.equal(ROTULOS_FAIXA.zero.longo, "Sem voto");
 const resumoMunicipios = resumoFaixas(base, "municipios");

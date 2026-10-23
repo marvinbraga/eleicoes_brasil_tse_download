@@ -21,6 +21,8 @@ import {
   linhasPlacar,
   linhasPorUf,
   linksUnidade,
+  opcoesRecorte,
+  RECORTE_BRASIL,
   recorteDoModo,
   ordenarPlacar,
   rotuloUnidade,
@@ -28,8 +30,6 @@ import {
   totaisPlacar,
   type ModoUnidades,
 } from "@/lib/placar-forca";
-
-const BRASIL = "BR";
 
 const LEGENDA_GRAFICO =
   "Os 8 primeiros da tabela, na ordem atual. Cada barra é a parte do total da esfera: " +
@@ -42,7 +42,7 @@ const ORDEM_PADRAO: Ordem = { coluna: COLUNA_PADRAO, direcao: "desc" };
 
 export function PlacarForcaVista({ placar }: { placar: PlacarForca }) {
   const [limiar, setLimiar] = useState(() => limiarInicial(placar.limiares));
-  const [recorte, setRecorte] = useState(BRASIL);
+  const [recorte, setRecorte] = useState(RECORTE_BRASIL);
   const [ordem, setOrdem] = useState<Ordem>(ORDEM_PADRAO);
   const [partido, setPartido] = useState<string | null>(null);
   const [ordemUf, setOrdemUf] = useState<Ordem>(ORDEM_PADRAO);
@@ -76,10 +76,7 @@ export function PlacarForcaVista({ placar }: { placar: PlacarForca }) {
     }
   }, [partido]);
 
-  const opcoesRecorte = [
-    { value: BRASIL, label: "Brasil" },
-    ...placar.ufs.map((uf) => ({ value: uf.codigo, label: uf.nome })),
-  ];
+  const recortes = opcoesRecorte(placar);
   const opcoesLimiar = placar.limiares.map((n) => ({ value: String(n), label: `${n}%` }));
   const contexto = `municípios por ${rotuloCargo(placar.cargo_referencia)} · ${placar.ano}, turno ${placar.turno}`;
 
@@ -90,7 +87,7 @@ export function PlacarForcaVista({ placar }: { placar: PlacarForca }) {
           id="recorte-forca"
           label="Recorte"
           value={recorte}
-          options={opcoesRecorte}
+          options={recortes}
           onChange={setRecorte}
         />
         <FiltroSelect

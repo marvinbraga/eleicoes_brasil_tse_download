@@ -10,6 +10,7 @@ import {
   LINKS_RELATORIOS,
   linksPartido,
   linksUnidade,
+  opcoesRecorte,
   recorteDoModo,
   ordenarPlacar,
   ROTULOS_ESFERA,
@@ -410,3 +411,27 @@ assert.deepEqual(linhasPorUf(comFrente, "frente", 5, "federacoes").map((l) => l.
 // colunas de cadeiras também no detalhe por UF
 assert.equal(colunasPlacar(PLACAR_B, 5, "uf").length, 14);
 console.log("ok");
+
+// seletor de recorte: Brasil primeiro, depois as UFs pelo nome exibido (não pela sigla)
+assert.deepEqual(
+  opcoesRecorte({
+    ufs: [
+      { codigo: "MS", nome: "Mato Grosso do Sul" },
+      { codigo: "MT", nome: "Mato Grosso" },
+      { codigo: "PA", nome: "Pará" },
+      { codigo: "PB", nome: "Paraíba" },
+      { codigo: "PR", nome: "Paraná" },
+      { codigo: "AC", nome: "Acre" },
+    ],
+  }),
+  [
+    { value: "BR", label: "Brasil" },
+    { value: "AC", label: "Acre" },
+    { value: "MT", label: "Mato Grosso" },
+    { value: "MS", label: "Mato Grosso do Sul" },
+    { value: "PA", label: "Pará" },
+    { value: "PB", label: "Paraíba" },
+    { value: "PR", label: "Paraná" },
+  ],
+);
+assert.deepEqual(opcoesRecorte(PLACAR).map((opcao) => opcao.label), ["Brasil", "Acre", "Amazonas"]);

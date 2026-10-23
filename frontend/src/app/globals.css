@@ -232,6 +232,25 @@
     font-family: var(--font-leitura), Georgia, serif;
 }
 
+/* Placar de força: cabeçalho em duas linhas. Só o "Partido" (rowSpan, 1ª linha) fica preso
+   à esquerda; a 2ª linha fica presa logo abaixo da 1ª, que tem altura fixa. */
+.folha-placar {
+    --placar-cabeca-1: 2.5rem;
+}
+
+.folha-placar [data-slot="table-header"] > [data-slot="table-row"]:first-child > [data-slot="table-head"] {
+    height: var(--placar-cabeca-1);
+}
+
+.folha-placar [data-slot="table-header"] > [data-slot="table-row"]:nth-child(2) > [data-slot="table-head"] {
+    top: var(--placar-cabeca-1);
+}
+
+.folha-placar [data-slot="table-header"] > [data-slot="table-row"]:nth-child(2) > [data-slot="table-head"]:first-child {
+    left: auto;
+    z-index: 2;
+}
+
 .folha [data-slot="table-row"] {
     border-color: var(--border);
 }

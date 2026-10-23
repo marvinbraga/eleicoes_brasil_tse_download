@@ -1,10 +1,13 @@
 import { DicaGrafico } from "@/components/relatorios/dica-grafico";
+import { TextoGrafico } from "@/components/relatorios/texto-grafico";
 import type { PartidoCapilaridade } from "@/lib/capilaridade";
 import {
   MEDIDAS_RANKING_ESTREITO,
   layoutRanking,
+  linhasAcima,
   resumoRanking,
   textoDireita,
+  textosRanking,
   type LayoutRanking,
 } from "@/lib/grafico-capilaridade";
 
@@ -56,7 +59,8 @@ type DesenhoProps = {
 
 function Desenho({ layout, sufixo, resumo, className }: DesenhoProps) {
   const { medidas, largura, altura, marcas, barras } = layout;
-  const { esquerda, topo, alturaLinha, alturaBarra, descida, fonte, rotuloAcima } = medidas;
+  const { esquerda, topo, alturaBarra, fonte, rotuloAcima } = medidas;
+  const textosMarca = textosRanking(layout).filter((texto) => texto.chave.startsWith("marca-"));
   const idTitulo = `ranking-capilaridade-titulo${sufixo}`;
   const idDesc = `ranking-capilaridade-desc${sufixo}`;
   const fundo = altura - medidas.base;
@@ -71,31 +75,30 @@ function Desenho({ layout, sufixo, resumo, className }: DesenhoProps) {
       <desc id={idDesc}>{resumo}</desc>
       <g pointerEvents="none">
         {marcas.map((marca) => (
-          <g key={marca.texto}>
-            <line x1={marca.x} x2={marca.x} y1={topo - 4} y2={fundo} stroke="var(--border)" strokeWidth={1} />
-            <text
-              x={marca.x}
-              y={topo - 8}
-              textAnchor="middle"
-              fontSize={fonte - 1}
-              fill="currentColor"
-              className="text-muted-foreground tabular-nums"
-            >
-              {marca.texto}
-            </text>
-          </g>
+          <line
+            key={marca.texto}
+            x1={marca.x}
+            x2={marca.x}
+            y1={topo - 4}
+            y2={fundo}
+            stroke="var(--border)"
+            strokeWidth={1}
+          />
+        ))}
+        {textosMarca.map((texto) => (
+          <TextoGrafico key={texto.chave} texto={texto} />
         ))}
       </g>
       {barras.map((barra) => {
-        const linhaTopo = barra.y - descida;
+        const destaque = barra.selecionado ? "font-semibold text-foreground" : "text-foreground";
         return (
           // Dentro de role="img" o link não é anunciado; a tabela abaixo leva os mesmos links.
           <a key={barra.partido} href={barra.href} tabIndex={-1} aria-hidden="true">
             <rect
               x={0}
-              y={linhaTopo}
+              y={barra.topoLinha}
               width={largura}
-              height={alturaLinha}
+              height={barra.alturaLinha}
               fill="transparent"
               className="hover:fill-muted/60"
               data-dica-titulo={barra.rotulo}
@@ -103,16 +106,21 @@ function Desenho({ layout, sufixo, resumo, className }: DesenhoProps) {
             />
             <g pointerEvents="none">
               {rotuloAcima ? (
-                <text
-                  x={esquerda}
-                  y={barra.y - 5}
-                  fontSize={fonte}
-                  fill="currentColor"
-                  className={barra.selecionado ? "font-semibold text-foreground" : "text-foreground"}
-                >
-                  {barra.rotulo}
-                  <tspan className="text-muted-foreground"> · {barra.classe}</tspan>
-                </text>
+                linhasAcima(barra, medidas).map((linha, indice) => (
+                  <text
+                    key={indice}
+                    x={esquerda}
+                    y={linha.y}
+                    fontSize={fonte}
+                    fill="currentColor"
+                    className={linha.classe ? "text-muted-foreground" : destaque}
+                  >
+                    {linha.classe ? linha.texto : barra.rotulo}
+                    {!linha.classe && barra.classeNaLinha ? (
+                      <tspan className="text-muted-foreground"> · {barra.classe}</tspan>
+                    ) : null}
+                  </text>
+                ))
               ) : (
                 <text
                   x={esquerda - 8}
@@ -121,7 +129,7 @@ function Desenho({ layout, sufixo, resumo, className }: DesenhoProps) {
                   textAnchor="end"
                   fontSize={fonte}
                   fill="currentColor"
-                  className={barra.selecionado ? "font-semibold text-foreground" : "text-foreground"}
+                  className={destaque}
                 >
                   {barra.rotulo}
                 </text>

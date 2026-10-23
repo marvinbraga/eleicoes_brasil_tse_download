@@ -105,6 +105,29 @@ function Desenho({ layout, id, sufixo, titulo, resumo, className }: DesenhoProps
           strokeWidth={1}
         />
         {barras.map((barra) => (
+          <rect
+            key={`barra-${barra.chave}`}
+            x={esquerda}
+            y={barra.y - alturaBarra / 2}
+            width={barra.largura}
+            height={alturaBarra}
+            rx={2}
+            fill="var(--tinta-quente)"
+            fillOpacity={OPACIDADE[barra.classe]}
+          />
+        ))}
+        {/* A média vem antes dos rótulos: perto dela, o valor fica por cima da linha. */}
+        <line
+          x1={xReferencia}
+          x2={xReferencia}
+          y1={0}
+          y2={altura}
+          stroke="currentColor"
+          className="text-foreground"
+          strokeDasharray="4 3"
+          strokeWidth={1}
+        />
+        {barras.map((barra) => (
           <g key={barra.chave}>
             {medidas.rotuloAcima ? (
               <text
@@ -129,15 +152,6 @@ function Desenho({ layout, id, sufixo, titulo, resumo, className }: DesenhoProps
                 {barra.rotulo}
               </text>
             )}
-            <rect
-              x={esquerda}
-              y={barra.y - alturaBarra / 2}
-              width={barra.largura}
-              height={alturaBarra}
-              rx={2}
-              fill="var(--tinta-quente)"
-              fillOpacity={OPACIDADE[barra.classe]}
-            />
             <text
               x={esquerda + barra.largura + 6}
               y={barra.y}
@@ -150,16 +164,6 @@ function Desenho({ layout, id, sufixo, titulo, resumo, className }: DesenhoProps
             </text>
           </g>
         ))}
-        <line
-          x1={xReferencia}
-          x2={xReferencia}
-          y1={0}
-          y2={altura}
-          stroke="currentColor"
-          className="text-foreground"
-          strokeDasharray="4 3"
-          strokeWidth={1}
-        />
       </g>
     </svg>
   );

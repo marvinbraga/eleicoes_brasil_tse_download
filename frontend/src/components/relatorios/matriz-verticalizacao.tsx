@@ -1,10 +1,13 @@
 import type { CSSProperties } from "react";
 
 import { DicaGrafico } from "@/components/relatorios/dica-grafico";
+import { TextoGrafico } from "@/components/relatorios/texto-grafico";
 import {
   corFatia,
   corR,
   resumoMatriz,
+  textoCelula,
+  textosMatriz,
   type CelulaMatriz,
   type LayoutMatriz,
 } from "@/lib/grafico-verticalizacao";
@@ -133,12 +136,10 @@ type DesenhoProps = {
 };
 
 function Desenho({ layout, id, sufixo, titulo, resumo, escala, className }: DesenhoProps) {
-  const { medidas, largura, altura, colunas, linhas, celulas, canto } = layout;
+  const { medidas, largura, altura, celulas } = layout;
   const idTitulo = `${id}-titulo${sufixo}`;
   const idDesc = `${id}-desc${sufixo}`;
   const idHachura = `${id}-hachura${sufixo}`;
-  const passoCabeca = medidas.fonteCabeca + 2;
-  const baseCabeca = medidas.topo - 6;
   return (
     <svg
       viewBox={`0 0 ${largura} ${altura}`}
@@ -161,51 +162,8 @@ function Desenho({ layout, id, sufixo, titulo, resumo, escala, className }: Dese
         </pattern>
       </defs>
       <g pointerEvents="none">
-        <text
-          x={0}
-          y={baseCabeca}
-          fontSize={medidas.fonteCabeca}
-          fill="currentColor"
-          className="text-muted-foreground"
-        >
-          {canto}
-        </text>
-        {colunas.map((coluna) => {
-          const textos = coluna.referencia ? ["Ref.", ...coluna.linhas] : coluna.linhas;
-          return (
-            <text
-              key={coluna.nome}
-              x={coluna.x}
-              textAnchor="middle"
-              fontSize={medidas.fonteCabeca}
-              fill="currentColor"
-              className="text-foreground"
-            >
-              {textos.map((texto, indice) => (
-                <tspan
-                  key={`${texto}-${indice}`}
-                  x={coluna.x}
-                  y={baseCabeca - (textos.length - 1 - indice) * passoCabeca}
-                >
-                  {texto}
-                </tspan>
-              ))}
-            </text>
-          );
-        })}
-        {linhas.map((linha) => (
-          <text
-            key={linha.nome}
-            x={medidas.esquerda - 6}
-            y={linha.y}
-            dy="0.35em"
-            textAnchor="end"
-            fontSize={medidas.fonte}
-            fill="currentColor"
-            className="text-foreground"
-          >
-            {linha.rotulo}
-          </text>
+        {textosMatriz(layout).map((texto) => (
+          <TextoGrafico key={texto.chave} texto={texto} />
         ))}
       </g>
       {celulas.map((celula) => (
@@ -233,8 +191,7 @@ function Celula({
   fonte: number;
 }) {
   const cor = celula.faixa === null ? null : escala === "fatia" ? corFatia(celula.faixa) : corR(celula.faixa);
-  const centroX = celula.x + celula.largura / 2;
-  const centroY = celula.y + celula.altura / 2;
+  const texto = textoCelula(celula, fonte);
   const dica = {
     "data-dica-titulo": celula.dicaTitulo,
     "data-dica-linhas": celula.dicaLinhas.join("\n"),
@@ -263,16 +220,16 @@ function Celula({
         />
       )}
       <text
-        x={centroX}
-        y={centroY}
+        x={texto.x}
+        y={texto.y}
         dy="0.35em"
         textAnchor="middle"
-        fontSize={fonte}
+        fontSize={texto.fonte}
         pointerEvents="none"
         fill={cor === null ? "currentColor" : cor.tinta}
         className={cor === null ? "text-muted-foreground tabular-nums" : "tabular-nums"}
       >
-        {celula.texto}
+        {texto.texto}
       </text>
     </g>
   );

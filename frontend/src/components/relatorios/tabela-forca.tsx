@@ -52,7 +52,7 @@ export function TabelaForca({
     total: colunas.filter((item) => item.esfera === esfera).length,
   })).filter((item) => item.total > 0);
   return (
-    <Table containerClassName="folha">
+    <Table containerClassName="folha folha-placar">
       <TableCaption>{titulo}</TableCaption>
       <TableHeader>
         <TableRow>

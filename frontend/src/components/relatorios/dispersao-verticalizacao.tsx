@@ -1,9 +1,11 @@
 import { DicaGrafico } from "@/components/relatorios/dica-grafico";
+import { TextoGrafico } from "@/components/relatorios/texto-grafico";
 import { formatarInteiro } from "@/lib/fracao";
 import {
   MEDIDAS_DISPERSAO_ESTREITO,
   formatarR,
   layoutDispersao,
+  textosDispersao,
   type LayoutDispersao,
 } from "@/lib/grafico-verticalizacao";
 import { rotuloPartido } from "@/lib/partidos";
@@ -77,8 +79,8 @@ type DesenhoProps = {
 };
 
 function Desenho({ layout, id, sufixo, titulo, resumo, className }: DesenhoProps) {
-  const { medidas, marcasX, marcasY, diagonal, pontos, rotuloX, rotuloY } = layout;
-  const { largura, altura, esquerda, direita, topo, base, fonte } = medidas;
+  const { medidas, marcasY, diagonal, pontos } = layout;
+  const { largura, altura, esquerda, direita, topo, base } = medidas;
   const idTitulo = `${id}-titulo${sufixo}`;
   const idDesc = `${id}-desc${sufixo}`;
   const chao = altura - base;
@@ -94,77 +96,31 @@ function Desenho({ layout, id, sufixo, titulo, resumo, className }: DesenhoProps
       <desc id={idDesc}>{resumo}</desc>
       <g pointerEvents="none">
         {marcasY.map((marca) => (
-          <g key={`y-${marca.texto}`}>
-            <line x1={esquerda} x2={direitaX} y1={marca.y} y2={marca.y} stroke="var(--border)" strokeWidth={1} />
-            <text
-              x={esquerda - 6}
-              y={marca.y}
-              dy="0.35em"
-              textAnchor="end"
-              fontSize={fonte}
-              fill="currentColor"
-              className="text-muted-foreground tabular-nums"
-            >
-              {marca.texto}
-            </text>
-          </g>
-        ))}
-        {marcasX.map((marca) => (
-          <text
-            key={`x-${marca.texto}`}
-            x={marca.x}
-            y={chao + fonte + 4}
-            textAnchor="middle"
-            fontSize={fonte}
-            fill="currentColor"
-            className="text-muted-foreground tabular-nums"
-          >
-            {marca.texto}
-          </text>
+          <line
+            key={`y-${marca.texto}`}
+            x1={esquerda}
+            x2={direitaX}
+            y1={marca.y}
+            y2={marca.y}
+            stroke="var(--border)"
+            strokeWidth={1}
+          />
         ))}
         <line x1={esquerda} x2={esquerda} y1={topo} y2={chao} stroke="var(--border)" strokeWidth={1} />
         {diagonal ? (
-          <g>
-            <line
-              x1={diagonal.x1}
-              y1={diagonal.y1}
-              x2={diagonal.x2}
-              y2={diagonal.y2}
-              stroke="var(--muted-foreground)"
-              strokeWidth={1}
-              strokeDasharray="4 3"
-            />
-            <text
-              x={diagonal.x2 - 4}
-              y={diagonal.y2 + fonte + 2}
-              textAnchor="end"
-              fontSize={fonte - 1}
-              fill="currentColor"
-              className="text-muted-foreground"
-            >
-              mesma fatia nos dois cargos
-            </text>
-          </g>
+          <line
+            x1={diagonal.x1}
+            y1={diagonal.y1}
+            x2={diagonal.x2}
+            y2={diagonal.y2}
+            stroke="var(--muted-foreground)"
+            strokeWidth={1}
+            strokeDasharray="4 3"
+          />
         ) : null}
-        <text
-          x={(esquerda + direitaX) / 2}
-          y={altura - 6}
-          textAnchor="middle"
-          fontSize={fonte}
-          fill="currentColor"
-          className="text-foreground"
-        >
-          {rotuloX}
-        </text>
-        <text
-          transform={`translate(${fonte - 2} ${(topo + chao) / 2}) rotate(-90)`}
-          textAnchor="middle"
-          fontSize={fonte}
-          fill="currentColor"
-          className="text-foreground"
-        >
-          {rotuloY}
-        </text>
+        {textosDispersao(layout).map((texto) => (
+          <TextoGrafico key={texto.chave} texto={texto} />
+        ))}
       </g>
       {pontos.map((ponto) => (
         <circle

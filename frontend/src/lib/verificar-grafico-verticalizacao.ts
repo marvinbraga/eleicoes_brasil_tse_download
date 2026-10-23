@@ -18,8 +18,14 @@ import {
   MEDIDAS_MATRIZ,
   MEDIDAS_MATRIZ_ESTREITO,
   resumoMatriz,
+  textoCelula,
+  textosDispersao,
+  textosMatriz,
+  type LayoutDispersao,
+  type LayoutMatriz,
 } from "./grafico-verticalizacao.ts";
 import { larguraTexto } from "./largura-texto.ts";
+import { caixaTexto, larguraEstimada, problemasEstreito, type TextoSvg } from "./texto-svg.ts";
 import {
   CARGOS_VERTICAIS,
   lerDecimal,
@@ -288,7 +294,7 @@ assert.ok(estreita !== null);
 assert.ok(estreita.largura <= 340);
 assert.deepEqual(
   estreita.linhas.map((linha) => linha.rotulo),
-  ["PL", "PT", "REPUBLICA…", "PSD", "MDB", "PSDB", "PSOL", "SOLIDARIE…"],
+  ["PL", "PT", "REPUBLI…", "PSD", "MDB", "PSDB", "PSOL", "SOLIDAR…"],
 );
 assert.equal(estreita.linhas[2].nome, "REPUBLICANOS 10");
 for (const linha of estreita.linhas) {
@@ -339,7 +345,7 @@ assert.ok(coerenciaEstreita !== null);
 assert.ok(coerenciaEstreita.largura <= 340);
 const larguraCelula = coerenciaEstreita.celulas[0].largura;
 for (const item of coerenciaEstreita.celulas) {
-  assert.ok(larguraTexto(item.texto, MEDIDAS_COERENCIA_ESTREITO.fonte) <= larguraCelula, item.texto);
+  assert.ok(larguraEstimada(item.texto, MEDIDAS_COERENCIA_ESTREITO.fonte) <= larguraCelula, item.texto);
 }
 for (const coluna of coerenciaEstreita.colunas) {
   for (const texto of coluna.linhas) {
@@ -475,5 +481,61 @@ assert.throws(() =>
 assert.throws(() =>
   lerVerticalizacao({ ...dados, partidos: [{ ...pl, coerencia: pl.coerencia.slice(1) }] }),
 );
+
+// Telefone (375 px → ~301 px de desenho): todo texto da variante estreita com ≥ 11 px CSS,
+// dentro do viewBox e sem um texto sobre o outro.
+function conferirEstreito(nome: string, textos: readonly TextoSvg[], largura: number, altura: number): void {
+  assert.ok(textos.length > 0, nome);
+  assert.deepEqual(problemasEstreito(textos, largura, altura), [], nome);
+}
+function textosDaMatriz(layout: LayoutMatriz): TextoSvg[] {
+  return [...textosMatriz(layout), ...layout.celulas.map((item) => textoCelula(item, layout.medidas.fonte))];
+}
+for (const [nome, layout] of [
+  ["matriz de fatias", matrizFatias(dados, MEDIDAS_MATRIZ_ESTREITO)],
+  ["matriz de coerência", matrizCoerencia(dados, MEDIDAS_COERENCIA_ESTREITO)],
+] as const) {
+  assert.ok(layout !== null);
+  conferirEstreito(nome, textosDaMatriz(layout), layout.largura, layout.altura);
+  // siglas em maiúsculas são mais largas que a estimativa geral: ~0,69 em por letra no navegador
+  for (const linha of layout.linhas) {
+    assert.ok(0.72 * layout.medidas.fonte * linha.rotulo.length <= layout.medidas.esquerda - 6, `${nome}: ${linha.rotulo}`);
+  }
+  for (const item of layout.celulas) {
+    assert.ok(larguraEstimada(item.texto, layout.medidas.fonte) <= item.largura, `${nome}: ${item.texto}`);
+  }
+}
+const dispersoesEstreitas: [string, LayoutDispersao | null][] = [
+  ["dispersão", layoutDispersao(dados, MEDIDAS_DISPERSAO_ESTREITO)],
+  ...[
+    ["100,00%", "100,00%"],
+    ["100,00%", "23,00%"],
+    ["23,00%", "100,00%"],
+    ["4,00%", "100,00%"],
+  ].map(([x, y]): [string, LayoutDispersao | null] => [
+    `dispersão ${x} × ${y}`,
+    layoutDispersao(
+      { ...dados, dispersao: { ...dados.dispersao, pontos: [{ codigo: "9", nome: "UM (AC)", uf: "AC", comparecimento: 10, x, y }] } },
+      MEDIDAS_DISPERSAO_ESTREITO,
+    ),
+  ]),
+];
+for (const [nome, layout] of dispersoesEstreitas) {
+  assert.ok(layout !== null, nome);
+  const textos = textosDispersao(layout);
+  conferirEstreito(nome, textos, layout.medidas.largura, layout.medidas.altura);
+  // o título do eixo y fica afastado dos números, mesmo do mais largo ("100%")
+  const titulo = textos.find((texto) => texto.chave === "rotulo-y");
+  assert.ok(titulo !== undefined);
+  const inicioNumeros = layout.medidas.esquerda - 6 - larguraTexto("100%", layout.medidas.fonte);
+  assert.ok(inicioNumeros - caixaTexto(titulo).x1 >= 4, `${nome}: título do eixo y sobre os números`);
+}
+// o desenho largo não muda: mesmas posições de antes nas marcas e no título do eixo y
+const textosLargos = textosDispersao(dispersao);
+assert.equal(textosLargos.find((texto) => texto.chave === "rotulo-y")?.x, 10);
+assert.equal(textosLargos.find((texto) => texto.chave === "nota-diagonal")?.fonte, 11);
+assert.equal(textosLargos.find((texto) => texto.chave === "nota-diagonal")?.x, dispersao.diagonal.x2 - 4);
+assert.equal(textosLargos.find((texto) => texto.chave === "x-0%")?.y, MEDIDAS_DISPERSAO.altura - MEDIDAS_DISPERSAO.base + 16);
+assert.equal(textosMatriz(fatias).find((texto) => texto.chave === "canto")?.y, MEDIDAS_MATRIZ.topo - 6);
 
 console.log("ok");

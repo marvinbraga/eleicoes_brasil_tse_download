@@ -1,7 +1,9 @@
 import { nomeUf } from "./eleicoes.ts";
 import { lerFatia } from "./fatia.ts";
 import { formatarInteiro, TRACO } from "./fracao.ts";
+import { larguraTexto } from "./largura-texto.ts";
 import { rotuloPartido, siglaPartido } from "./partidos.ts";
+import type { TextoSvg } from "./texto-svg.ts";
 import {
   CURTO_CARGO,
   lerDecimal,
@@ -21,7 +23,8 @@ export const LIMITES_R = [0.2, 0.4, 0.6, 0.8] as const;
 const MENOS = "−";
 const SEM_ELEICAO = "n/a";
 const VAO_REFERENCIA = 8;
-const EM_POR_CARACTERE = 0.6;
+// Siglas são maiúsculas (M, D, O largos): no navegador medem ~0,69 em por letra, não 0,6.
+const EM_POR_LETRA_SIGLA = 0.72;
 const MAXIMO_FRASES = 3;
 const PASSOS_EIXO = [5, 10, 20, 25] as const;
 const MAXIMO_MARCAS = 5;
@@ -80,22 +83,25 @@ export const MEDIDAS_MATRIZ: MedidasMatriz = {
   rotuloCurto: false,
 };
 
+// Estreito: o viewBox de 340 é desenhado em ~301 px; fonte 12,5 dá 11,07 px na tela.
 export const MEDIDAS_MATRIZ_ESTREITO: MedidasMatriz = {
   largura: 340,
   esquerda: 84,
   topo: 44,
   alturaLinha: 26,
   vao: 2,
-  fonte: 12,
-  fonteCabeca: 11,
+  fonte: 12.5,
+  fonteCabeca: 12.5,
   rotuloCurto: true,
 };
 
-// Sete colunas em 340 px deixam células de 33 px: "−0,15" só cabe com fonte 11.
+// Sete colunas: "−0,15" com fonte 12,5 pede células de 35 (0,56 em por caractere numérico),
+// e a margem da sigla encolhe para 69 (7 letras maiúsculas).
+// O cabeçalho da referência tem três linhas ("Ref.", "Fed.×", "Est."), daí o topo maior.
 export const MEDIDAS_COERENCIA_ESTREITO: MedidasMatriz = {
   ...MEDIDAS_MATRIZ_ESTREITO,
-  fonte: 11,
-  fonteCabeca: 10,
+  esquerda: 69,
+  topo: 50,
 };
 
 export type CelulaMatriz = {
@@ -176,6 +182,67 @@ export function matrizCoerencia(
   });
 }
 
+// Centro da célula; o mesmo ponto desenha e mede o valor.
+export function textoCelula(celula: CelulaMatriz, fonte: number): TextoSvg {
+  return {
+    chave: `celula-${celula.chave}`,
+    texto: celula.texto,
+    x: celula.x + celula.largura / 2,
+    y: celula.y + celula.altura / 2,
+    fonte,
+    ancora: "middle",
+    centrado: true,
+    tom: celula.faixa === null ? "suave" : "forte",
+    tabular: true,
+  };
+}
+
+// Canto, cabeçalho (uma linha de texto por elemento) e rótulos das linhas; sem as células.
+export function textosMatriz(layout: LayoutMatriz): TextoSvg[] {
+  const { medidas, colunas, linhas, canto } = layout;
+  const passoCabeca = medidas.fonteCabeca + 2;
+  const baseCabeca = medidas.topo - 6;
+  const cabeca = colunas.flatMap((coluna) => {
+    const textos = coluna.referencia ? ["Ref.", ...coluna.linhas] : coluna.linhas;
+    return textos.map(
+      (texto, indice): TextoSvg => ({
+        chave: `cabeca-${coluna.nome}-${indice}`,
+        texto,
+        x: coluna.x,
+        y: baseCabeca - (textos.length - 1 - indice) * passoCabeca,
+        fonte: medidas.fonteCabeca,
+        ancora: "middle",
+        tom: "forte",
+      }),
+    );
+  });
+  const rotulos = linhas.map(
+    (linha): TextoSvg => ({
+      chave: `linha-${linha.nome}`,
+      texto: linha.rotulo,
+      x: medidas.esquerda - 6,
+      y: linha.y,
+      fonte: medidas.fonte,
+      ancora: "end",
+      centrado: true,
+      tom: "forte",
+    }),
+  );
+  return [
+    {
+      chave: "canto",
+      texto: canto,
+      x: 0,
+      y: baseCabeca,
+      fonte: medidas.fonteCabeca,
+      ancora: "start",
+      tom: "suave",
+    },
+    ...cabeca,
+    ...rotulos,
+  ];
+}
+
 export function resumoMatriz(layout: LayoutMatriz): string {
   return layout.linhas
     .map((linha, indice) => {
@@ -239,7 +306,7 @@ function rotuloLinha(numero: number, medidas: MedidasMatriz): string {
     return rotuloPartido(numero);
   }
   const sigla = siglaPartido(numero) ?? String(numero);
-  const cabe = Math.floor((medidas.esquerda - 6) / (EM_POR_CARACTERE * medidas.fonte));
+  const cabe = Math.floor((medidas.esquerda - 6) / (EM_POR_LETRA_SIGLA * medidas.fonte));
   return sigla.length <= cabe ? sigla : `${sigla.slice(0, cabe - 1)}…`;
 }
 
@@ -325,6 +392,10 @@ export type MedidasDispersao = {
   raioMin: number;
   raioMax: number;
   fonte: number;
+  // Nota da diagonal ("mesma fatia nos dois cargos").
+  fonteNota: number;
+  // Linha de base do título do eixo y (girado), a partir da borda esquerda.
+  tituloY: number;
 };
 
 export const MEDIDAS_DISPERSAO: MedidasDispersao = {
@@ -337,19 +408,28 @@ export const MEDIDAS_DISPERSAO: MedidasDispersao = {
   raioMin: 1.5,
   raioMax: 8,
   fonte: 12,
+  fonteNota: 11,
+  tituloY: 10,
 };
 
+// Estreito: fonte 13 no viewBox de 340 dá 11,5 px em ~301 px. O título do eixo y fica a 14 da
+// borda (o acento de "válidos" sobe ~1 em), a esquerda abre espaço entre ele e "100%", e a
+// direita deixa a metade de "100%" no fim do eixo x.
 export const MEDIDAS_DISPERSAO_ESTREITO: MedidasDispersao = {
   largura: 340,
   altura: 320,
-  esquerda: 44,
-  direita: 12,
+  esquerda: 58,
+  direita: 18,
   topo: 16,
   base: 44,
   raioMin: 1.5,
   raioMax: 6,
   fonte: 13,
+  fonteNota: 13,
+  tituloY: 14,
 };
+
+const NOTA_DIAGONAL = "mesma fatia nos dois cargos";
 
 export type PontoLayout = {
   chave: string;
@@ -420,6 +500,76 @@ export function layoutDispersao(
     rotuloX: `${ROTULO_CARGO[cargoX]} (% dos válidos)`,
     rotuloY: `${ROTULO_CARGO[cargoY]} (% dos válidos)`,
   };
+}
+
+// Todos os textos da dispersão, na posição em que o componente os desenha.
+export function textosDispersao(layout: LayoutDispersao): TextoSvg[] {
+  const { medidas, marcasX, marcasY, diagonal, rotuloX, rotuloY } = layout;
+  const { largura, altura, esquerda, direita, topo, base, fonte, fonteNota } = medidas;
+  const chao = altura - base;
+  const direitaX = largura - direita;
+  const textos: TextoSvg[] = [
+    ...marcasY.map(
+      (marca): TextoSvg => ({
+        chave: `y-${marca.texto}`,
+        texto: marca.texto,
+        x: esquerda - 6,
+        y: marca.y,
+        fonte,
+        ancora: "end",
+        centrado: true,
+        tom: "suave",
+        tabular: true,
+      }),
+    ),
+    ...marcasX.map(
+      (marca): TextoSvg => ({
+        chave: `x-${marca.texto}`,
+        texto: marca.texto,
+        x: marca.x,
+        y: chao + fonte + 4,
+        fonte,
+        ancora: "middle",
+        tom: "suave",
+        tabular: true,
+      }),
+    ),
+  ];
+  if (diagonal !== null) {
+    // Junto ao fim da diagonal, mas sem passar da área do gráfico.
+    const ocupa = larguraTexto(NOTA_DIAGONAL, fonteNota);
+    textos.push({
+      chave: "nota-diagonal",
+      texto: NOTA_DIAGONAL,
+      x: Math.min(direitaX, Math.max(diagonal.x2 - 4, esquerda + ocupa)),
+      y: diagonal.y2 + fonte + 2,
+      fonte: fonteNota,
+      ancora: "end",
+      tom: "suave",
+    });
+  }
+  textos.push(
+    {
+      chave: "rotulo-x",
+      texto: rotuloX,
+      x: (esquerda + direitaX) / 2,
+      y: altura - 6,
+      fonte,
+      ancora: "middle",
+      tom: "forte",
+    },
+    {
+      chave: "rotulo-y",
+      texto: rotuloY,
+      x: medidas.tituloY,
+      y: (topo + chao) / 2,
+      fonte,
+      ancora: "middle",
+      vertical: true,
+      tom: "forte",
+    },
+  );
+  return textos;
 }
 
 // O teto é o primeiro múltiplo "redondo" (5, 10, 20 ou 25 pp) que cabe em até 5 marcas.

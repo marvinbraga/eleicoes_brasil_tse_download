@@ -571,3 +571,15 @@ function eleitorado(valor: number | null, base: number | null): Valor {
     detalhe: `${formatarInteiro(valor)} ${valor === 1 ? "voto válido" : "votos válidos"}`,
   };
 }
+
+export const RECORTE_BRASIL = "BR";
+
+// Brasil primeiro; as UFs pelo nome que o leitor vê ("Mato Grosso" antes de "Mato Grosso do Sul").
+export function opcoesRecorte(
+  placar: { ufs: readonly { codigo: string; nome: string }[] },
+): { value: string; label: string }[] {
+  const ufs = [...placar.ufs]
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))
+    .map((uf) => ({ value: uf.codigo, label: uf.nome }));
+  return [{ value: RECORTE_BRASIL, label: "Brasil" }, ...ufs];
+}

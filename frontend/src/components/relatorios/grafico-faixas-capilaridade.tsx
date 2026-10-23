@@ -1,10 +1,12 @@
 import { DicaGrafico } from "@/components/relatorios/dica-grafico";
+import { TextoGrafico } from "@/components/relatorios/texto-grafico";
 import type { PartidoCapilaridade } from "@/lib/capilaridade";
 import {
   MEDIDAS_FAIXAS_ESTREITO,
   ROTULOS_FAIXA,
   layoutFaixas,
   resumoFaixas,
+  textosFaixas,
   type LayoutFaixas,
   type MedidaFaixa,
 } from "@/lib/grafico-capilaridade";
@@ -14,8 +16,6 @@ const PAINEIS: readonly { medida: MedidaFaixa; titulo: string }[] = [
   { medida: "municipios", titulo: "Municípios" },
   { medida: "votos", titulo: "Votos do partido" },
 ];
-
-const TITULO_EIXO = "vezes a fatia média do partido";
 
 export function GraficoFaixasCapilaridade({ partido }: { partido: PartidoCapilaridade }) {
   const rotulo = rotuloPartido(partido.partido);
@@ -96,64 +96,34 @@ function Desenho({ layout, id, sufixo, titulo, resumo, className }: DesenhoProps
         stroke="var(--border)"
         strokeWidth={1}
       />
-      {colunas.map((coluna) => {
-        const centro = coluna.x + coluna.largura / 2;
-        return (
-          <g key={coluna.chave}>
-            <rect
-              x={coluna.x}
-              y={medidas.topo}
-              width={coluna.largura}
-              height={chao - medidas.topo}
-              fill="transparent"
-              className="hover:fill-muted/60"
-              data-dica-titulo={ROTULOS_FAIXA[coluna.chave].longo}
-              data-dica-linhas={coluna.dica.join("\n")}
-            />
-            <g pointerEvents="none">
-              <rect
-                x={coluna.x}
-                y={coluna.y}
-                width={coluna.largura}
-                height={coluna.altura}
-                fill={coluna.neutra ? "var(--muted-foreground)" : "var(--tinta-quente)"}
-                fillOpacity={coluna.neutra ? 0.45 : 1}
-              />
-              <text
-                x={centro}
-                y={coluna.y - 4}
-                textAnchor="middle"
-                fontSize={medidas.fonte - 1}
-                fill="currentColor"
-                className="text-foreground tabular-nums"
-              >
-                {coluna.valor}
-              </text>
-              <text
-                x={centro}
-                y={chao + 14}
-                textAnchor="middle"
-                fontSize={medidas.fonte}
-                fill="currentColor"
-                className="text-muted-foreground"
-              >
-                {ROTULOS_FAIXA[coluna.chave].curto}
-              </text>
-            </g>
-          </g>
-        );
-      })}
-      <text
-        x={largura / 2}
-        y={altura - 6}
-        textAnchor="middle"
-        fontSize={medidas.fonte - 1}
-        fill="currentColor"
-        className="text-muted-foreground"
-        pointerEvents="none"
-      >
-        {TITULO_EIXO}
-      </text>
+      {colunas.map((coluna) => (
+        <g key={coluna.chave}>
+          <rect
+            x={coluna.x}
+            y={medidas.topo}
+            width={coluna.largura}
+            height={chao - medidas.topo}
+            fill="transparent"
+            className="hover:fill-muted/60"
+            data-dica-titulo={ROTULOS_FAIXA[coluna.chave].longo}
+            data-dica-linhas={coluna.dica.join("\n")}
+          />
+          <rect
+            x={coluna.x}
+            y={coluna.y}
+            width={coluna.largura}
+            height={coluna.altura}
+            pointerEvents="none"
+            fill={coluna.neutra ? "var(--muted-foreground)" : "var(--tinta-quente)"}
+            fillOpacity={coluna.neutra ? 0.45 : 1}
+          />
+        </g>
+      ))}
+      <g pointerEvents="none">
+        {textosFaixas(layout).map((texto) => (
+          <TextoGrafico key={texto.chave} texto={texto} />
+        ))}
+      </g>
     </svg>
   );
 }
