@@ -280,28 +280,28 @@ def _gerar_mapa() -> int:
     return next((codigo for codigo in codigos if codigo != 0), 0)
 
 
-_SECOES: list[subprocess.Popen[bytes]] = []
-
-
 def _secoes_ao_lado() -> None:
-    if _SECOES and _SECOES[-1].poll() is None:
-        return
+    """Uma cópia por vez, mesmo entre reinícios deste script (flock), e com o disco em
+    prioridade ociosa (ionice): o relatório de seções não atrasa o mapa nem a importação."""
     with (PASTA / "secoes.log").open("a", encoding="utf-8") as destino:
         destino.write(f"\n===== {_agora()} início seções =====\n")
         destino.flush()
-        _SECOES.append(
-            subprocess.Popen(  # noqa: S603 - comando fixo, sem entrada externa
-                [
-                    sys.executable,
-                    str(RAIZ / "scripts" / "relatorio_secoes_turnos.py"),
-                    "--ano",
-                    ANO,
-                    "--sem-navegador",
-                ],
-                cwd=RAIZ,
-                stdout=destino,
-                stderr=subprocess.STDOUT,
-            )
+        subprocess.Popen(  # noqa: S603 - comando fixo, sem entrada externa
+            [
+                "flock",
+                "--nonblock",
+                str(PASTA / "secoes.lock"),
+                "ionice",
+                "-c3",
+                sys.executable,
+                str(RAIZ / "scripts" / "relatorio_secoes_turnos.py"),
+                "--ano",
+                ANO,
+                "--sem-navegador",
+            ],
+            cwd=RAIZ,
+            stdout=destino,
+            stderr=subprocess.STDOUT,
         )
 
 
