@@ -1,10 +1,12 @@
 """The map command paints the leading party and reuses stored municipal votes."""
 
+import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
 
+from eleicoes.domain.boletim_consulta import Participacao
 from eleicoes.domain.errors import (
     SCHEMA_OUTDATED_HINT,
     ElectionError,
@@ -849,6 +851,12 @@ class _RoundReader(_QuietReader):
         self.loads.append((ano, turno))
         return self._carga
 
+    def participation(
+        self, ano: int, turno: int, uf: str, cargo: str, nivel: str
+    ) -> tuple[Participacao, ...]:
+        self.calls.append((ano, turno, f"{uf}/{cargo}/{nivel}"))
+        return (Participacao(1007, None, 100, 80 if turno == 1 else 70),)
+
 
 def test_injected_reader_answers_the_load_mark(tmp_path: Path) -> None:
     store = _Memory()
@@ -924,3 +932,60 @@ def test_president_only_runoff_has_no_turnosgov(tmp_path: Path) -> None:
     )
 
     assert '"turnosgov": null' in destino.read_text(encoding="utf-8")
+
+
+def test_reader_turnout_reaches_both_rounds_of_the_comparison(tmp_path: Path) -> None:
+    destino = tmp_path / "mapa.html"
+    reader = _RoundReader(None)
+    store = _Memory()
+    store.save(2026, 1, (_bujari(),))
+
+    main(
+        _command(destino),
+        reader=reader,
+        store=store,
+        assets=_Assets(),
+        collect=lambda _ano, _turno: (_second_round_place(6, 4),),
+    )
+    turnos = json.loads(_pintura(destino.read_text(encoding="utf-8")))["turnos"]
+
+    assert (2026, 1, "AC/presidente/municipio") in reader.calls
+    assert (2026, 2, "AC/presidente/municipio") in reader.calls
+    assert turnos["municipios"][0]["participacao"] == [100, 80, 100, 70]
+
+
+def test_map_without_enough_places_has_no_estimated_scenario(tmp_path: Path) -> None:
+    destino = tmp_path / "mapa.html"
+    main(
+        _command(destino),
+        store=_Memory(),
+        assets=_Assets(),
+        collect=lambda _ano, turno: (_bujari(),) if turno == 1 else (_second_round_place(6, 4),),
+        present=lambda _ano, _turno: ("AC",),
+        participation=lambda _ano, _turno, _ufs: {},
+    )
+    turnos = json.loads(_pintura(destino.read_text(encoding="utf-8")))["turnos"]
+
+    assert "estimado" not in [item["chave"] for item in turnos["cenarios"]]
+    assert "participacao" not in turnos["municipios"][0]
+
+
+def _pintura(html: str) -> str:
+    inicio = html.index('<script type="application/json" id="pintura">') + len(
+        '<script type="application/json" id="pintura">'
+    )
+    return html[inicio : html.index("</script>", inicio)].replace("<\\/", "</")
+
+
+def test_calibration_summary_reads_the_tracked_2022_file(tmp_path: Path) -> None:
+    from eleicoes.use_cases.apresentar_mapa import ler_calibracao
+
+    resumo = ler_calibracao(Path("dados/calibracao_turnos_2022.json"))
+    quebrado = tmp_path / "quebrado.json"
+    quebrado.write_text("{}", encoding="utf-8")
+
+    assert resumo is not None
+    assert resumo["ano"] == 2022
+    assert set(resumo["fora"]) >= {"todosa", "proporcional"}  # type: ignore[arg-type]
+    assert ler_calibracao(quebrado) is None
+    assert ler_calibracao(tmp_path / "ausente.json") is None

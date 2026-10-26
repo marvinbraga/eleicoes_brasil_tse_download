@@ -134,6 +134,8 @@ class PaginaDoMapa:
     recortes: Mapping[str, RecortePintado] = field(default_factory=dict)
     turnos: "ComparativoTurnos | None" = None
     turnos_governador: "ComparativoTurnos | None" = None
+    # Resumo de dados/calibracao_turnos_2022.json para a legenda do comparativo.
+    calibracao: Mapping[str, object] | None = None
 
 
 def ponte_de_linhas(linhas: Sequence[Mapping[str, str]]) -> PonteTseIbge:

@@ -299,3 +299,53 @@ def _place(uf: str, codigo: str, nome: str, votos: dict[int, int]) -> MunicipalP
 def _ponte() -> PonteTseIbge:
     values = ("04/10/2026", "09:00:06", "1", "12", "AC", "Acre", "01007", "Bujari", "1200138", "X")
     return ponte_de_linhas((dict(zip(_HEADER, values, strict=True)),))
+
+
+def test_estimated_scenario_uses_each_uf_share_and_a_weighted_national_one() -> None:
+    from eleicoes.domain.mapa_turnos import cenario_estimado, parte_nacional
+
+    partes = {"AC": Fraction(1, 4), "AL": Fraction(3, 4)}
+    nacional = parte_nacional(
+        [
+            ("AC", Apuracao(0, 0, 100, 0, 0)),
+            ("AL", Apuracao(0, 0, 300, 0, 0)),
+            ("AM", Apuracao(0, 0, 999, 0, 0)),
+        ],
+        partes,
+    )
+    cenario = cenario_estimado(22, partes, nacional)
+    primeiro = Apuracao(400, 500, 100, 0, 0)
+    segundo = Apuracao(500, 500, 0, 0, 0)
+
+    (no_ac, no_al, fora) = leituras(
+        ((primeiro, segundo),) * 3, cenario, minimo=99, ufs=("AC", "AL", "ZZ")
+    )
+
+    assert nacional == Fraction(5, 8)
+    assert cenario.chave == "estimado"
+    assert "AC 25%" in cenario.descricao and "AL 75%" in cenario.descricao
+    assert no_ac.esperado == Fraction(425, 1000)
+    assert no_al.esperado == Fraction(475, 1000)
+    assert fora.esperado == Fraction(4625, 10000)
+
+
+def test_turnout_rides_along_and_adds_up() -> None:
+    primeiro = (_place("AC", "01007", "BUJARI (AC)", {22: 40, 13: 60}),)
+    segundo = (_place("AC", "01007", "BUJARI (AC)", {22: 45, 13: 55}),)
+
+    found = comparar_turnos(
+        primeiro,
+        segundo,
+        _ponte(),
+        frozenset({"1200138"}),
+        frozenset({"12"}),
+        "076",
+        participacao={(1, "AC", "01007"): (200, 100), (2, "AC", "01007"): (200, 100)},
+        partes_estimadas={"AC": Fraction(1, 3)},
+    )
+
+    assert found.municipios[0].primeiro.aptos == 200
+    assert found.municipios[0].segundo.comparecimento == 100
+    assert found.pais is not None and found.pais.primeiro.aptos == 200
+    assert found.cenarios[-1].chave == "estimado"
+    assert (Apuracao(1, 0, 0, 0, 0, (), 10, 8) + Apuracao(1, 0, 0, 0, 0)).aptos is None

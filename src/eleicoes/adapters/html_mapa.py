@@ -148,7 +148,7 @@ _PAGE_SCRIPT: Final = """\
     turnosgov: "Governador 1º × 2º"
   };
   var CLASSES_DOS_TURNOS = ["fora_a", "moderado_a", "dentro", "moderado_b", "fora_b", "sem_base"];
-  var METRICAS = ["desvio", "residuo", "a", "b", "branco", "nulo", "cedulas"];
+  var METRICAS = ["desvio", "residuo", "a", "b", "branco", "nulo", "cedulas", "abstencao"];
   var CORES_DAS_CLASSES = {
     fora_a: "#2c5aa0",
     moderado_a: "#9dc0e8",
@@ -163,7 +163,8 @@ _PAGE_SCRIPT: Final = """\
   var COR_POSITIVA = [27, 120, 55];
   var COR_NEGATIVA = [118, 42, 131];
   var LIMITE_DO_MODELO = "O modelo só move os votos dos eliminados; quem votou em branco ou " +
-    "nulo no 1º turno, faltou a um dos turnos ou trocou de finalista fica fora dele. ";
+    "nulo no 1º turno, faltou a um dos turnos ou trocou de finalista fica fora dele " +
+    "(a abstenção aparece na tabela do lugar, mas não entra na conta). ";
   var PERSONALIZADO = "personalizado";
   var DEMAIS = "0";
   var DESTINOS = [
@@ -1057,7 +1058,8 @@ _PAGE_SCRIPT: Final = """\
       b: "Votos do " + b,
       branco: "Brancos",
       nulo: "Nulos",
-      cedulas: "Total de cédulas"
+      cedulas: "Total de cédulas",
+      abstencao: "Abstenção"
     }[chave];
   }
 
@@ -1228,7 +1230,15 @@ _PAGE_SCRIPT: Final = """\
     return lida.classe;
   }
 
+  function taxaDeAbstencao(aptos, comparecimento) {
+    return aptos > 0 ? (aptos - comparecimento) / aptos : 0;
+  }
+
   function valorDaMetrica(item, metrica) {
+    if (metrica === "abstencao") {
+      var p = item.participacao;
+      return p ? (taxaDeAbstencao(p[2], p[3]) - taxaDeAbstencao(p[0], p[1])) * 100 : 0;
+    }
     if (metrica === "residuo") {
       var lida = leituraAtual(item);
       return (lida.real - lida.esperado) * 100;
@@ -1384,6 +1394,11 @@ _PAGE_SCRIPT: Final = """\
       linhaDaTabela(corpo, linha[0], item.primeiro[linha[1]], item.segundo[linha[1]]);
     });
     linhaDaTabela(corpo, "Cédulas", cedulas(item.primeiro), cedulas(item.segundo));
+    var p = item.participacao;
+    if (p) {
+      linhaDaTabela(corpo, "Comparecimento", p[1], p[3]);
+      linhaDaTabela(corpo, "Abstenção", p[0] - p[1], p[2] - p[3]);
+    }
     painelDetalhe.appendChild(tabela);
     var cenario = cenarioAtual();
     var lida = leituraAtual(item);
@@ -1495,6 +1510,7 @@ _PAGE_SCRIPT: Final = """\
         decimal(TURNOS.limiares.moderado, 1).replace("+", "") + " moderado, > " +
         decimal(TURNOS.limiares.fora, 1).replace("+", "") + " fora do esperado). " +
         "Desvio aponta onde o cenário explica mal o voto; não prova irregularidade. " +
+        notaDaCalibracao() +
         "País e UFs sem grupo usam a diferença do cenário (verde: " + rotuloA() +
         " acima; roxo: abaixo). " + LIMITE_DO_MODELO + cobertura;
     }
@@ -1502,12 +1518,39 @@ _PAGE_SCRIPT: Final = """\
       return "Fatia real do " + rotuloA() + " entre os finalistas menos a esperada no cenário. " +
         cenarioAtual().descricao + " " + pais + LIMITE_DO_MODELO + cobertura;
     }
+    if (metrica === "abstencao") {
+      return "Variação da taxa de abstenção (eleitores aptos que não votaram) do 1º para o 2º " +
+        "turno, em pontos percentuais. Comparecimento do boletim de " + cargo + ". " + cobertura;
+    }
     if (metrica === "cedulas") {
       return "Variação do total de cédulas de " + cargo + " (válidos, brancos e nulos) do 1º " +
         "para o 2º turno. " + cobertura;
     }
     return nomeDaMetrica(metrica) + ": variação da fatia nas cédulas de " + cargo + " do 1º para " +
       "o 2º turno, em pontos percentuais. A tabela do lugar mostra os votos. " + cobertura;
+  }
+
+  function metricaDisponivel(chave) {
+    return chave !== "abstencao" || TURNOS.municipios.some(function (item) {
+      return Boolean(item.participacao);
+    });
+  }
+
+  function notaDaCalibracao() {
+    var calibracao = TURNOS.calibracao;
+    if (!calibracao || doGovernador()) {
+      return "";
+    }
+    var fora = calibracao.fora[estadoTurnos.cenario];
+    var moderado = calibracao.moderado[estadoTurnos.cenario];
+    if (fora === undefined || moderado === undefined) {
+      return "";
+    }
+    return "Referência: em " + calibracao.ano + ", eleição sem contestação, este método marcou " +
+      fatia(fora) + " dos municípios como fora do esperado (" + milhar(calibracao.lugares) +
+      " pareados; a normal daria " + fatia(calibracao.normal) + ") e " + fatia(moderado) +
+      " acima do moderado. Então espere cerca de 1% de municípios fora do esperado mesmo sem " +
+      "nada de errado. ";
   }
 
   function resumoDoPais() {
@@ -1541,7 +1584,7 @@ _PAGE_SCRIPT: Final = """\
         atualizarTurnos();
         descricao.textContent = cenarioAtual().descricao;
       });
-    var metrica = seletor("Pintar por", METRICAS.map(function (chave) {
+    var metrica = seletor("Pintar por", METRICAS.filter(metricaDisponivel).map(function (chave) {
       return [chave, nomeDaMetrica(chave)];
     }), estadoTurnos.metrica, function (valor) {
       estadoTurnos.metrica = valor;
@@ -1991,7 +2034,9 @@ def _payload(pagina: PaginaDoMapa) -> dict[str, object]:
         **_view(pagina.recorte),
         "visoes": _other_views(pagina),
         "titulos": _titles(pagina),
-        "turnos": None if pagina.turnos is None else _turnos(pagina.turnos),
+        "turnos": None
+        if pagina.turnos is None
+        else {**_turnos(pagina.turnos), "calibracao": pagina.calibracao},
         "turnosgov": (
             None if pagina.turnos_governador is None else _turnos(pagina.turnos_governador)
         ),
@@ -2069,7 +2114,18 @@ def _lugar(lugar: LugarTurnos, grupos: tuple[GrupoEliminado, ...]) -> dict[str, 
     if grupos:
         # Votos de cada grupo de eliminados no 1º turno, na ordem de "eliminados" do comparativo.
         found["eliminados"] = [lugar.primeiro.votos_do_grupo(grupo.numeros) for grupo in grupos]
+    participacao = _participacao(lugar.primeiro, lugar.segundo)
+    if participacao is not None:
+        found["participacao"] = participacao
     return found
+
+
+def _participacao(primeiro: Apuracao, segundo: Apuracao) -> list[int] | None:
+    """Aptos e comparecimento do 1º e do 2º turno, só quando os dois turnos foram lidos."""
+    lidos = (primeiro.aptos, primeiro.comparecimento, segundo.aptos, segundo.comparecimento)
+    if any(valor is None for valor in lidos):
+        return None
+    return [valor for valor in lidos if valor is not None]
 
 
 def _contas(apuracao: Apuracao) -> list[int]:
