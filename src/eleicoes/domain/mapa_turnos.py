@@ -1,4 +1,4 @@
-"""1º × 2º turno de presidente: variação, cenários de transferência e desvio local.
+"""1º × 2º turno de presidente ou governador: variação, cenários e desvio local.
 
 O modelo de cada cenário só redistribui os votos dos candidatos eliminados.
 A fatia esperada do finalista A entre os votos dos dois finalistas é
@@ -11,10 +11,13 @@ dois. O resíduo é a fatia real menos a esperada. O desvio local compara o
 resíduo de cada lugar com a mediana dos lugares do mesmo grupo (a UF, para
 municípios) pelo z robusto de Iglewicz e Hoaglin. Desvio grande não prova
 nada sobre a apuração: só aponta onde o cenário explica mal o voto.
+
+No governador, cada UF tem os seus finalistas. A é o mais votado dos dois no
+1º turno da UF, e só entram as UFs com 2º turno de governador.
 """
 
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from fractions import Fraction
 from statistics import median
 from typing import Final
@@ -29,6 +32,8 @@ MINIMO_NO_GRUPO: Final = 8
 LIMIAR_MODERADO: Final = 2.0
 LIMIAR_FORA: Final = 3.5
 CORTE_DO_GRUPO: Final = Fraction(1, 100)
+PRESIDENTE: Final = "presidente"
+GOVERNADOR: Final = "governador"
 DEMAIS: Final = 0
 _K_MAD: Final = 0.6745
 _K_MEDIA: Final = 0.7979
@@ -49,7 +54,7 @@ class FinalistsMissingError(ElectionError):
 
 @dataclass(frozen=True, slots=True)
 class Apuracao:
-    """Votos de presidente de um turno num lugar, já separados pelos finalistas.
+    """Votos de um cargo num turno e lugar, já separados pelos finalistas.
 
     `eliminados` abre `outros` por partido, em pares (número, votos) ordenados pelo número.
     """
@@ -153,6 +158,8 @@ class ComparativoTurnos:
     sem_comparacao: int
     sem_poligono: tuple[str, ...]
     eliminados: tuple[GrupoEliminado, ...] = ()
+    cargo: str = PRESIDENTE
+    finalistas_por_uf: Mapping[str, tuple[int, int]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -198,6 +205,55 @@ def cenarios(a: int, b: int) -> tuple[Cenario, ...]:
             Fraction(1, 4),
         ),
     )
+
+
+def cenarios_de_governador() -> tuple[Cenario, ...]:
+    return (
+        Cenario(
+            "dividido",
+            "Metade para cada",
+            "Os votos dos eliminados se dividem igualmente entre os dois finalistas da UF.",
+            Fraction(1, 2),
+        ),
+        Cenario(
+            "proporcional",
+            "Como no 1º turno",
+            "Os eliminados se dividem como os eleitores dos finalistas no 1º turno, "
+            "o mesmo que não pesarem no resultado.",
+            None,
+        ),
+        Cenario(
+            "todosa",
+            "Todos para o 1º colocado do 1º turno",
+            "Os votos dos eliminados vão todos para o finalista mais votado no 1º turno da UF.",
+            Fraction(1),
+        ),
+        Cenario(
+            "todosb",
+            "Todos para o 2º colocado do 1º turno",
+            "Os votos dos eliminados vão todos para o finalista menos votado no 1º turno da UF.",
+            Fraction(0),
+        ),
+    )
+
+
+def finalistas_de_governador(
+    primeiro: Sequence[MunicipalPlace], segundo: Sequence[MunicipalPlace]
+) -> dict[str, tuple[int, int]]:
+    """Os dois mais votados do 2º turno de cada UF, o mais votado deles no 1º turno antes."""
+    depois = _totais_por_uf(segundo, _governador)
+    antes = _totais_por_uf(primeiro, _governador)
+    found: dict[str, tuple[int, int]] = {}
+    for uf in UF_CODES:
+        totais = depois.get(uf, {})
+        ordem = sorted(totais, key=lambda numero: (-totais[numero], numero))
+        if len(ordem) < 2:
+            continue
+        par = ordem[:2]
+        votos = antes.get(uf, {})
+        par.sort(key=lambda numero: (-votos.get(numero, 0), numero))
+        found[uf] = (par[0], par[1])
+    return found
 
 
 def grupos_eliminados(
@@ -250,10 +306,13 @@ def comparar_turnos(
     *,
     exterior: Mapping[str, tuple[float, float]] | None = None,
     apoiado: int | None = None,
+    cargo: str = PRESIDENTE,
 ) -> ComparativoTurnos:
+    if cargo == GOVERNADOR:
+        return _comparar_governador(primeiro, segundo, ponte, codigos_municipio, codigos_uf)
     a, b = finalistas(segundo, apoiado)
     escolhidos = cenarios(a, b)
-    pares, sem_comparacao = _pares(primeiro, segundo, a, b)
+    pares, sem_comparacao = _pares(primeiro, segundo, _presidente, lambda _uf: (a, b))
     cidades = tuple(par for par in pares if par.uf != _EXTERIOR)
     fora = tuple(par for par in pares if par.uf == _EXTERIOR)
     municipios, buracos = _municipios(cidades, escolhidos, ponte, codigos_municipio)
@@ -272,6 +331,38 @@ def comparar_turnos(
         sem_comparacao,
         tuple(sorted(buracos + buracos_exterior + buracos_uf)),
         grupos_eliminados(primeiro, a, b),
+    )
+
+
+def _comparar_governador(
+    primeiro: Sequence[MunicipalPlace],
+    segundo: Sequence[MunicipalPlace],
+    ponte: PonteTseIbge,
+    codigos_municipio: frozenset[str],
+    codigos_uf: frozenset[str],
+) -> ComparativoTurnos:
+    """Sem país nem exterior: somar finalistas diferentes de cada UF não teria sentido."""
+    por_uf = finalistas_de_governador(primeiro, segundo)
+    if not por_uf:
+        raise FinalistsMissingError
+    escolhidos = cenarios_de_governador()
+    pares, sem_comparacao = _pares(primeiro, segundo, _governador, por_uf.get)
+    cidades = tuple(par for par in pares if par.uf != _EXTERIOR)
+    municipios, buracos = _municipios(cidades, escolhidos, ponte, codigos_municipio)
+    ufs, buracos_uf = _ufs(cidades, escolhidos, ponte, codigos_uf)
+    return ComparativoTurnos(
+        0,
+        0,
+        escolhidos,
+        None,
+        ufs,
+        municipios,
+        (),
+        tuple(code for code in UF_CODES if any(par.uf == code for par in cidades)),
+        sem_comparacao,
+        tuple(sorted(buracos + buracos_uf)),
+        cargo=GOVERNADOR,
+        finalistas_por_uf=por_uf,
     )
 
 
@@ -376,30 +467,59 @@ def _escala(valores: tuple[float, ...]) -> float | None:
     return None
 
 
+def _presidente(place: MunicipalPlace) -> CargoTally | None:
+    return place.presidente
+
+
+def _governador(place: MunicipalPlace) -> CargoTally | None:
+    return place.governador
+
+
+def _totais_por_uf(
+    places: Sequence[MunicipalPlace], cargo: Callable[[MunicipalPlace], CargoTally | None]
+) -> dict[str, dict[int, int]]:
+    found: dict[str, dict[int, int]] = {}
+    for place in places:
+        tally = cargo(place)
+        if tally is None:
+            continue
+        totais = found.setdefault(place.uf, {})
+        for party in tally.parties:
+            totais[party.partido] = totais.get(party.partido, 0) + party.votos
+    return found
+
+
+def _por_chave(
+    places: Sequence[MunicipalPlace],
+    cargo: Callable[[MunicipalPlace], CargoTally | None],
+    finalistas_da_uf: Callable[[str], tuple[int, int] | None],
+) -> dict[tuple[str, str], tuple[str, CargoTally]]:
+    found: dict[tuple[str, str], tuple[str, CargoTally]] = {}
+    for place in places:
+        tally = cargo(place)
+        if tally is not None and finalistas_da_uf(place.uf) is not None:
+            found[(place.uf, chave_tse(place.codigo))] = (place.nome, tally)
+    return found
+
+
 def _pares(
     primeiro: Sequence[MunicipalPlace],
     segundo: Sequence[MunicipalPlace],
-    a: int,
-    b: int,
+    cargo: Callable[[MunicipalPlace], CargoTally | None],
+    finalistas_da_uf: Callable[[str], tuple[int, int] | None],
 ) -> tuple[tuple[_Par, ...], int]:
-    antes = {(place.uf, chave_tse(place.codigo)): place for place in primeiro}
-    depois = {(place.uf, chave_tse(place.codigo)): place for place in segundo}
+    antes = _por_chave(primeiro, cargo, finalistas_da_uf)
+    depois = _por_chave(segundo, cargo, finalistas_da_uf)
     ufs_depois = {uf for uf, _ in depois}
     found: list[_Par] = []
-    for chave, place in depois.items():
+    for chave, (nome, tally) in depois.items():
         anterior = antes.get(chave)
-        if anterior is None:
+        dupla = finalistas_da_uf(chave[0])
+        if anterior is None or dupla is None:
             continue
         uf, codigo = chave
-        found.append(
-            _Par(
-                uf,
-                codigo,
-                place.nome,
-                apuracao(anterior.presidente, a, b),
-                apuracao(place.presidente, a, b),
-            )
-        )
+        a, b = dupla
+        found.append(_Par(uf, codigo, nome, apuracao(anterior[1], a, b), apuracao(tally, a, b)))
     sozinhos = sum(1 for chave in antes if chave[0] in ufs_depois and chave not in depois)
     sozinhos += sum(1 for chave in depois if chave not in antes)
     ordem = {code: indice for indice, code in enumerate(UF_CODES)}

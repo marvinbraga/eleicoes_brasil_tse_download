@@ -133,6 +133,7 @@ class PaginaDoMapa:
     topojson_js: str
     recortes: Mapping[str, RecortePintado] = field(default_factory=dict)
     turnos: "ComparativoTurnos | None" = None
+    turnos_governador: "ComparativoTurnos | None" = None
 
 
 def ponte_de_linhas(linhas: Sequence[Mapping[str, str]]) -> PonteTseIbge:

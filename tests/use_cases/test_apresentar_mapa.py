@@ -733,7 +733,7 @@ def test_second_round_adds_the_turnos_view(tmp_path: Path) -> None:
     assert code == 0
     assert collected == [1, 2]
     assert store.rows[(2026, 2)].places == (_second_round_place(6, 4),)
-    assert '"turnos": {"a": "22", "b": "13"' in text
+    assert '"turnos": {"cargo": "presidente", "a": "22", "b": "13"' in text
     assert "Mapa de presidente — 2026, 1º × 2º turno" in text
 
 
@@ -881,3 +881,46 @@ def test_production_last_load_closes_the_reader(monkeypatch: pytest.MonkeyPatch)
     assert _production_last_load(2026, 2) == _MOMENT
     assert reader.loads == [(2026, 2)]
     assert reader.closed is True
+
+
+def _governor_runoff_place() -> MunicipalPlace:
+    presidente = CargoTally((PartyTally(22, 6, 0), PartyTally(13, 4, 0)), 0, 0)
+    governador = CargoTally((PartyTally(11, 7, 0), PartyTally(10, 3, 0)), 0, 0)
+    return MunicipalPlace("AC", "01007", "Bujari", presidente, governador)
+
+
+def test_governor_runoff_adds_the_turnosgov_view(tmp_path: Path) -> None:
+    destino = tmp_path / "mapa.html"
+    primeiro = MunicipalPlace(
+        "AC",
+        "01007",
+        "Bujari",
+        _tally(22),
+        CargoTally((PartyTally(10, 50, 0), PartyTally(11, 40, 0), PartyTally(45, 9, 0)), 0, 0),
+    )
+
+    main(
+        ["--cargo", "presidente", "--destino", str(destino), "--sem-navegador"],
+        store=_Memory(),
+        assets=_Assets(),
+        collect=lambda _ano, turno: (primeiro,) if turno == 1 else (_governor_runoff_place(),),
+        present=lambda _ano, _turno: ("AC",),
+    )
+    text = destino.read_text(encoding="utf-8")
+
+    assert '"turnosgov": {"cargo": "governador", "a": null, "b": null' in text
+    assert '"finalistas": {"AC": ["10", "11"]}' in text
+    assert "Mapa de governador — 2026, 1º × 2º turno" in text
+
+
+def test_president_only_runoff_has_no_turnosgov(tmp_path: Path) -> None:
+    destino = tmp_path / "mapa.html"
+    main(
+        ["--cargo", "presidente", "--destino", str(destino), "--sem-navegador"],
+        store=_Memory(),
+        assets=_Assets(),
+        collect=lambda _ano, turno: (_bujari(),) if turno == 1 else (_second_round_place(6, 4),),
+        present=lambda _ano, _turno: ("AC",),
+    )
+
+    assert '"turnosgov": null' in destino.read_text(encoding="utf-8")

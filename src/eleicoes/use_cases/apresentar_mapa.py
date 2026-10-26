@@ -28,7 +28,12 @@ from eleicoes.domain.mapa import (
     RecortePintado,
     recorte_pintado,
 )
-from eleicoes.domain.mapa_turnos import ComparativoTurnos, comparar_turnos
+from eleicoes.domain.mapa_turnos import (
+    GOVERNADOR,
+    ComparativoTurnos,
+    comparar_turnos,
+    finalistas_de_governador,
+)
 from eleicoes.domain.presidente_governador import (
     CrossReportView,
     MunicipalPlace,
@@ -108,7 +113,11 @@ class PresentMap:
         _require_country(mesh)
         page = _page(ano, turno, cargo, stored.places, mesh)
         if segundo:
-            page = replace(page, turnos=_turnos(stored.places, segundo, mesh, self._apoiado))
+            page = replace(
+                page,
+                turnos=_turnos(stored.places, segundo, mesh, self._apoiado),
+                turnos_governador=_turnos_de_governador(stored.places, segundo, mesh),
+            )
         opened = _write(destino, self._render(page), self._open)
         return PresentedMap(destino, opened, loaded, stored.gerado_em)
 
@@ -434,6 +443,25 @@ def _turnos(
         mesh.manifesto.brasil_id,
         exterior=mesh.exterior,
         apoiado=apoiado,
+    )
+
+
+def _turnos_de_governador(
+    primeiro: tuple[MunicipalPlace, ...],
+    segundo: tuple[MunicipalPlace, ...],
+    mesh: MalhaCarregada,
+) -> ComparativoTurnos | None:
+    """Só existe quando alguma UF importada tem 2º turno de governador."""
+    if not finalistas_de_governador(primeiro, segundo):
+        return None
+    return comparar_turnos(
+        primeiro,
+        segundo,
+        mesh.ponte,
+        mesh.codigos_municipio,
+        mesh.codigos_uf,
+        mesh.manifesto.brasil_id,
+        cargo=GOVERNADOR,
     )
 
 

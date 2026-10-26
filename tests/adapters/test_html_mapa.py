@@ -345,7 +345,7 @@ def test_page_carries_the_other_views_for_the_switcher() -> None:
     assert 'return "#visao=" + nome;' in html
     assert 'window.addEventListener("hashchange", function () {' in html
     assert "new ol.control.Control({element: painelVisoes})" in html
-    assert 'if (nome === "governador" || nome === "turnos") {' in html
+    assert 'if (nome === "governador" || ehComparativo(nome)) {' in html
 
 
 def test_page_without_extra_views_has_no_other_views() -> None:
@@ -495,3 +495,36 @@ def test_turnos_without_groups_omit_the_breakdown() -> None:
 
     assert turnos["eliminados"] == []
     assert "eliminados" not in turnos["municipios"][0]
+
+
+def test_governor_turnos_carry_the_finalists_of_each_uf() -> None:
+    from eleicoes.domain.mapa_turnos import GOVERNADOR, cenarios_de_governador
+    from eleicoes.domain.mapa_turnos import ComparativoTurnos as Comparativo
+
+    lugar = replace(
+        _lugar_de_bujari(Apuracao(400, 500, 0, 1, 2)),
+        leituras=(Leitura(Fraction(1, 2), Fraction(13, 25), 20, None, "sem_base"),) * 4,
+    )
+    comparativo = Comparativo(
+        0,
+        0,
+        cenarios_de_governador(),
+        None,
+        (),
+        (lugar,),
+        (),
+        ("AC",),
+        0,
+        (),
+        cargo=GOVERNADOR,
+        finalistas_por_uf={"AC": (10, 11)},
+    )
+    html = html_do_mapa(replace(_page(), turnos_governador=comparativo))
+    pintura = json.loads(_block(html, "pintura"))
+
+    assert pintura["turnos"] is None
+    assert pintura["turnosgov"]["finalistas"] == {"AC": ["10", "11"]}
+    assert pintura["turnosgov"]["a"] is None
+    assert pintura["turnosgov"]["padrao"] == "dividido"
+    assert pintura["titulos"]["turnosgov"] == "Mapa de governador — 2026, 1º × 2º turno"
+    assert 'turnosgov: "Governador 1º × 2º"' in html
