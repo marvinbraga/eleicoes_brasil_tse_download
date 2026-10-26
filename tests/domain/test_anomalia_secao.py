@@ -204,3 +204,12 @@ def test_section_votes_reject_repeated_or_bad_numbers() -> None:
         VotosSecao(1, 1, 1, 300, 0, 0, 0, ((22, 1), (22, 1)))
     with pytest.raises(InvalidBoletimConsultaError):
         VotosSecao(1, 1, 1, -1, 0, 0, 0, ())
+
+
+def test_numbers_without_a_candidate_count_as_null() -> None:
+    votos = VotosSecao(1, 1, 1, 400, 0, 2, 3, ((13, 100), (22, 120), (28, 7), (70, 20)))
+
+    conta = apuracao_da_secao(votos, 22, 13)
+
+    assert (conta.a, conta.b, conta.outros, conta.nulo) == (120, 100, 20, 10)
+    assert conta.cedulas == votos.cedulas

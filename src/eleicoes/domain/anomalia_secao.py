@@ -23,7 +23,7 @@ from math import erfc, sqrt
 from statistics import median
 from typing import Final, TypeAlias
 
-from eleicoes.domain.boletim_consulta import VotosSecao
+from eleicoes.domain.boletim_consulta import VotosSecao, partido_tem_candidato
 from eleicoes.domain.mapa_turnos import (
     LIMIAR_FORA,
     LIMIAR_MODERADO,
@@ -71,6 +71,8 @@ ALERTAS: Final = (ACIMA_DOS_APTOS, CEDULAS_DESTOANTES, APTOS_MUDARAM)
 _CORTES_DAS_FAIXAS: Final = (250, 400)
 _PARTIDO_MAXIMO: Final = 99
 _Grupo: TypeAlias = tuple[str, int, int]
+
+_PRESIDENTE: Final = "presidente"
 
 
 @dataclass(frozen=True, slots=True)
@@ -240,8 +242,20 @@ def cauda_normal(limiar: float) -> float:
 
 
 def apuracao_da_secao(votos: VotosSecao, a: int, b: int) -> Apuracao:
-    outros = sum(total for numero, total in votos.nominais if numero not in (a, b))
-    return Apuracao(votos.votos(a), votos.votos(b), outros, votos.branco, votos.nulo)
+    """Número digitado sem candidato a presidente conta como nulo, como na totalização do TSE
+    e no mapa; só os eliminados com candidato entram em ``outros``."""
+    outros = 0
+    sem_candidato = 0
+    for numero, total in votos.nominais:
+        if numero in (a, b):
+            continue
+        if partido_tem_candidato(_PRESIDENTE, numero):
+            outros += total
+        else:
+            sem_candidato += total
+    return Apuracao(
+        votos.votos(a), votos.votos(b), outros, votos.branco, votos.nulo + sem_candidato
+    )
 
 
 def alertas_da_secao(antes: VotosSecao, depois: VotosSecao) -> tuple[str, ...]:
