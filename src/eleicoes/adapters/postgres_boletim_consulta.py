@@ -6,9 +6,11 @@ User values are bound, never interpolated.
 """
 
 from collections.abc import Sequence
+from datetime import datetime
 from decimal import Decimal
 from typing import Final
 
+from eleicoes.adapters.postgres_boletim import LOAD_TABLE, load_set
 from eleicoes.adapters.postgres_sink import ConnectionFactory, SqlConnection
 from eleicoes.domain.boletim_consulta import (
     BlankNullProjection,
@@ -22,6 +24,7 @@ from eleicoes.domain.boletim_consulta import (
     SectionProjection,
     TotalCargo,
     VotosMunicipio,
+    VotosSecao,
     VotosZona,
 )
 from eleicoes.domain.errors import InvalidBoletimConsultaError, InvalidNivelError
@@ -39,6 +42,7 @@ _POWER_VALUES: Final = 4
 _TURNOUT_VALUES: Final = 2
 _BLANK_NULL_VALUES: Final = 3
 _LEADER_VALUES: Final = 7
+_SECTION_VOTE_WIDTH: Final = 9
 
 _PLACE_COLUMNS: Final[dict[str, tuple[str, ...]]] = {
     "municipio": ("municipio",),
@@ -48,6 +52,10 @@ _PLACE_COLUMNS: Final[dict[str, tuple[str, ...]]] = {
 
 _PRESENT_UFS: Final = (
     "SELECT DISTINCT uf FROM raw.boletim WHERE ano = %s AND turno = %s AND cargo = %s ORDER BY uf"
+)
+
+_LAST_LOAD: Final = (
+    "SELECT MAX(carregado_em) FROM raw.carga WHERE tabela = %s AND conjunto = %s AND turno = %s"
 )
 
 _TOTALS: Final = """
@@ -184,6 +192,52 @@ WHERE ano = %s
   AND cargo = %s
   AND tipo_voto IN ('branco', 'nulo')
 GROUP BY municipio
+"""
+
+_SECTION_VOTES: Final = """
+WITH secoes AS (
+    SELECT
+        municipio,
+        zona,
+        secao,
+        MAX(eleitores_aptos) AS eleitores_aptos,
+        MAX(eleitores_complemento) AS eleitores_complemento,
+        COALESCE(SUM(quantidade) FILTER (WHERE tipo_voto = 'branco'), 0) AS branco,
+        COALESCE(SUM(quantidade) FILTER (WHERE tipo_voto = 'nulo'), 0) AS nulo
+    FROM raw.boletim
+    WHERE ano = %s
+      AND turno = %s
+      AND uf = %s
+      AND cargo = %s
+    GROUP BY municipio, zona, secao
+),
+nominais AS (
+    SELECT municipio, zona, secao, numero, SUM(quantidade) AS quantidade
+    FROM raw.boletim
+    WHERE ano = %s
+      AND turno = %s
+      AND uf = %s
+      AND cargo = %s
+      AND tipo_voto = 'nominal'
+      AND numero IS NOT NULL
+    GROUP BY municipio, zona, secao, numero
+)
+SELECT
+    secoes.municipio,
+    secoes.zona,
+    secoes.secao,
+    secoes.eleitores_aptos,
+    secoes.eleitores_complemento,
+    secoes.branco,
+    secoes.nulo,
+    nominais.numero,
+    nominais.quantidade
+FROM secoes
+LEFT JOIN nominais
+    ON nominais.municipio = secoes.municipio
+   AND nominais.zona = secoes.zona
+   AND nominais.secao = secoes.secao
+ORDER BY secoes.municipio, secoes.zona, secoes.secao, nominais.numero
 """
 
 
@@ -629,9 +683,20 @@ class PostgresBoletimReader:
         rows = self._rows(_BLANKS, (ano, turno, uf, cargo))
         return tuple(_blank(row) for row in rows)
 
+    def section_votes(self, ano: int, turno: int, uf: str, cargo: str) -> tuple[VotosSecao, ...]:
+        params = (ano, turno, uf, cargo, ano, turno, uf, cargo)
+        return votos_por_secao(self._rows(_SECTION_VOTES, params))
+
     def present_ufs(self, ano: int, turno: int, cargo: str) -> tuple[str, ...]:
         rows = self._rows(_PRESENT_UFS, (ano, turno, cargo))
         return tuple(_uf_code(row) for row in rows)
+
+    def last_load(self, ano: int, turno: int) -> datetime | None:
+        rows = self._rows(_LAST_LOAD, (LOAD_TABLE, load_set(ano), str(turno)))
+        if not rows:
+            return None
+        _require_width(rows[0], 1)
+        return _moment(rows[0][0])
 
     def close(self) -> None:
         connection = self._connection
@@ -649,6 +714,14 @@ class PostgresBoletimReader:
         if self._connection is None:
             self._connection = self._connect()
         return self._connection
+
+
+def _moment(value: object) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime) and value.tzinfo is not None:
+        return value
+    raise InvalidBoletimConsultaError("carregado_em")
 
 
 def _uf_code(row: Sequence[object]) -> str:
@@ -813,6 +886,26 @@ def _nominal(row: Sequence[object]) -> NominalProjection:
 def _blank(row: Sequence[object]) -> BlankNullProjection:
     _require_width(row, _BLANK_WIDTH)
     return BlankNullProjection(municipio=_integer(row[0]), quantidade=_integer(row[1]))
+
+
+def votos_por_secao(rows: Sequence[Sequence[object]]) -> tuple[VotosSecao, ...]:
+    """Junta as linhas (seção × número) numa seção só. Seção sem nominal vem com número nulo."""
+    cabecas: dict[tuple[int, int, int], tuple[int, int, int, int]] = {}
+    nominais: dict[tuple[int, int, int], list[tuple[int, int]]] = {}
+    for row in rows:
+        _require_width(row, _SECTION_VOTE_WIDTH)
+        chave = (_integer(row[0]), _integer(row[1]), _integer(row[2]))
+        cabeca = (_integer(row[3]), _integer(row[4]), _integer(row[5]), _integer(row[6]))
+        if cabecas.setdefault(chave, cabeca) != cabeca:
+            raise InvalidBoletimConsultaError("secao")
+        votos = nominais.setdefault(chave, [])
+        numero = _optional_integer(row[7])
+        if numero is not None:
+            votos.append((numero, _integer(row[8])))
+    return tuple(
+        VotosSecao(*chave, *cabeca, tuple(sorted(nominais[chave])))
+        for chave, cabeca in cabecas.items()
+    )
 
 
 def _require_width(row: Sequence[object], width: int) -> None:

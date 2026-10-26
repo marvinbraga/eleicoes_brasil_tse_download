@@ -1,10 +1,12 @@
 """The map command paints the leading party and reuses stored municipal votes."""
 
+import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
 
+from eleicoes.domain.boletim_consulta import Participacao
 from eleicoes.domain.errors import (
     SCHEMA_OUTDATED_HINT,
     ElectionError,
@@ -670,6 +672,9 @@ class _QuietReader:
         self.calls.append((ano, turno, cargo))
         return ()
 
+    def last_load(self, _ano: int, _turno: int) -> datetime | None:
+        return None
+
     def close(self) -> None:
         self.closed = True
 
@@ -730,7 +735,7 @@ def test_second_round_adds_the_turnos_view(tmp_path: Path) -> None:
     assert code == 0
     assert collected == [1, 2]
     assert store.rows[(2026, 2)].places == (_second_round_place(6, 4),)
-    assert '"turnos": {"a": "22", "b": "13"' in text
+    assert '"turnos": {"cargo": "presidente", "a": "22", "b": "13"' in text
     assert "Mapa de presidente — 2026, 1º × 2º turno" in text
 
 
@@ -774,3 +779,213 @@ def test_no_second_round_keeps_the_page_without_turnos(tmp_path: Path) -> None:
     )
 
     assert '"turnos": null' in destino.read_text(encoding="utf-8")
+
+
+def _reuse_run(
+    tmp_path: Path,
+    last_load: datetime | None,
+    ufs: tuple[str, ...] = ("AC",),
+) -> list[int]:
+    """Grava o 2º turno em _MOMENT e roda o mapa com a marca de carga pedida."""
+    store = _Memory()
+    store.save(2026, 1, (_bujari(),))
+    store.save(2026, 2, (_second_round_place(6, 4),))
+    collected: list[int] = []
+    asked: list[tuple[int, int]] = []
+
+    def collect(_ano: int, turno: int) -> tuple[MunicipalPlace, ...]:
+        collected.append(turno)
+        return (_second_round_place(7, 3),)
+
+    def load(ano: int, turno: int) -> datetime | None:
+        asked.append((ano, turno))
+        return last_load
+
+    code = main(
+        ["--cargo", "presidente", "--destino", str(tmp_path / "mapa.html"), "--sem-navegador"],
+        store=store,
+        assets=_Assets(),
+        collect=collect,
+        present=lambda _ano, _turno: ufs,
+        last_load=load,
+    )
+    assert code == 0
+    if collected:
+        assert store.rows[(2026, 2)].places == (_second_round_place(7, 3),)
+    if ufs == ("AC",):
+        assert asked == [(2026, 2)]
+    return collected
+
+
+def test_reimport_after_the_store_was_saved_collects_again(tmp_path: Path) -> None:
+    assert _reuse_run(tmp_path, _MOMENT + timedelta(minutes=5)) == [2]
+
+
+def test_load_mark_older_than_the_store_keeps_the_stored_round(tmp_path: Path) -> None:
+    assert _reuse_run(tmp_path, _MOMENT - timedelta(minutes=5)) == []
+
+
+def test_load_mark_equal_to_the_store_collects_again(tmp_path: Path) -> None:
+    assert _reuse_run(tmp_path, _MOMENT) == [2]
+
+
+def test_round_without_load_marks_falls_back_to_the_uf_check(tmp_path: Path) -> None:
+    assert _reuse_run(tmp_path, None) == []
+
+
+def test_new_uf_collects_again_even_with_an_old_mark(tmp_path: Path) -> None:
+    assert _reuse_run(tmp_path, _MOMENT - timedelta(minutes=5), ("AC", "AL")) == [2]
+
+
+class _RoundReader(_QuietReader):
+    def __init__(self, carga: datetime | None) -> None:
+        super().__init__()
+        self._carga = carga
+        self.loads: list[tuple[int, int]] = []
+
+    def present_ufs(self, ano: int, turno: int, cargo: str) -> tuple[str, ...]:
+        self.calls.append((ano, turno, cargo))
+        return ("AC",) if turno == 2 else ()
+
+    def last_load(self, ano: int, turno: int) -> datetime | None:
+        self.loads.append((ano, turno))
+        return self._carga
+
+    def participation(
+        self, ano: int, turno: int, uf: str, cargo: str, nivel: str
+    ) -> tuple[Participacao, ...]:
+        self.calls.append((ano, turno, f"{uf}/{cargo}/{nivel}"))
+        return (Participacao(1007, None, 100, 80 if turno == 1 else 70),)
+
+
+def test_injected_reader_answers_the_load_mark(tmp_path: Path) -> None:
+    store = _Memory()
+    store.save(2026, 1, (_bujari(),))
+    store.save(2026, 2, (_second_round_place(6, 4),))
+    reader = _RoundReader(_MOMENT + timedelta(seconds=1))
+    collected: list[int] = []
+
+    def collect(_ano: int, turno: int) -> tuple[MunicipalPlace, ...]:
+        collected.append(turno)
+        return (_second_round_place(7, 3),)
+
+    code = main(
+        _command(tmp_path / "mapa.html"),
+        reader=reader,
+        store=store,
+        assets=_Assets(),
+        collect=collect,
+    )
+    assert code == 0
+    assert reader.loads == [(2026, 2)]
+    assert collected == [2]
+
+
+def test_production_last_load_closes_the_reader(monkeypatch: pytest.MonkeyPatch) -> None:
+    from eleicoes.use_cases.apresentar_mapa import _production_last_load
+
+    reader = _RoundReader(_MOMENT)
+    monkeypatch.setattr("eleicoes.composition.boletim.build_boletim_reader", lambda _env: reader)
+    assert _production_last_load(2026, 2) == _MOMENT
+    assert reader.loads == [(2026, 2)]
+    assert reader.closed is True
+
+
+def _governor_runoff_place() -> MunicipalPlace:
+    presidente = CargoTally((PartyTally(22, 6, 0), PartyTally(13, 4, 0)), 0, 0)
+    governador = CargoTally((PartyTally(11, 7, 0), PartyTally(10, 3, 0)), 0, 0)
+    return MunicipalPlace("AC", "01007", "Bujari", presidente, governador)
+
+
+def test_governor_runoff_adds_the_turnosgov_view(tmp_path: Path) -> None:
+    destino = tmp_path / "mapa.html"
+    primeiro = MunicipalPlace(
+        "AC",
+        "01007",
+        "Bujari",
+        _tally(22),
+        CargoTally((PartyTally(10, 50, 0), PartyTally(11, 40, 0), PartyTally(45, 9, 0)), 0, 0),
+    )
+
+    main(
+        ["--cargo", "presidente", "--destino", str(destino), "--sem-navegador"],
+        store=_Memory(),
+        assets=_Assets(),
+        collect=lambda _ano, turno: (primeiro,) if turno == 1 else (_governor_runoff_place(),),
+        present=lambda _ano, _turno: ("AC",),
+    )
+    text = destino.read_text(encoding="utf-8")
+
+    assert '"turnosgov": {"cargo": "governador", "a": null, "b": null' in text
+    assert '"finalistas": {"AC": ["10", "11"]}' in text
+    assert "Mapa de governador — 2026, 1º × 2º turno" in text
+
+
+def test_president_only_runoff_has_no_turnosgov(tmp_path: Path) -> None:
+    destino = tmp_path / "mapa.html"
+    main(
+        ["--cargo", "presidente", "--destino", str(destino), "--sem-navegador"],
+        store=_Memory(),
+        assets=_Assets(),
+        collect=lambda _ano, turno: (_bujari(),) if turno == 1 else (_second_round_place(6, 4),),
+        present=lambda _ano, _turno: ("AC",),
+    )
+
+    assert '"turnosgov": null' in destino.read_text(encoding="utf-8")
+
+
+def test_reader_turnout_reaches_both_rounds_of_the_comparison(tmp_path: Path) -> None:
+    destino = tmp_path / "mapa.html"
+    reader = _RoundReader(None)
+    store = _Memory()
+    store.save(2026, 1, (_bujari(),))
+
+    main(
+        _command(destino),
+        reader=reader,
+        store=store,
+        assets=_Assets(),
+        collect=lambda _ano, _turno: (_second_round_place(6, 4),),
+    )
+    turnos = json.loads(_pintura(destino.read_text(encoding="utf-8")))["turnos"]
+
+    assert (2026, 1, "AC/presidente/municipio") in reader.calls
+    assert (2026, 2, "AC/presidente/municipio") in reader.calls
+    assert turnos["municipios"][0]["participacao"] == [100, 80, 100, 70]
+
+
+def test_map_without_enough_places_has_no_estimated_scenario(tmp_path: Path) -> None:
+    destino = tmp_path / "mapa.html"
+    main(
+        _command(destino),
+        store=_Memory(),
+        assets=_Assets(),
+        collect=lambda _ano, turno: (_bujari(),) if turno == 1 else (_second_round_place(6, 4),),
+        present=lambda _ano, _turno: ("AC",),
+        participation=lambda _ano, _turno, _ufs: {},
+    )
+    turnos = json.loads(_pintura(destino.read_text(encoding="utf-8")))["turnos"]
+
+    assert "estimado" not in [item["chave"] for item in turnos["cenarios"]]
+    assert "participacao" not in turnos["municipios"][0]
+
+
+def _pintura(html: str) -> str:
+    inicio = html.index('<script type="application/json" id="pintura">') + len(
+        '<script type="application/json" id="pintura">'
+    )
+    return html[inicio : html.index("</script>", inicio)].replace("<\\/", "</")
+
+
+def test_calibration_summary_reads_the_tracked_2022_file(tmp_path: Path) -> None:
+    from eleicoes.use_cases.apresentar_mapa import ler_calibracao
+
+    resumo = ler_calibracao(Path("dados/calibracao_turnos_2022.json"))
+    quebrado = tmp_path / "quebrado.json"
+    quebrado.write_text("{}", encoding="utf-8")
+
+    assert resumo is not None
+    assert resumo["ano"] == 2022
+    assert set(resumo["fora"]) >= {"todosa", "proporcional"}  # type: ignore[arg-type]
+    assert ler_calibracao(quebrado) is None
+    assert ler_calibracao(tmp_path / "ausente.json") is None

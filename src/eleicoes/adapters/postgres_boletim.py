@@ -46,6 +46,16 @@ _COLUMNS: Final[tuple[str, ...]] = (
 )
 _COPY: Final = "COPY raw.boletim (" + ", ".join(_COLUMNS) + ") FROM STDIN"
 _DELETE: Final = "DELETE FROM raw.boletim WHERE ano = %s AND turno = %s AND uf = %s"
+# Cada carga da UF deixa uma marca em raw.carga, na mesma transação. clock_timestamp() é o
+# instante depois do COPY: now() seria o início da transação e perderia uma carga longa.
+_FORGET_LOAD: Final = "DELETE FROM raw.carga WHERE arquivo = %s AND membro = %s"
+_RECORD_LOAD: Final = (
+    "INSERT INTO raw.carga "
+    "(conjunto, turno, uf, arquivo, membro, tabela, geracao, linhas, situacao, carregado_em) "
+    "VALUES (%s, %s, %s, %s, %s, %s, '', %s, 'carregado', clock_timestamp())"
+)
+LOAD_TABLE: Final = "raw.boletim"
+_LOAD_MEMBER: Final = "bu.dat"
 BoletimCell = int | str | None
 BoletimRow = tuple[BoletimCell, ...]
 
@@ -97,10 +107,25 @@ class _CursorWork(Protocol):
 
 def _replace(cursor: SqlCursor, scope: tuple[int, int, str], rows: Sequence[BoletimRow]) -> None:
     cursor.execute(_DELETE, scope)
-    if not rows:
-        return
-    with cursor.copy(_COPY) as stream:
-        stream.write(_payload(rows))
+    if rows:
+        with cursor.copy(_COPY) as stream:
+            stream.write(_payload(rows))
+    _record_load(cursor, scope, len(rows))
+
+
+def load_set(ano: int) -> str:
+    """raw.carga não tem coluna de ano: ele vai no conjunto."""
+    return f"boletins-{ano}"
+
+
+def _record_load(cursor: SqlCursor, scope: tuple[int, int, str], linhas: int) -> None:
+    ano, turno, uf = scope
+    arquivo = f"boletins/{ano}/turno-{turno}/{uf}"
+    cursor.execute(_FORGET_LOAD, (arquivo, _LOAD_MEMBER))
+    cursor.execute(
+        _RECORD_LOAD,
+        (load_set(ano), str(turno), uf, arquivo, _LOAD_MEMBER, LOAD_TABLE, linhas),
+    )
 
 
 def _rows(

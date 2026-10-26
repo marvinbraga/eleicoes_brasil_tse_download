@@ -6,18 +6,24 @@ import pytest
 
 from eleicoes.domain.mapa import PonteTseIbge, ponte_de_linhas
 from eleicoes.domain.mapa_turnos import (
+    DEMAIS,
     DENTRO,
     FORA_A,
     FORA_B,
+    GOVERNADOR,
     MODERADO,
     SEM_BASE,
     Apuracao,
     FinalistsMissingError,
+    GrupoEliminado,
     apuracao,
     cenarios,
+    cenarios_de_governador,
     classe_do_z,
     comparar_turnos,
     finalistas,
+    finalistas_de_governador,
+    grupos_eliminados,
     leituras,
 )
 from eleicoes.domain.presidente_governador import CargoTally, MunicipalPlace, PartyTally
@@ -131,7 +137,7 @@ def test_finalists_need_two_candidates() -> None:
 def test_absent_party_counts_as_zero() -> None:
     tally = CargoTally((PartyTally(22, 10, 0), PartyTally(30, 5, 0)), 1, 2)
 
-    assert apuracao(tally, 22, 13) == Apuracao(10, 0, 5, 1, 2)
+    assert apuracao(tally, 22, 13) == Apuracao(10, 0, 5, 1, 2, ((30, 5),))
 
 
 def test_comparison_joins_rounds_and_maps_mesh_codes() -> None:
@@ -160,7 +166,7 @@ def test_comparison_joins_rounds_and_maps_mesh_codes() -> None:
     assert found.ufs_com_segundo == ("AC", "ZZ")
     assert found.sem_comparacao == 1
     assert [item.codigo for item in found.municipios] == ["1200138"]
-    assert found.municipios[0].primeiro == Apuracao(400, 500, 100, 0, 0)
+    assert found.municipios[0].primeiro == Apuracao(400, 500, 100, 0, 0, ((30, 100),))
     assert found.municipios[0].leituras[0].esperado == Fraction(1, 2)
     assert [item.codigo for item in found.ufs] == ["12"]
     assert found.pais is not None and found.pais.codigo == "076"
@@ -180,6 +186,111 @@ def test_places_without_polygon_are_listed() -> None:
     assert found.sem_poligono == ("Acre (AC)", "BUJARI (AC)")
 
 
+def test_sum_keeps_the_eliminated_breakdown() -> None:
+    um = Apuracao(1, 2, 7, 0, 0, ((30, 3), (70, 4)))
+    outro = Apuracao(1, 2, 5, 0, 0, ((14, 1), (70, 4)))
+
+    soma = um + outro
+
+    assert soma.eliminados == ((14, 1), (30, 3), (70, 8))
+    assert sum(votos for _, votos in soma.eliminados) == soma.outros
+    assert soma.votos_do_grupo(frozenset({70, 14})) == 9
+
+
+def test_big_eliminated_parties_stand_alone_and_the_rest_are_grouped() -> None:
+    primeiro = (
+        _place("AC", "01007", "BUJARI (AC)", {22: 480, 13: 470, 70: 30, 14: 15, 30: 4, 80: 1}),
+    )
+
+    found = grupos_eliminados(primeiro, 22, 13)
+
+    assert found == (
+        GrupoEliminado(70, frozenset({70}), Fraction(3, 100)),
+        GrupoEliminado(14, frozenset({14}), Fraction(15, 1000)),
+        GrupoEliminado(DEMAIS, frozenset({30, 80}), Fraction(5, 1000)),
+    )
+
+
+def test_no_eliminated_party_means_no_group() -> None:
+    primeiro = (_place("AC", "01007", "BUJARI (AC)", {22: 480, 13: 470}),)
+
+    assert grupos_eliminados(primeiro, 22, 13) == ()
+
+
+def test_governor_scenarios_follow_the_first_round_order() -> None:
+    found = cenarios_de_governador()
+
+    assert [(item.chave, item.parte_de_a) for item in found] == [
+        ("dividido", Fraction(1, 2)),
+        ("proporcional", None),
+        ("todosa", Fraction(1)),
+        ("todosb", Fraction(0)),
+    ]
+    assert found[2].rotulo == "Todos para o 1º colocado do 1º turno"
+
+
+def test_governor_finalists_are_per_uf_and_led_by_the_first_round_winner() -> None:
+    primeiro = (
+        _gov("AC", "01007", {10: 50, 11: 40, 45: 9}),
+        _gov("AM", "02003", {55: 60, 22: 30, 15: 20}),
+        _gov("AL", "27001", {40: 70, 15: 10}),
+    )
+    segundo = (
+        _gov("AC", "01007", {11: 70, 10: 30}),
+        _gov("AM", "02003", {55: 65, 22: 45}),
+        _place("AL", "27001", "MACEIO (AL)", {22: 5, 13: 5}),
+    )
+
+    assert finalistas_de_governador(primeiro, segundo) == {"AC": (10, 11), "AM": (55, 22)}
+
+
+def test_governor_comparison_skips_ufs_without_a_runoff_and_the_country() -> None:
+    primeiro = (
+        _gov("AC", "1007", {10: 500, 11: 400, 45: 100}),
+        _gov("AL", "27001", {40: 70, 15: 10}),
+    )
+    segundo = (
+        _gov("AC", "01007", {11: 520, 10: 480}),
+        _place("AL", "27001", "MACEIO (AL)", {22: 5, 13: 5}),
+    )
+
+    found = comparar_turnos(
+        primeiro,
+        segundo,
+        _ponte(),
+        frozenset({"1200138"}),
+        frozenset({"12"}),
+        "076",
+        cargo=GOVERNADOR,
+    )
+
+    assert found.cargo == GOVERNADOR
+    assert found.finalistas_por_uf == {"AC": (10, 11)}
+    assert found.pais is None
+    assert found.exterior == ()
+    assert found.ufs_com_segundo == ("AC",)
+    assert found.eliminados == ()
+    assert found.municipios[0].primeiro == Apuracao(500, 400, 100, 0, 0, ((45, 100),))
+    assert found.municipios[0].segundo.a == 480
+    assert [item.codigo for item in found.ufs] == ["12"]
+
+
+def test_governor_comparison_needs_a_runoff() -> None:
+    primeiro = (_gov("AC", "01007", {10: 50, 11: 40}),)
+    segundo = (_place("AC", "01007", "BUJARI (AC)", {22: 5, 13: 5}),)
+
+    with pytest.raises(FinalistsMissingError):
+        comparar_turnos(
+            primeiro, segundo, _ponte(), frozenset(), frozenset(), "076", cargo=GOVERNADOR
+        )
+
+
+def _gov(uf: str, codigo: str, votos: dict[int, int]) -> MunicipalPlace:
+    parties = tuple(PartyTally(numero, total, 0) for numero, total in votos.items())
+    presidente = CargoTally((PartyTally(22, 1, 0), PartyTally(13, 1, 0)), 0, 0)
+    return MunicipalPlace(uf, codigo, f"{codigo} ({uf})", presidente, CargoTally(parties, 0, 0))
+
+
 def _place(uf: str, codigo: str, nome: str, votos: dict[int, int]) -> MunicipalPlace:
     parties = tuple(PartyTally(numero, total, 0) for numero, total in votos.items())
     return MunicipalPlace(uf, codigo, nome, CargoTally(parties, 0, 0), None)
@@ -188,3 +299,55 @@ def _place(uf: str, codigo: str, nome: str, votos: dict[int, int]) -> MunicipalP
 def _ponte() -> PonteTseIbge:
     values = ("04/10/2026", "09:00:06", "1", "12", "AC", "Acre", "01007", "Bujari", "1200138", "X")
     return ponte_de_linhas((dict(zip(_HEADER, values, strict=True)),))
+
+
+def test_estimated_scenario_uses_each_uf_share_and_a_weighted_national_one() -> None:
+    from eleicoes.domain.mapa_turnos import cenario_estimado, parte_nacional
+
+    partes = {"AC": Fraction(1, 4), "AL": Fraction(3, 4)}
+    nacional = parte_nacional(
+        [
+            ("AC", Apuracao(0, 0, 100, 0, 0)),
+            ("AL", Apuracao(0, 0, 300, 0, 0)),
+            ("AM", Apuracao(0, 0, 999, 0, 0)),
+        ],
+        partes,
+    )
+    cenario = cenario_estimado(22, partes, nacional, frozenset({"AC"}))
+    primeiro = Apuracao(400, 500, 100, 0, 0)
+    segundo = Apuracao(500, 500, 0, 0, 0)
+
+    (no_ac, no_al, fora) = leituras(
+        ((primeiro, segundo),) * 3, cenario, minimo=99, ufs=("AC", "AL", "ZZ")
+    )
+
+    assert nacional == Fraction(5, 8)
+    assert cenario.chave == "estimado"
+    assert "AC 25% (amostra pequena)" in cenario.descricao
+    assert "AL 75%;" not in cenario.descricao and "AL 75%)" in cenario.descricao
+    assert "só move os eliminados" in cenario.descricao
+    assert no_ac.esperado == Fraction(425, 1000)
+    assert no_al.esperado == Fraction(475, 1000)
+    assert fora.esperado == Fraction(4625, 10000)
+
+
+def test_turnout_rides_along_and_adds_up() -> None:
+    primeiro = (_place("AC", "01007", "BUJARI (AC)", {22: 40, 13: 60}),)
+    segundo = (_place("AC", "01007", "BUJARI (AC)", {22: 45, 13: 55}),)
+
+    found = comparar_turnos(
+        primeiro,
+        segundo,
+        _ponte(),
+        frozenset({"1200138"}),
+        frozenset({"12"}),
+        "076",
+        participacao={(1, "AC", "01007"): (200, 100), (2, "AC", "01007"): (200, 100)},
+        partes_estimadas={"AC": Fraction(1, 3)},
+    )
+
+    assert found.municipios[0].primeiro.aptos == 200
+    assert found.municipios[0].segundo.comparecimento == 100
+    assert found.pais is not None and found.pais.primeiro.aptos == 200
+    assert found.cenarios[-1].chave == "estimado"
+    assert (Apuracao(1, 0, 0, 0, 0, (), 10, 8) + Apuracao(1, 0, 0, 0, 0)).aptos is None

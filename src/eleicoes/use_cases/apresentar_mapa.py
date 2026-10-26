@@ -1,12 +1,14 @@
 """Present the president or governor choropleth from stored municipal votes."""
 
 import argparse
+import json
 import os
 import sys
 import webbrowser
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime
+from fractions import Fraction
 from pathlib import Path
 from typing import Final
 
@@ -28,13 +30,27 @@ from eleicoes.domain.mapa import (
     RecortePintado,
     recorte_pintado,
 )
-from eleicoes.domain.mapa_turnos import ComparativoTurnos, comparar_turnos
+from eleicoes.domain.mapa_turnos import (
+    GOVERNADOR,
+    ComparativoTurnos,
+    FinalistsMissingError,
+    chave_tse,
+    comparar_turnos,
+    finalistas,
+    finalistas_de_governador,
+)
 from eleicoes.domain.presidente_governador import (
     CrossReportView,
     MunicipalPlace,
     view_from_places,
 )
 from eleicoes.domain.report import EXIT_FAILURE, EXIT_SUCCESS
+from eleicoes.domain.transferencia import (
+    estimar_por_uf,
+    grupos_do_primeiro,
+    observacoes,
+    parte_estimada_de_a,
+)
 from eleicoes.domain.values import ElectionYear, Turno
 from eleicoes.ports.boletim_consulta import BoletimReader
 from eleicoes.ports.grade import MunicipalityNames
@@ -47,15 +63,20 @@ from eleicoes.use_cases.presidente_governador import collect_places
 
 Collect = Callable[[int, int], tuple[MunicipalPlace, ...]]
 Present = Callable[[int, int], tuple[str, ...]]
+LastLoad = Callable[[int, int], datetime | None]
+# (ano, turno, UFs) → {(UF, código TSE de cinco dígitos): (aptos, comparecimento)} de presidente.
+Participation = Callable[[int, int, tuple[str, ...]], Mapping[tuple[str, str], tuple[int, int]]]
 Render = Callable[[PaginaDoMapa], str]
 OpenReport = Callable[[Path], bool]
 _MESH_DIR = Path("downloads/malha")
 _EXTERIOR_CSV = Path("dados/exterior.csv")
+_CALIBRACAO = Path("dados/calibracao_turnos_2022.json")
 _VIEWS: Final = ("presidente", "governador")
 _PRIMEIRO_TURNO: Final = 1
 _SEGUNDO_TURNO: Final = 2
 _APOIADO: Final = 22
 _PRESIDENTE: Final = "presidente"
+_MUNICIPIO: Final = "municipio"
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,6 +101,9 @@ class PresentMap:
         open_report: OpenReport,
         present: Present | None = None,
         apoiado: int | None = _APOIADO,
+        last_load: LastLoad | None = None,
+        participation: Participation | None = None,
+        calibracao: Mapping[str, object] | None = None,
     ) -> None:
         self._collect = collect
         self._store = store
@@ -88,6 +112,9 @@ class PresentMap:
         self._open = open_report
         self._present = present
         self._apoiado = apoiado
+        self._last_load = last_load
+        self._participation = participation
+        self._calibracao = calibracao
 
     def execute(
         self,
@@ -105,7 +132,13 @@ class PresentMap:
         _require_country(mesh)
         page = _page(ano, turno, cargo, stored.places, mesh)
         if segundo:
-            page = replace(page, turnos=_turnos(stored.places, segundo, mesh, self._apoiado))
+            participacao = self._turnout(ano, segundo)
+            page = replace(
+                page,
+                turnos=_turnos(stored.places, segundo, mesh, self._apoiado, participacao),
+                calibracao=self._calibracao,
+                turnos_governador=_turnos_de_governador(stored.places, segundo, mesh),
+            )
         opened = _write(destino, self._render(page), self._open)
         return PresentedMap(destino, opened, loaded, stored.gerado_em)
 
@@ -124,18 +157,40 @@ class PresentMap:
         return StoredCrossReport(places, moment), False
 
     def _second_round(self, ano: int, turno: int, atualizar: bool) -> tuple[MunicipalPlace, ...]:
-        """O 2º turno ainda chega por UF: o gravado só vale se cobrir as mesmas UFs do banco."""
+        """O 2º turno ainda chega por UF: o gravado só vale se cobrir as mesmas UFs do banco
+        e se nenhuma UF foi importada de novo depois que ele foi gravado."""
         if turno != _PRIMEIRO_TURNO or self._present is None:
             return ()
         ufs = frozenset(self._present(ano, _SEGUNDO_TURNO))
         if not ufs:
             return ()
         stored = None if atualizar else self._store.load(ano, _SEGUNDO_TURNO)
-        if stored is not None and frozenset(place.uf for place in stored.places) == ufs:
+        if stored is not None and self._still_valid(ano, stored, ufs):
             return stored.places
         places = self._collect(ano, _SEGUNDO_TURNO)
         self._store.save(ano, _SEGUNDO_TURNO, places)
         return places
+
+    def _turnout(
+        self, ano: int, segundo: tuple[MunicipalPlace, ...]
+    ) -> dict[tuple[int, str, str], tuple[int, int]]:
+        if self._participation is None:
+            return {}
+        ufs = tuple(sorted({place.uf for place in segundo}))
+        found: dict[tuple[int, str, str], tuple[int, int]] = {}
+        for turno in (_PRIMEIRO_TURNO, _SEGUNDO_TURNO):
+            for (uf, codigo), lida in self._participation(ano, turno, ufs).items():
+                found[(turno, uf, codigo)] = lida
+        return found
+
+    def _still_valid(self, ano: int, stored: StoredCrossReport, ufs: frozenset[str]) -> bool:
+        if frozenset(place.uf for place in stored.places) != ufs:
+            return False
+        if self._last_load is None:
+            return True
+        # Sem marca de carga (UFs importadas antes dela existir) vale só a checagem das UFs.
+        carga = self._last_load(ano, _SEGUNDO_TURNO)
+        return carga is None or carga < stored.gerado_em
 
 
 def main(
@@ -149,10 +204,22 @@ def main(
     render: Render | None = None,
     open_report: OpenReport | None = None,
     present: Present | None = None,
+    last_load: LastLoad | None = None,
+    participation: Participation | None = None,
 ) -> int:
     args = _parser().parse_args(argv)
     try:
-        report = _present(args, reader, names, store, assets, collect, render, open_report, present)
+        report = _present(
+            args,
+            reader,
+            names,
+            store,
+            assets,
+            collect,
+            render,
+            open_report,
+            (present, last_load, participation),
+        )
     except MeshMissingError as error:
         print(f"Falta {error.nome}.", file=sys.stderr)
         return EXIT_FAILURE
@@ -210,7 +277,7 @@ def _present(
     collect: Collect | None,
     render: Render | None,
     open_report: OpenReport | None,
-    present: Present | None,
+    rounds: tuple[Present | None, LastLoad | None, Participation | None],
 ) -> PresentedMap:
     destino = _destino(args)
     cache = store if store is not None else _production_store()
@@ -221,11 +288,33 @@ def _present(
             assets if assets is not None else _production_assets(),
             render if render is not None else html_do_mapa,
             _choose_opener(args, open_report),
-            _present_for(reader, collect, present),
+            _present_for(reader, collect, rounds[0]),
             int(args.apoiado),
+            _last_load_for(reader, collect, rounds[1]),
+            _participation_for(reader, collect, rounds[2]),
+            ler_calibracao(_CALIBRACAO),
         ).execute(args.ano, args.turno, str(args.cargo), destino, atualizar=bool(args.atualizar))
     finally:
         cache.close()
+
+
+def ler_calibracao(caminho: Path) -> dict[str, object] | None:
+    """Resumo de 2022 para a legenda: parte dos municípios marcada em cada cenário."""
+    try:
+        dados = json.loads(caminho.read_text(encoding="utf-8"))
+        cenarios = dados["cenarios"]
+        return {
+            "ano": int(dados["eleicao"]["ano"]),
+            "lugares": int(cenarios[0]["municipios"]["com_base"]),
+            "normal": float(dados["referencia_normal"]["fora"]),
+            "fora": {item["chave"]: float(item["municipios"]["fracao_fora"]) for item in cenarios},
+            "moderado": {
+                item["chave"]: float(item["municipios"]["fracao_acima_do_moderado"])
+                for item in cenarios
+            },
+        }
+    except (OSError, ValueError, KeyError, IndexError, TypeError):
+        return None
 
 
 def _destino(args: argparse.Namespace) -> Path:
@@ -275,6 +364,55 @@ def _bound_present(reader: BoletimReader) -> Present:
     return present
 
 
+def _last_load_for(
+    reader: BoletimReader | None,
+    collect: Collect | None,
+    last_load: LastLoad | None,
+) -> LastLoad | None:
+    if last_load is not None:
+        return last_load
+    if reader is not None:
+        return _bound_last_load(reader)
+    if collect is not None:
+        return None
+    return _production_last_load
+
+
+def _bound_last_load(reader: BoletimReader) -> LastLoad:
+    def last_load(ano: int, turno: int) -> datetime | None:
+        return reader.last_load(ano, turno)
+
+    return last_load
+
+
+def _participation_for(
+    reader: BoletimReader | None,
+    collect: Collect | None,
+    participation: Participation | None,
+) -> Participation | None:
+    if participation is not None:
+        return participation
+    if reader is not None:
+        return _bound_participation(reader)
+    if collect is not None:
+        return None
+    return _production_participation
+
+
+def _bound_participation(reader: BoletimReader) -> Participation:
+    def participation(
+        ano: int, turno: int, ufs: tuple[str, ...]
+    ) -> dict[tuple[str, str], tuple[int, int]]:
+        found: dict[tuple[str, str], tuple[int, int]] = {}
+        for uf in ufs:
+            for linha in reader.participation(ano, turno, uf, _PRESIDENTE, _MUNICIPIO):
+                chave = (uf, chave_tse(str(linha.municipio)))
+                found[chave] = (linha.eleitores_aptos, linha.comparecimento)
+        return found
+
+    return participation
+
+
 def _choose_opener(args: argparse.Namespace, open_report: OpenReport | None) -> OpenReport:
     if open_report is not None:
         return open_report
@@ -315,6 +453,28 @@ def _production_present(ano: int, turno: int) -> tuple[str, ...]:
     reader = build_boletim_reader(_environment())
     try:
         return reader.present_ufs(ano, turno, _PRESIDENTE)
+    finally:
+        reader.close()
+
+
+def _production_last_load(ano: int, turno: int) -> datetime | None:
+    from eleicoes.composition.boletim import build_boletim_reader
+
+    reader = build_boletim_reader(_environment())
+    try:
+        return reader.last_load(ano, turno)
+    finally:
+        reader.close()
+
+
+def _production_participation(
+    ano: int, turno: int, ufs: tuple[str, ...]
+) -> Mapping[tuple[str, str], tuple[int, int]]:
+    from eleicoes.composition.boletim import build_boletim_reader
+
+    reader = build_boletim_reader(_environment())
+    try:
+        return _bound_participation(reader)(ano, turno, ufs)
     finally:
         reader.close()
 
@@ -368,7 +528,9 @@ def _turnos(
     segundo: tuple[MunicipalPlace, ...],
     mesh: MalhaCarregada,
     apoiado: int | None,
+    participacao: Mapping[tuple[int, str, str], tuple[int, int]],
 ) -> ComparativoTurnos:
+    partes, pequenas = _partes_estimadas(primeiro, segundo, apoiado)
     return comparar_turnos(
         primeiro,
         segundo,
@@ -378,6 +540,46 @@ def _turnos(
         mesh.manifesto.brasil_id,
         exterior=mesh.exterior,
         apoiado=apoiado,
+        participacao=participacao,
+        partes_estimadas=partes,
+        amostras_pequenas=pequenas,
+    )
+
+
+def _partes_estimadas(
+    primeiro: tuple[MunicipalPlace, ...],
+    segundo: tuple[MunicipalPlace, ...],
+    apoiado: int | None,
+) -> tuple[dict[str, Fraction], frozenset[str]]:
+    """Parte de A por UF, da regressão ecológica, e as UFs de amostra pequena.
+
+    Sem reamostras: o mapa só usa o ponto."""
+    try:
+        a, b = finalistas(segundo, apoiado)
+    except FinalistsMissingError:
+        return {}, frozenset()
+    grupos = grupos_do_primeiro(primeiro, a, b)
+    estimadas, _ = estimar_por_uf(observacoes(primeiro, segundo, grupos), grupos, reamostras=0)
+    partes = {estimativa.uf: parte_estimada_de_a(estimativa) for estimativa in estimadas}
+    return partes, frozenset(item.uf for item in estimadas if item.amostra_pequena)
+
+
+def _turnos_de_governador(
+    primeiro: tuple[MunicipalPlace, ...],
+    segundo: tuple[MunicipalPlace, ...],
+    mesh: MalhaCarregada,
+) -> ComparativoTurnos | None:
+    """Só existe quando alguma UF importada tem 2º turno de governador."""
+    if not finalistas_de_governador(primeiro, segundo):
+        return None
+    return comparar_turnos(
+        primeiro,
+        segundo,
+        mesh.ponte,
+        mesh.codigos_municipio,
+        mesh.codigos_uf,
+        mesh.manifesto.brasil_id,
+        cargo=GOVERNADOR,
     )
 
 

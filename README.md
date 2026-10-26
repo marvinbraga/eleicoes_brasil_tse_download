@@ -366,9 +366,47 @@ O arquivo sai em `relatorios/mapa-{cargo}-{ano}-turno-{turno}.html`. `--atualiza
 
 Com o mapa do 1º turno, quando já há boletins do 2º turno importados, o arquivo ganha a visão **1º × 2º turno** (`#visao=turnos`). Ela mostra, por município, UF e país, os votos dos dois finalistas, dos eliminados, os brancos, os nulos e o total de cédulas nos dois turnos, com a variação.
 
-O seletor **Cenário de apoio no 2º turno** redistribui os votos dos eliminados: todos para o apoiado (padrão), 75% para ele, metade para cada, como no 1º turno ou 75% para o outro finalista. A fatia esperada do apoiado entre os votos dos finalistas é comparada com a real. A **anomalia** é o z robusto (mediana e MAD) dessa diferença contra os municípios da mesma UF: acima de 2 em módulo é desvio moderado, acima de 3,5 fica fora do esperado. Municípios com menos de 1.000 votos dos finalistas e grupos com menos de 8 lugares ficam sem z. País e UFs sem grupo são pintados pela diferença do cenário. Desvio indica onde o cenário explica mal o voto; não prova irregularidade. O modelo não move quem votou em branco ou nulo no 1º turno, quem faltou a um dos turnos nem quem trocou de finalista.
+O seletor **Cenário de apoio no 2º turno** redistribui os votos dos eliminados: todos para o apoiado (padrão), 75% para ele, metade para cada, como no 1º turno ou 75% para o outro finalista. A opção **Personalizado** abre um destino por eliminado: os que tiveram ao menos 1% dos válidos do país no 1º turno aparecem um a um e os outros ficam juntos em **Demais**. Cada um pode ir todo para um finalista, 75%, metade, 25% ou seguir a divisão do 1º turno. A página recalcula o esperado e o z no navegador e guarda a escolha no endereço (`&personalizado=70a14b55m0p`: número do partido, ou `0` para os demais, seguido de `a` todos para o apoiado, `q` 75%, `m` metade, `u` 25%, `b` todos para o outro, `p` como no 1º turno). A fatia esperada do apoiado entre os votos dos finalistas é comparada com a real. A **anomalia** é o z robusto (mediana e MAD) dessa diferença contra os municípios da mesma UF: acima de 2 em módulo é desvio moderado, acima de 3,5 fica fora do esperado. Municípios com menos de 1.000 votos dos finalistas e grupos com menos de 8 lugares ficam sem z. País e UFs sem grupo são pintados pela diferença do cenário. Desvio indica onde o cenário explica mal o voto; não prova irregularidade. O modelo não move quem votou em branco ou nulo no 1º turno, quem faltou a um dos turnos nem quem trocou de finalista.
 
-O 2º turno gravado no banco só é reaproveitado enquanto cobre as mesmas UFs importadas. Depois de importar uma UF nova, rode o mapa de novo e o 2º turno é recalculado.
+O cenário **Estimado pelos dados** usa, em cada UF, a parte dos votos dos eliminados que a regressão ecológica (`scripts/estimar_transferencia.py`) atribui ao apoiado; UFs com menos de 12 municípios e o exterior usam a média ponderada. A tabela de cada lugar mostra também o comparecimento e a abstenção do boletim de presidente nos dois turnos, e **Pintar por → Abstenção** mostra a variação da taxa. A abstenção ainda não entra na conta do esperado. A legenda traz a referência de 2022 (`dados/calibracao_turnos_2022.json`, gerado por `scripts/calibrar_turnos_2022.py`): numa eleição sem contestação, cerca de 1% dos municípios já fica fora do esperado em cada cenário.
+
+Quando alguma UF importada tem 2º turno de governador, o mesmo arquivo ganha a visão **Governador 1º × 2º** (`#visao=turnosgov`). Só entram essas UFs, e cada uma tem os seus finalistas: os dois mais votados do 2º turno na UF, com o mais votado deles no 1º turno como 1º colocado. Os cenários são metade para cada, como no 1º turno, todos para o 1º colocado e todos para o 2º colocado do 1º turno. Os municípios são comparados dentro da UF, como no presidente. Não há país nem exterior. Sem 2º turno de governador importado, a visão não aparece.
+
+O botão **Baixar CSV**, no painel do cenário das duas visões, grava os municípios (e as cidades do exterior) no cenário escolhido: nome, UF, código IBGE (o do TSE no exterior), finalistas, votos de cada grupo nos dois turnos, fatia esperada e real do finalista A, diferença em pontos e em votos, z e classe. As linhas vêm do maior |z| para o menor. O arquivo usa ponto e vírgula, vírgula decimal e BOM de UTF-8, e abre direto no Excel em português.
+
+O 2º turno gravado no banco só é reaproveitado enquanto cobre as mesmas UFs importadas e nenhuma UF foi importada depois que ele foi gravado. Cada `boletins` deixa uma marca em `raw.carga` (conjunto `boletins-<ano>`). Assim, importar de novo uma UF que já estava no banco, por exemplo depois de baixar boletins que faltavam, também refaz o 2º turno na próxima vez que o mapa rodar. UFs importadas antes dessa marca existir valem só pela checagem das UFs.
+
+#### Importar o 2º turno enquanto ele chega
+
+Com o download do 2º turno rodando (`scripts/manter_urnas_2026.py --turno 2`), abra outro terminal na raiz do projeto:
+
+```bash
+uv run python scripts/acompanhar_turno_2026.py
+```
+
+A cada 120 s o script lê `logs/urnas-2026-turno-2/resumo.log`. Quando a última linha de uma UF é `fim XX saída=0` e ela ainda não foi importada depois dessa linha, ele roda `boletins --ano 2026 --turno 2 --uf XX` e, depois do lote, refaz o mapa de presidente sem abrir o navegador. O exterior (`ZZ`) entra como as outras UFs. Se o download passa de novo por uma UF sem trazer arquivo novo, ela não é importada outra vez. O script para quando as 27 UFs e o exterior estão importados, ou com Ctrl+C.
+
+- `--intervalo 300` muda a espera entre as passadas.
+- `--uma-vez` faz uma passada só e sai.
+
+Ficam na mesma pasta: `importados.log` (o que já foi importado), `acompanhar.log` (o resumo), `importar-XX.log` (a saída de cada importação) e `mapa.log`. Só uma cópia do script roda por vez.
+
+### Seções no 1º × 2º turno
+
+A mesma comparação, seção por seção, para as UFs que já têm 2º turno de presidente no banco:
+
+```bash
+uv run python scripts/relatorio_secoes_turnos.py --ano 2026 --sem-navegador
+```
+
+O HTML sai em `relatorios/secoes-turnos-{ano}.html` e o CSV com todas as seções pareadas fica ao lado, com o mesmo nome. As seções se pareiam por UF, município, zona e número; as que só aparecem num turno entram só na contagem. As cédulas são os votos de presidente nominais, brancos e nulos do boletim. O z robusto compara cada seção com as do mesmo município; município com menos de 8 seções comparáveis usa a zona, e zona pequena usa a UF. Seções com menos de 150 votos válidos no 1º turno ou de finalista no 2º ficam sem z. Ao lado de cada contagem de |z| > 3,5 vem o número que a normal esperaria por acaso. As verificações objetivas (cédulas acima dos aptos, cédulas que mudam mais de 50% entre os turnos, aptos que mudam mais de 5%) ficam separadas do z. Nada disso prova irregularidade. O frontend mostra o arquivo em **Seções 1º × 2º turno**.
+
+| Opção | Padrão | Uso |
+| --- | --- | --- |
+| `--ano` | `2026` | Ano da eleição. |
+| `--destino` | `relatorios/secoes-turnos-{ano}.html` | Caminho completo do HTML; o CSV troca a extensão. |
+| `--sem-navegador` | abre o navegador | Grava os arquivos e deixa o navegador fechado. |
+| `--apoiado` | `22` | Finalista que os eliminados apoiaram no 2º turno. Ordena os cenários. |
 
 ## Entender os arquivos da seção
 

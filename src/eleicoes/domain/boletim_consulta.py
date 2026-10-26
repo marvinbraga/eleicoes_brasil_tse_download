@@ -346,6 +346,45 @@ class BlankNullProjection:
         _require_count(self.quantidade, "quantidade")
 
 
+@dataclass(frozen=True, slots=True)
+class VotosSecao:
+    """Uma seção num cargo: votos por número, branco, nulo e eleitores aptos.
+
+    ``nominais`` guarda pares (número, votos) em ordem de número, sem repetir número.
+    """
+
+    municipio: int
+    zona: int
+    secao: int
+    eleitores_aptos: int
+    eleitores_complemento: int
+    branco: int
+    nulo: int
+    nominais: tuple[tuple[int, int], ...]
+
+    def __post_init__(self) -> None:
+        _require_range(self.municipio, 1, _MAX_MUNICIPIO, "municipio")
+        _require_range(self.zona, 1, _MAX_ZONA, "zona")
+        _require_range(self.secao, 1, _MAX_SECAO, "secao")
+        _require_count(self.eleitores_aptos, "eleitores_aptos")
+        _require_count(self.eleitores_complemento, "eleitores_complemento")
+        _require_count(self.branco, "branco")
+        _require_count(self.nulo, "nulo")
+        for numero, votos in self.nominais:
+            _require_range(numero, 0, _MAX_NUMERO, "numero")
+            _require_count(votos, "quantidade")
+        numeros = tuple(numero for numero, _ in self.nominais)
+        if numeros != tuple(sorted(set(numeros))):
+            raise InvalidBoletimConsultaError("nominais")
+
+    @property
+    def cedulas(self) -> int:
+        return sum(votos for _, votos in self.nominais) + self.branco + self.nulo
+
+    def votos(self, numero: int) -> int:
+        return dict(self.nominais).get(numero, 0)
+
+
 def require_cargo(cargo: str) -> str:
     if not isinstance(cargo, str) or cargo.strip() == "":
         raise InvalidCargoError(cargo)
@@ -377,9 +416,7 @@ def require_secao(secao: int) -> int:
 
 # Candidatos a presidente em 2026. A urna grava qualquer número digitado como
 # voto nominal; a totalização do TSE conta número sem candidato como nulo.
-_PRESIDENTIAL_CANDIDATES: Final = frozenset(
-    {13, 14, 16, 21, 22, 27, 29, 30, 35, 55, 70, 80}
-)
+_PRESIDENTIAL_CANDIDATES: Final = frozenset({13, 14, 16, 21, 22, 27, 29, 30, 35, 55, 70, 80})
 
 
 def partido_tem_candidato(cargo: str, partido: int) -> bool:

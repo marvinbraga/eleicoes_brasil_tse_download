@@ -6,6 +6,7 @@ from fractions import Fraction
 
 from eleicoes.adapters.html_mapa import html_do_mapa
 from eleicoes.domain.mapa import Marca, PaginaDoMapa, Pintura, PontoPintado, RecortePintado
+from eleicoes.domain.mapa_turnos import Apuracao, Leitura, LugarTurnos
 
 _LOGO = "data:image/png;base64,QQ=="
 _MUNICIPIOS = (
@@ -269,7 +270,8 @@ def test_legend_lists_parties_with_marks_and_acronyms() -> None:
     assert "function montarLegenda()" in html
     assert "function resumoDaLideranca(linha)" in html
     assert "new ol.control.Control({element: painelLegenda})" in html
-    assert "alternarLegenda(painelLegenda.parentElement.clientWidth >= 640);" in html
+    assert 'var TELA_ESTREITA = window.matchMedia("(max-width: 640px)").matches;' in html
+    assert "alternarLegenda(!TELA_ESTREITA);" in html
     assert 'return sigla ? sigla + " " + numero : String(numero);' in html
     assert 'posicao + " · " + nomeDoPartido(numero)' in html
     assert "amostra.style.background = linha.cor;" in html
@@ -344,7 +346,7 @@ def test_page_carries_the_other_views_for_the_switcher() -> None:
     assert 'return "#visao=" + nome;' in html
     assert 'window.addEventListener("hashchange", function () {' in html
     assert "new ol.control.Control({element: painelVisoes})" in html
-    assert 'if (nome === "governador" || nome === "turnos") {' in html
+    assert 'if (nome === "governador" || ehComparativo(nome)) {' in html
 
 
 def test_page_without_extra_views_has_no_other_views() -> None:
@@ -443,3 +445,108 @@ def test_page_without_second_round_has_no_turnos() -> None:
 
     assert pintura["turnos"] is None
     assert "turnos" not in pintura["titulos"]
+
+
+def _lugar_de_bujari(primeiro: Apuracao) -> LugarTurnos:
+    leitura = Leitura(Fraction(1, 2), Fraction(13, 25), 20, None, "sem_base")
+    return LugarTurnos(
+        "1200138",
+        "BUJARI (AC)",
+        "AC",
+        primeiro,
+        Apuracao(520, 480, 0, 3, 4),
+        (leitura,) * 5,
+    )
+
+
+def test_turnos_payload_carries_the_eliminated_groups_per_place() -> None:
+    from eleicoes.domain.mapa_turnos import ComparativoTurnos as Comparativo
+    from eleicoes.domain.mapa_turnos import GrupoEliminado, cenarios
+
+    lugar = _lugar_de_bujari(Apuracao(400, 500, 100, 1, 2, ((30, 20), (70, 70), (80, 10))))
+    grupos = (
+        GrupoEliminado(70, frozenset({70}), Fraction(289, 10000)),
+        GrupoEliminado(0, frozenset({30, 80}), Fraction(37, 10000)),
+    )
+    comparativo = Comparativo(
+        22, 13, cenarios(22, 13), None, (), (lugar,), (), ("AC",), 0, (), grupos
+    )
+    html = html_do_mapa(replace(_page(), turnos=comparativo))
+    turnos = json.loads(_block(html, "pintura"))["turnos"]
+
+    assert turnos["eliminados"] == [
+        {"numero": "70", "fatia": 0.0289},
+        {"numero": "0", "fatia": 0.0037},
+    ]
+    assert turnos["municipios"][0]["eliminados"] == [70, 30]
+    assert [item["parte"] for item in turnos["cenarios"]] == [1.0, 0.75, 0.5, None, 0.25]
+    assert 'opcoes.push([PERSONALIZADO, "Personalizado"]);' in html
+    assert '"&personalizado=" + codigoDosDestinos()' in html
+
+
+def test_turnos_without_groups_omit_the_breakdown() -> None:
+    from eleicoes.domain.mapa_turnos import ComparativoTurnos as Comparativo
+    from eleicoes.domain.mapa_turnos import cenarios
+
+    lugar = _lugar_de_bujari(Apuracao(400, 500, 0, 1, 2))
+    comparativo = Comparativo(22, 13, cenarios(22, 13), None, (), (lugar,), (), ("AC",), 0, ())
+    turnos = json.loads(_block(html_do_mapa(replace(_page(), turnos=comparativo)), "pintura"))[
+        "turnos"
+    ]
+
+    assert turnos["eliminados"] == []
+    assert "eliminados" not in turnos["municipios"][0]
+
+
+def test_governor_turnos_carry_the_finalists_of_each_uf() -> None:
+    from eleicoes.domain.mapa_turnos import GOVERNADOR, cenarios_de_governador
+    from eleicoes.domain.mapa_turnos import ComparativoTurnos as Comparativo
+
+    lugar = replace(
+        _lugar_de_bujari(Apuracao(400, 500, 0, 1, 2)),
+        leituras=(Leitura(Fraction(1, 2), Fraction(13, 25), 20, None, "sem_base"),) * 4,
+    )
+    comparativo = Comparativo(
+        0,
+        0,
+        cenarios_de_governador(),
+        None,
+        (),
+        (lugar,),
+        (),
+        ("AC",),
+        0,
+        (),
+        cargo=GOVERNADOR,
+        finalistas_por_uf={"AC": (10, 11)},
+    )
+    html = html_do_mapa(replace(_page(), turnos_governador=comparativo))
+    pintura = json.loads(_block(html, "pintura"))
+
+    assert pintura["turnos"] is None
+    assert pintura["turnosgov"]["finalistas"] == {"AC": ["10", "11"]}
+    assert pintura["turnosgov"]["a"] is None
+    assert pintura["turnosgov"]["padrao"] == "dividido"
+    assert pintura["titulos"]["turnosgov"] == "Mapa de governador — 2026, 1º × 2º turno"
+    assert 'turnosgov: "Governador 1º × 2º"' in html
+    assert 'var chave = TURNOS.cargo + "|" + metrica + "|" + estadoTurnos.cenario +' in html
+
+
+def test_turnos_controls_export_a_csv_for_excel() -> None:
+    html = html_do_mapa(_page())
+
+    assert 'var baixar = elemento("button", "Baixar CSV");' in html
+    assert 'new Blob(["\\uFEFF" + linhas.join("\\r\\n") + "\\r\\n"],' in html
+    assert 'return campos.map(campoDoCsv).join(";");' in html
+    assert 'return valor.toFixed(casas).replace(".", ",");' in html
+
+
+def test_narrow_screens_fold_the_turnos_controls_and_scroll_the_views_bar() -> None:
+    html = html_do_mapa(_page())
+
+    assert " @media (max-width: 640px) {" in html
+    assert " #visoes { left: 2.6em; right: .5em; transform: none; overflow-x: auto;" in html
+    assert " #turnos-controles .alternar { display: block; } }" in html
+    assert 'var alternar = elemento("button", "Cenário e pintura");' in html
+    assert "var controlesAbertos = !TELA_ESTREITA;" in html
+    assert "painelVisoes.scrollLeft = botoes[i].offsetLeft -" in html

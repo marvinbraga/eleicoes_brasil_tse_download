@@ -75,7 +75,7 @@ def test_pairing_pads_tse_codes_and_counts_the_unpaired() -> None:
     pares, sem_par = parear(primeiro, segundo, 22, 13)
 
     assert [(par.uf, par.codigo) for par in pares] == [("AC", "01007")]
-    assert pares[0].primeiro == Apuracao(400, 500, 100, 0, 0)
+    assert pares[0].primeiro == Apuracao(400, 500, 100, 0, 0, ((30, 100),))
     assert sem_par == 2
 
 

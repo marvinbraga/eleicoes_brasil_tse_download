@@ -7,12 +7,14 @@ from typing import Final
 
 from eleicoes.domain.mapa import PaginaDoMapa, Pintura, PontoPintado, RecortePintado
 from eleicoes.domain.mapa_turnos import (
+    GOVERNADOR,
     LIMIAR_FORA,
     LIMIAR_MODERADO,
     MINIMO_NO_GRUPO,
     PISO_DE_VOTOS,
     Apuracao,
     ComparativoTurnos,
+    GrupoEliminado,
     LugarTurnos,
 )
 
@@ -20,6 +22,7 @@ _IBGE: Final = "Malha municipal e de estados: IBGE. Licença compatível com CC 
 _CARGO_NO_TITULO: Final = {"cruzamento": "presidente × governador"}
 _VIEWS: Final = ("presidente", "governador", "cruzamento")
 _TURNOS: Final = "turnos"
+_TURNOS_GOVERNADOR: Final = "turnosgov"
 _BASE_VIEW: Final = {"cruzamento": "presidente"}
 _REGIONS: Final = (
     "O recorte das regiões não entra neste mapa. A malha desse recorte ainda não foi medida."
@@ -106,10 +109,29 @@ _PAGE_CSS: Final = (
     " #turnos-controles select { font: 12px sans-serif; color: #111111; background: #ffffff;"
     " border: 1px solid #888888; border-radius: 4px; padding: .2em; max-width: 100%; }"
     " #turnos-controles small { opacity: .8; }"
+    " #turnos-controles .personalizado { display: flex; flex-direction: column; gap: .3em;"
+    " padding-left: .5em; border-left: 2px solid #cccccc; }"
+    " #turnos-controles .personalizado[hidden] { display: none; }"
+    " #turnos-controles .personalizado label { font-weight: normal; }"
+    " #turnos-controles button { font: 12px sans-serif; color: #111111; background: #ffffff;"
+    " border: 1px solid #888888; border-radius: 4px; padding: .3em .6em; cursor: pointer; }"
     " #detalhe table { border-collapse: collapse; margin-top: .2em; }"
     " #detalhe th, #detalhe td { padding: 0 .5em 0 0; text-align: right; font-weight: normal; }"
     " #detalhe th:first-child { text-align: left; }"
     " #detalhe thead th { opacity: .7; }"
+    " #turnos-controles { max-height: calc(100% - 6em); overflow: auto; }"
+    " #turnos-controles .corpo { display: flex; flex-direction: column; gap: .35em; }"
+    " #turnos-controles .corpo[hidden] { display: none; }"
+    " #turnos-controles .alternar { display: none; font-weight: bold; text-align: left; }"
+    " #turnos-controles .alternar::after { content: ' ▾'; }"
+    " #turnos-controles .alternar[aria-expanded='false']::after { content: ' ▸'; }"
+    " @media (max-width: 640px) {"
+    " #visoes { left: 2.6em; right: .5em; transform: none; overflow-x: auto;"
+    " scrollbar-width: none; }"
+    " #visoes button { flex: none; }"
+    " #legenda { top: 3.4em; max-height: calc(100% - 7.5em); }"
+    " #turnos-controles .alternar { display: block; } }"
+    " @media (min-width: 641px) { #turnos-controles .corpo[hidden] { display: flex; } }"
 )
 _PAGE_SCRIPT: Final = """\
 (function () {
@@ -117,15 +139,16 @@ _PAGE_SCRIPT: Final = """\
   var municipios = JSON.parse(document.getElementById("municipios").textContent);
   var ufs = JSON.parse(document.getElementById("ufs").textContent);
   var paises = JSON.parse(document.getElementById("paises").textContent);
-  var VISOES = ["presidente", "governador", "cruzamento", "turnos"];
+  var VISOES = ["presidente", "governador", "cruzamento", "turnos", "turnosgov"];
   var NOMES_DAS_VISOES = {
     presidente: "Presidente",
     governador: "Governador",
     cruzamento: "Presidente × governador",
-    turnos: "1º × 2º turno"
+    turnos: "1º × 2º turno",
+    turnosgov: "Governador 1º × 2º"
   };
   var CLASSES_DOS_TURNOS = ["fora_a", "moderado_a", "dentro", "moderado_b", "fora_b", "sem_base"];
-  var METRICAS = ["desvio", "residuo", "a", "b", "branco", "nulo", "cedulas"];
+  var METRICAS = ["desvio", "residuo", "a", "b", "branco", "nulo", "cedulas", "abstencao"];
   var CORES_DAS_CLASSES = {
     fora_a: "#2c5aa0",
     moderado_a: "#9dc0e8",
@@ -140,21 +163,133 @@ _PAGE_SCRIPT: Final = """\
   var COR_POSITIVA = [27, 120, 55];
   var COR_NEGATIVA = [118, 42, 131];
   var LIMITE_DO_MODELO = "O modelo só move os votos dos eliminados; quem votou em branco ou " +
-    "nulo no 1º turno, faltou a um dos turnos ou trocou de finalista fica fora dele. ";
-  var TURNOS = base.turnos || null;
-  var estadoTurnos = lerEstadoTurnos();
+    "nulo no 1º turno, faltou a um dos turnos ou trocou de finalista fica fora dele " +
+    "(a abstenção aparece na tabela do lugar, mas não entra na conta). ";
+  var PERSONALIZADO = "personalizado";
+  var DEMAIS = "0";
+  var DESTINOS = [
+    {letra: "a", parte: 1},
+    {letra: "q", parte: 0.75},
+    {letra: "m", parte: 0.5},
+    {letra: "u", parte: 0.25},
+    {letra: "b", parte: 0},
+    {letra: "p", parte: null}
+  ];
+
+  // <matematica-dos-turnos>
+  // Espelha leituras() de mapa_turnos.py para o cenário personalizado. Não toca no DOM:
+  // o teste de paridade recorta este trecho e o roda no node.
+  var K_MAD = 0.6745;
+  var K_MEDIA = 0.7979;
+
+  function esperadoDoCenario(primeiro, porGrupo, partes) {
+    var validos = primeiro[0] + primeiro[1] + primeiro[2];
+    if (validos === 0) {
+      return 0.5;
+    }
+    var finalistas = primeiro[0] + primeiro[1];
+    var proporcional = finalistas === 0 ? 0.5 : primeiro[0] / finalistas;
+    var movidos = 0;
+    for (var i = 0; i < partes.length; i++) {
+      movidos += (partes[i] === null ? proporcional : partes[i]) * porGrupo[i];
+    }
+    return (primeiro[0] + movidos) / validos;
+  }
+
+  function mediana(valores) {
+    var ordem = valores.slice().sort(function (x, y) {
+      return x - y;
+    });
+    var meio = Math.floor(ordem.length / 2);
+    return ordem.length % 2 ? ordem[meio] : (ordem[meio - 1] + ordem[meio]) / 2;
+  }
+
+  function escalaRobusta(valores) {
+    var centro = mediana(valores);
+    var desvios = valores.map(function (valor) {
+      return Math.abs(valor - centro);
+    });
+    var mad = mediana(desvios);
+    if (mad > 0) {
+      return mad / K_MAD;
+    }
+    var soma = 0;
+    for (var i = 0; i < desvios.length; i++) {
+      soma += desvios[i];
+    }
+    var media = soma / desvios.length;
+    return media > 0 ? media / K_MEDIA : null;
+  }
+
+  function arredondarParaPar(valor) {
+    var piso = Math.floor(valor);
+    if (Math.abs(valor - piso - 0.5) < 1e-9) {
+      return piso % 2 === 0 ? piso : piso + 1;
+    }
+    return Math.round(valor);
+  }
+
+  function classeDoZ(z, limiares) {
+    if (z > limiares.fora) {
+      return "fora_a";
+    }
+    if (z < -limiares.fora) {
+      return "fora_b";
+    }
+    return Math.abs(z) > limiares.moderado ? "moderado" : "dentro";
+  }
+
+  function lerGrupo(itens, esperados, regras) {
+    var reais = [];
+    var comparaveis = [];
+    var base = [];
+    for (var i = 0; i < itens.length; i++) {
+      var primeiro = itens[i].primeiro;
+      var finalistas = itens[i].segundo[0] + itens[i].segundo[1];
+      reais.push(finalistas > 0 ? itens[i].segundo[0] / finalistas : 0.5);
+      comparaveis.push(primeiro[0] + primeiro[1] + primeiro[2] >= regras.piso &&
+        finalistas >= regras.piso);
+      if (comparaveis[i]) {
+        base.push(reais[i] - esperados[i]);
+      }
+    }
+    var escala = base.length >= regras.minimo ? escalaRobusta(base) : null;
+    var centro = escala !== null ? mediana(base) : 0;
+    return itens.map(function (item, indice) {
+      var residuo = reais[indice] - esperados[indice];
+      var votos = arredondarParaPar(residuo * (item.segundo[0] + item.segundo[1]));
+      if (escala === null || !comparaveis[indice]) {
+        return [esperados[indice], votos, null, "sem_base"];
+      }
+      var z = (residuo - centro) / escala;
+      return [esperados[indice], votos, z, classeDoZ(z, regras.limiares)];
+    });
+  }
+  // </matematica-dos-turnos>
+
+  var COMPARATIVOS = {turnos: base.turnos || null, turnosgov: base.turnosgov || null};
+  var ESTADOS = {};
+  var TURNOS = null;
+  var estadoTurnos = null;
   var BASES = {};
   BASES[baseDaVisao(base.cargo)] = base;
   Object.keys(base.visoes || {}).forEach(function (nome) {
     BASES[nome] = Object.assign({}, base, base.visoes[nome]);
   });
-  if (TURNOS) {
-    BASES.turnos = pinturaDosTurnos();
-  }
+  Object.keys(COMPARATIVOS).forEach(function (nome) {
+    if (COMPARATIVOS[nome]) {
+      usarComparativo(nome);
+      recalcularPersonalizado();
+      BASES[nome] = pinturaDosTurnos(nome);
+    }
+  });
   var visaoAtual = visaoDoEndereco() || base.cargo;
   var pintura = dadosDaVisao(visaoAtual);
   var CRUZAMENTO = visaoAtual === "cruzamento";
-  var COMPARATIVO = visaoAtual === "turnos";
+  var COMPARATIVO = ehComparativo(visaoAtual);
+  if (COMPARATIVO) {
+    usarComparativo(visaoAtual);
+  }
   var ORDEM_DAS_CLASSES = ["consolidacao", "terreno_de_virada", "em_aberto", "sem_governador"];
   var CLASSES = {
     consolidacao: {
@@ -871,9 +1006,38 @@ _PAGE_SCRIPT: Final = """\
     return novo;
   }
 
+  function ehComparativo(nome) {
+    return COMPARATIVOS.hasOwnProperty(nome);
+  }
+
+  function usarComparativo(nome) {
+    TURNOS = COMPARATIVOS[nome];
+    if (!ESTADOS[nome]) {
+      ESTADOS[nome] = lerEstadoTurnos(nome);
+    }
+    estadoTurnos = ESTADOS[nome];
+  }
+
+  function doGovernador() {
+    return Boolean(TURNOS && TURNOS.cargo === "governador");
+  }
+
+  // No governador cada UF tem os seus finalistas; os textos gerais falam do 1º e do 2º colocado.
+  function rotuloA() {
+    return doGovernador() ? "1º colocado" : TURNOS.a;
+  }
+
+  function rotuloB() {
+    return doGovernador() ? "2º colocado" : TURNOS.b;
+  }
+
+  function finalistasDe(item) {
+    return doGovernador() ? TURNOS.finalistas[item.uf] : [TURNOS.a, TURNOS.b];
+  }
+
   function rotuloDaClasse(chave) {
-    var a = TURNOS ? TURNOS.a : "A";
-    var b = TURNOS ? TURNOS.b : "B";
+    var a = TURNOS ? rotuloA() : "A";
+    var b = TURNOS ? rotuloB() : "B";
     return {
       fora_a: "Fora do esperado: " + a + " acima",
       moderado_a: "Desvio moderado: " + a + " acima",
@@ -885,8 +1049,8 @@ _PAGE_SCRIPT: Final = """\
   }
 
   function nomeDaMetrica(chave) {
-    var a = TURNOS ? nomeDoPartido(TURNOS.a) : "A";
-    var b = TURNOS ? nomeDoPartido(TURNOS.b) : "B";
+    var a = !TURNOS ? "A" : doGovernador() ? "1º colocado do 1º turno" : nomeDoPartido(TURNOS.a);
+    var b = !TURNOS ? "B" : doGovernador() ? "2º colocado do 1º turno" : nomeDoPartido(TURNOS.b);
     return {
       desvio: "Anomalia no cenário",
       residuo: "Diferença do cenário (p.p.)",
@@ -894,26 +1058,113 @@ _PAGE_SCRIPT: Final = """\
       b: "Votos do " + b,
       branco: "Brancos",
       nulo: "Nulos",
-      cedulas: "Total de cédulas"
+      cedulas: "Total de cédulas",
+      abstencao: "Abstenção"
     }[chave];
   }
 
-  function lerEstadoTurnos() {
-    var estado = {cenario: "", metrica: "desvio"};
+  function lerEstadoTurnos(nome) {
+    var estado = {cenario: "", metrica: "desvio", destinos: {}};
     if (!TURNOS) {
       return estado;
     }
     estado.cenario = TURNOS.padrao;
+    semearDestinos(estado, TURNOS.cenarios[0].parte);
     var hash = window.location.hash;
+    var visao = /(?:^|[#&])visao=([a-z]+)/.exec(hash);
+    if (!visao || visao[1] !== nome) {
+      return estado;
+    }
     var cenario = /(?:^|[#&])cenario=([a-z]+)/.exec(hash);
-    if (cenario && indiceDoCenario(cenario[1]) >= 0) {
+    if (cenario && (indiceDoCenario(cenario[1]) >= 0 ||
+        cenario[1] === PERSONALIZADO && temPersonalizado())) {
       estado.cenario = cenario[1];
+    }
+    var escolhas = /(?:^|[#&])personalizado=([a-z0-9]+)/.exec(hash);
+    if (escolhas) {
+      lerDestinos(estado, escolhas[1]);
     }
     var metrica = /(?:^|[#&])pintar=([a-z]+)/.exec(hash);
     if (metrica && METRICAS.indexOf(metrica[1]) >= 0) {
       estado.metrica = metrica[1];
     }
     return estado;
+  }
+
+  function temPersonalizado() {
+    return Boolean(TURNOS && TURNOS.eliminados && TURNOS.eliminados.length);
+  }
+
+  function destinoDaLetra(letra) {
+    for (var i = 0; i < DESTINOS.length; i++) {
+      if (DESTINOS[i].letra === letra) {
+        return DESTINOS[i];
+      }
+    }
+    return null;
+  }
+
+  function letraDaParte(parte) {
+    for (var i = 0; i < DESTINOS.length; i++) {
+      if (DESTINOS[i].parte === parte) {
+        return DESTINOS[i].letra;
+      }
+    }
+    return "p";
+  }
+
+  function semearDestinos(estado, parte) {
+    (TURNOS.eliminados || []).forEach(function (grupo) {
+      estado.destinos[grupo.numero] = letraDaParte(parte);
+    });
+  }
+
+  function lerDestinos(estado, codigo) {
+    var par = /([0-9]+)([a-z])/g;
+    var achado = par.exec(codigo);
+    while (achado) {
+      if (estado.destinos.hasOwnProperty(achado[1]) && destinoDaLetra(achado[2])) {
+        estado.destinos[achado[1]] = achado[2];
+      }
+      achado = par.exec(codigo);
+    }
+  }
+
+  function codigoDosDestinos() {
+    return (TURNOS.eliminados || []).map(function (grupo) {
+      return grupo.numero + estadoTurnos.destinos[grupo.numero];
+    }).join("");
+  }
+
+  function partesEscolhidas() {
+    return TURNOS.eliminados.map(function (grupo) {
+      return destinoDaLetra(estadoTurnos.destinos[grupo.numero]).parte;
+    });
+  }
+
+  function recalcularPersonalizado() {
+    if (estadoTurnos.cenario !== PERSONALIZADO) {
+      return;
+    }
+    var partes = partesEscolhidas();
+    var regras = {piso: TURNOS.piso, minimo: TURNOS.minimo, limiares: TURNOS.limiares};
+    var porUf = {};
+    TURNOS.municipios.forEach(function (item) {
+      (porUf[item.uf] = porUf[item.uf] || []).push(item);
+    });
+    var grupos = Object.keys(porUf).map(function (uf) {
+      return porUf[uf];
+    });
+    grupos.push(TURNOS.exterior, TURNOS.ufs, TURNOS.pais ? [TURNOS.pais] : []);
+    grupos.forEach(function (itens) {
+      var esperados = itens.map(function (item) {
+        return esperadoDoCenario(item.primeiro, item.eliminados, partes);
+      });
+      var lidas = lerGrupo(itens, esperados, regras);
+      itens.forEach(function (item, indice) {
+        item.personalizada = lidas[indice];
+      });
+    });
   }
 
   function indiceDoCenario(chave) {
@@ -926,7 +1177,33 @@ _PAGE_SCRIPT: Final = """\
   }
 
   function cenarioAtual() {
+    if (estadoTurnos.cenario === PERSONALIZADO) {
+      return {
+        chave: PERSONALIZADO,
+        rotulo: "Personalizado",
+        descricao: "Cada eliminado segue o destino escolhido: " +
+          TURNOS.eliminados.map(function (grupo) {
+            return nomeDoGrupo(grupo) + ", " +
+              nomeDoDestino(estadoTurnos.destinos[grupo.numero]).toLowerCase();
+          }).join("; ") + "."
+      };
+    }
     return TURNOS.cenarios[indiceDoCenario(estadoTurnos.cenario)];
+  }
+
+  function nomeDoGrupo(grupo) {
+    return grupo.numero === DEMAIS ? "Demais" : nomeDoPartido(grupo.numero);
+  }
+
+  function nomeDoDestino(letra) {
+    return {
+      a: "Todos para o " + TURNOS.a,
+      q: "75% para o " + TURNOS.a,
+      m: "Metade para cada",
+      u: "25% para o " + TURNOS.a,
+      b: "Todos para o " + TURNOS.b,
+      p: "Como no 1º turno"
+    }[letra];
   }
 
   function cedulas(contas) {
@@ -934,7 +1211,8 @@ _PAGE_SCRIPT: Final = """\
   }
 
   function leituraAtual(item) {
-    var lida = item.leituras[indiceDoCenario(estadoTurnos.cenario)];
+    var lida = estadoTurnos.cenario === PERSONALIZADO ? item.personalizada :
+      item.leituras[indiceDoCenario(estadoTurnos.cenario)];
     var finalistas = item.segundo[0] + item.segundo[1];
     return {
       esperado: lida[0],
@@ -952,7 +1230,15 @@ _PAGE_SCRIPT: Final = """\
     return lida.classe;
   }
 
+  function taxaDeAbstencao(aptos, comparecimento) {
+    return aptos > 0 ? (aptos - comparecimento) / aptos : 0;
+  }
+
   function valorDaMetrica(item, metrica) {
+    if (metrica === "abstencao") {
+      var p = item.participacao;
+      return p ? (taxaDeAbstencao(p[2], p[3]) - taxaDeAbstencao(p[0], p[1])) * 100 : 0;
+    }
     if (metrica === "residuo") {
       var lida = leituraAtual(item);
       return (lida.real - lida.esperado) * 100;
@@ -975,7 +1261,8 @@ _PAGE_SCRIPT: Final = """\
   }
 
   function limiteDaMetrica(metrica) {
-    var chave = metrica + "|" + estadoTurnos.cenario;
+    var chave = TURNOS.cargo + "|" + metrica + "|" + estadoTurnos.cenario +
+      (estadoTurnos.cenario === PERSONALIZADO ? "|" + codigoDosDestinos() : "");
     if (LIMITES_DAS_METRICAS[chave]) {
       return LIMITES_DAS_METRICAS[chave];
     }
@@ -1039,9 +1326,9 @@ _PAGE_SCRIPT: Final = """\
     return pintado;
   }
 
-  function pinturaDosTurnos() {
+  function pinturaDosTurnos(nome) {
     return Object.assign({}, base, {
-      cargo: "turnos",
+      cargo: nome,
       pais: TURNOS.pais ? itemDosTurnos(TURNOS.pais) : null,
       ufs: TURNOS.ufs.map(itemDosTurnos),
       municipios: TURNOS.municipios.map(itemDosTurnos),
@@ -1095,9 +1382,10 @@ _PAGE_SCRIPT: Final = """\
       cabeca.appendChild(celula);
     });
     var corpo = tabela.createTBody();
+    var dupla = finalistasDe(item);
     var linhas = [
-      [nomeDoPartido(TURNOS.a), 0],
-      [nomeDoPartido(TURNOS.b), 1],
+      [nomeDoPartido(dupla[0]), 0],
+      [nomeDoPartido(dupla[1]), 1],
       ["Eliminados", 2],
       ["Brancos", 3],
       ["Nulos", 4]
@@ -1106,16 +1394,21 @@ _PAGE_SCRIPT: Final = """\
       linhaDaTabela(corpo, linha[0], item.primeiro[linha[1]], item.segundo[linha[1]]);
     });
     linhaDaTabela(corpo, "Cédulas", cedulas(item.primeiro), cedulas(item.segundo));
+    var p = item.participacao;
+    if (p) {
+      linhaDaTabela(corpo, "Comparecimento", p[1], p[3]);
+      linhaDaTabela(corpo, "Abstenção", p[0] - p[1], p[2] - p[3]);
+    }
     painelDetalhe.appendChild(tabela);
     var cenario = cenarioAtual();
     var lida = leituraAtual(item);
     painelDetalhe.appendChild(elemento("div", "Cenário: " + cenario.rotulo)).className = "secao";
     painelDetalhe.appendChild(elemento("div",
-      "Esperado para o " + TURNOS.a + ": " + fatia(lida.esperado) +
+      "Esperado para o " + dupla[0] + ": " + fatia(lida.esperado) +
         " dos votos dos finalistas · real: " + fatia(lida.real)));
     painelDetalhe.appendChild(elemento("div",
       "Diferença: " + decimal((lida.real - lida.esperado) * 100, 2) + " p.p. (≈ " +
-        comSinal(lida.votos) + " votos para o " + TURNOS.a + ")"));
+        comSinal(lida.votos) + " votos para o " + dupla[0] + ")"));
     var classe = classeVisivel(lida);
     var linha = elemento("div", "");
     linha.className = "classe";
@@ -1149,7 +1442,7 @@ _PAGE_SCRIPT: Final = """\
     }
     if (agregado(item)) {
       return "País e UFs sem grupo de comparação (menos de " + TURNOS.minimo +
-        " UFs importadas) são pintados pela diferença do cenário: verde, o " + TURNOS.a +
+        " UFs importadas) são pintados pela diferença do cenário: verde, o " + rotuloA() +
         " acima do esperado; roxo, abaixo.";
     }
     return "Fica sem z quando o lugar tem menos de " + milhar(TURNOS.piso) +
@@ -1157,7 +1450,7 @@ _PAGE_SCRIPT: Final = """\
   }
 
   function montarLegendaDosTurnos() {
-    botaoLegenda.textContent = "1º × 2º turno";
+    botaoLegenda.textContent = NOMES_DAS_VISOES[visaoAtual];
     var lista = painelLegenda.querySelector("ul");
     var metrica = estadoTurnos.metrica;
     if (metrica === "desvio") {
@@ -1200,8 +1493,16 @@ _PAGE_SCRIPT: Final = """\
   }
 
   function notaDosTurnos(metrica) {
-    var cobertura = "2º turno importado em " + TURNOS.cobertura.length + " de 28 recortes (" +
-      TURNOS.cobertura.join(", ") + "). ";
+    var cobertura = doGovernador() ?
+      "2º turno de governador importado em " + TURNOS.cobertura.length +
+        (TURNOS.cobertura.length === 1 ? " UF (" : " UFs (") +
+        TURNOS.cobertura.map(function (uf) {
+          var dupla = TURNOS.finalistas[uf];
+          return uf + ": " + nomeDoPartido(dupla[0]) + " × " + nomeDoPartido(dupla[1]);
+        }).join("; ") + "). Sem soma do país: aproxime o mapa para ver essas UFs. " :
+      "2º turno importado em " + TURNOS.cobertura.length + " de 28 recortes (" +
+        TURNOS.cobertura.join(", ") + "). ";
+    var cargo = doGovernador() ? "governador" : "presidente";
     var pais = TURNOS.pais ? resumoDoPais() : "";
     if (metrica === "desvio") {
       return nomeDaMetrica(metrica) + ". Cenário: " + cenarioAtual().descricao + " " + pais +
@@ -1209,19 +1510,47 @@ _PAGE_SCRIPT: Final = """\
         decimal(TURNOS.limiares.moderado, 1).replace("+", "") + " moderado, > " +
         decimal(TURNOS.limiares.fora, 1).replace("+", "") + " fora do esperado). " +
         "Desvio aponta onde o cenário explica mal o voto; não prova irregularidade. " +
-        "País e UFs sem grupo usam a diferença do cenário (verde: " + TURNOS.a +
+        notaDaCalibracao() +
+        "País e UFs sem grupo usam a diferença do cenário (verde: " + rotuloA() +
         " acima; roxo: abaixo). " + LIMITE_DO_MODELO + cobertura;
     }
     if (metrica === "residuo") {
-      return "Fatia real do " + TURNOS.a + " entre os finalistas menos a esperada no cenário. " +
+      return "Fatia real do " + rotuloA() + " entre os finalistas menos a esperada no cenário. " +
         cenarioAtual().descricao + " " + pais + LIMITE_DO_MODELO + cobertura;
     }
+    if (metrica === "abstencao") {
+      return "Variação da taxa de abstenção (eleitores aptos que não votaram) do 1º para o 2º " +
+        "turno, em pontos percentuais. Comparecimento do boletim de " + cargo + ". " + cobertura;
+    }
     if (metrica === "cedulas") {
-      return "Variação do total de cédulas de presidente (válidos, brancos e nulos) do 1º " +
+      return "Variação do total de cédulas de " + cargo + " (válidos, brancos e nulos) do 1º " +
         "para o 2º turno. " + cobertura;
     }
-    return nomeDaMetrica(metrica) + ": variação da fatia nas cédulas de presidente do 1º para " +
+    return nomeDaMetrica(metrica) + ": variação da fatia nas cédulas de " + cargo + " do 1º para " +
       "o 2º turno, em pontos percentuais. A tabela do lugar mostra os votos. " + cobertura;
+  }
+
+  function metricaDisponivel(chave) {
+    return chave !== "abstencao" || TURNOS.municipios.some(function (item) {
+      return Boolean(item.participacao);
+    });
+  }
+
+  function notaDaCalibracao() {
+    var calibracao = TURNOS.calibracao;
+    if (!calibracao || doGovernador()) {
+      return "";
+    }
+    var fora = calibracao.fora[estadoTurnos.cenario];
+    var moderado = calibracao.moderado[estadoTurnos.cenario];
+    if (fora === undefined || moderado === undefined) {
+      return "";
+    }
+    return "Referência: em " + calibracao.ano + ", eleição sem contestação, este método marcou " +
+      fatia(fora) + " dos municípios como fora do esperado (" + milhar(calibracao.lugares) +
+      " pareados; a normal daria " + fatia(calibracao.normal) + ") e " + fatia(moderado) +
+      " acima do moderado. Então espere cerca de 1% de municípios fora do esperado mesmo sem " +
+      "nada de errado. ";
   }
 
   function resumoDoPais() {
@@ -1232,28 +1561,158 @@ _PAGE_SCRIPT: Final = """\
   }
 
   function montarControlesDosTurnos() {
+    painelTurnos.textContent = "";
     if (!TURNOS) {
       painelTurnos.hidden = true;
       return;
     }
-    var cenario = seletor("Cenário de apoio no 2º turno", TURNOS.cenarios.map(function (item) {
+    var opcoes = TURNOS.cenarios.map(function (item) {
       return [item.chave, item.rotulo];
-    }), estadoTurnos.cenario, function (valor) {
-      estadoTurnos.cenario = valor;
-      descricao.textContent = cenarioAtual().descricao;
-      atualizarTurnos();
     });
-    var metrica = seletor("Pintar por", METRICAS.map(function (chave) {
+    if (temPersonalizado()) {
+      opcoes.push([PERSONALIZADO, "Personalizado"]);
+    }
+    var cenario = seletor("Cenário de apoio no 2º turno", opcoes, estadoTurnos.cenario,
+      function (valor) {
+        var anterior = TURNOS.cenarios[indiceDoCenario(estadoTurnos.cenario)];
+        if (valor === PERSONALIZADO && anterior) {
+          semearDestinos(estadoTurnos, anterior.parte);
+          marcarDestinos(personalizado);
+        }
+        estadoTurnos.cenario = valor;
+        personalizado.hidden = valor !== PERSONALIZADO;
+        atualizarTurnos();
+        descricao.textContent = cenarioAtual().descricao;
+      });
+    var metrica = seletor("Pintar por", METRICAS.filter(metricaDisponivel).map(function (chave) {
       return [chave, nomeDaMetrica(chave)];
     }), estadoTurnos.metrica, function (valor) {
       estadoTurnos.metrica = valor;
       atualizarTurnos();
     });
     var descricao = elemento("small", cenarioAtual().descricao);
-    painelTurnos.appendChild(cenario);
-    painelTurnos.appendChild(descricao);
-    painelTurnos.appendChild(metrica);
+    var personalizado = seletoresDosDestinos(function () {
+      atualizarTurnos();
+      descricao.textContent = cenarioAtual().descricao;
+    });
+    personalizado.hidden = estadoTurnos.cenario !== PERSONALIZADO;
+    var baixar = elemento("button", "Baixar CSV");
+    baixar.type = "button";
+    baixar.className = "baixar";
+    baixar.addEventListener("click", baixarCsv);
+    var corpo = elemento("div", "");
+    corpo.id = "turnos-corpo";
+    corpo.className = "corpo";
+    [cenario, personalizado, descricao, metrica, baixar].forEach(function (parte) {
+      corpo.appendChild(parte);
+    });
+    // O botão só aparece em telas estreitas (CSS); nas largas o corpo fica sempre à vista.
+    var alternar = elemento("button", "Cenário e pintura");
+    alternar.type = "button";
+    alternar.className = "alternar";
+    alternar.setAttribute("aria-controls", "turnos-corpo");
+    alternar.addEventListener("click", function () {
+      controlesAbertos = !controlesAbertos;
+      abrirControles(alternar, corpo);
+    });
+    abrirControles(alternar, corpo);
+    painelTurnos.appendChild(alternar);
+    painelTurnos.appendChild(corpo);
     painelTurnos.hidden = !COMPARATIVO;
+  }
+
+  function abrirControles(alternar, corpo) {
+    alternar.setAttribute("aria-expanded", controlesAbertos ? "true" : "false");
+    corpo.hidden = !controlesAbertos;
+  }
+
+  function seletoresDosDestinos(aoMudar) {
+    var caixa = elemento("div", "");
+    caixa.className = "personalizado";
+    (TURNOS.eliminados || []).forEach(function (grupo) {
+      var rotulo = nomeDoGrupo(grupo) + " · " + fatia(grupo.fatia) + " no país";
+      var campo = seletor(rotulo, DESTINOS.map(function (destino) {
+        return [destino.letra, nomeDoDestino(destino.letra)];
+      }), estadoTurnos.destinos[grupo.numero], function (valor) {
+        estadoTurnos.destinos[grupo.numero] = valor;
+        aoMudar();
+      });
+      campo.querySelector("select").setAttribute("data-grupo", grupo.numero);
+      caixa.appendChild(campo);
+    });
+    return caixa;
+  }
+
+  function marcarDestinos(caixa) {
+    var listas = caixa.querySelectorAll("select");
+    for (var i = 0; i < listas.length; i++) {
+      listas[i].value = estadoTurnos.destinos[listas[i].getAttribute("data-grupo")];
+    }
+  }
+
+  // CSV para o Excel em português: ponto e vírgula, vírgula decimal e BOM de UTF-8.
+  function baixarCsv() {
+    var linhas = linhasDoCsv().map(function (campos) {
+      return campos.map(campoDoCsv).join(";");
+    });
+    var arquivo = new Blob(["\\uFEFF" + linhas.join("\\r\\n") + "\\r\\n"],
+      {type: "text/csv;charset=utf-8"});
+    var endereco = URL.createObjectURL(arquivo);
+    var link = document.createElement("a");
+    link.href = endereco;
+    link.download = (doGovernador() ? "governador" : "presidente") + "-1o-x-2o-turno-" +
+      estadoTurnos.cenario + ".csv";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(function () {
+      URL.revokeObjectURL(endereco);
+    }, 1000);
+  }
+
+  function linhasDoCsv() {
+    var lugares = TURNOS.municipios.concat(TURNOS.exterior).map(function (item) {
+      return {item: item, lida: leituraAtual(item)};
+    });
+    lugares.sort(function (x, y) {
+      var zx = x.lida.z === null ? -1 : Math.abs(x.lida.z);
+      var zy = y.lida.z === null ? -1 : Math.abs(y.lida.z);
+      return zy - zx ||
+        Math.abs(y.lida.real - y.lida.esperado) - Math.abs(x.lida.real - x.lida.esperado);
+    });
+    var cabecalho = ["Nome", "UF", "Código IBGE (TSE no exterior)", "Finalista A", "Finalista B"];
+    ["1º turno", "2º turno"].forEach(function (turno) {
+      ["A", "B", "Eliminados", "Brancos", "Nulos", "Cédulas"].forEach(function (grupo) {
+        cabecalho.push(grupo + " " + turno);
+      });
+    });
+    cabecalho.push("Esperado A (%)", "Real A (%)", "Diferença (p.p.)", "Diferença (votos)", "z",
+      "Classe", "Cenário");
+    var cenario = cenarioAtual().rotulo;
+    return [cabecalho].concat(lugares.map(function (lugar) {
+      var item = lugar.item;
+      var lida = lugar.lida;
+      var dupla = finalistasDe(item);
+      var campos = [String(item.nome).replace(/ \\([A-Z]{2}\\)$/, ""), item.uf,
+        String(item.codigo), dupla[0], dupla[1]];
+      [item.primeiro, item.segundo].forEach(function (contas) {
+        campos.push(contas[0], contas[1], contas[2], contas[3], contas[4], cedulas(contas));
+      });
+      campos.push(numeroDoCsv(lida.esperado * 100, 3), numeroDoCsv(lida.real * 100, 3),
+        numeroDoCsv((lida.real - lida.esperado) * 100, 3), lida.votos,
+        lida.z === null ? "" : numeroDoCsv(lida.z, 3), rotuloDaClasse(classeVisivel(lida)),
+        cenario);
+      return campos;
+    }));
+  }
+
+  function numeroDoCsv(valor, casas) {
+    return valor.toFixed(casas).replace(".", ",");
+  }
+
+  function campoDoCsv(valor) {
+    var texto = String(valor);
+    return /[;"\\r\\n]/.test(texto) ? '"' + texto.replace(/"/g, '""') + '"' : texto;
   }
 
   function seletor(rotulo, opcoes, atual, aoMudar) {
@@ -1274,14 +1733,15 @@ _PAGE_SCRIPT: Final = """\
 
   function atualizarTurnos() {
     destacar(null, null, null);
-    BASES.turnos = pinturaDosTurnos();
-    pintura = dadosDaVisao("turnos");
+    recalcularPersonalizado();
+    BASES[visaoAtual] = pinturaDosTurnos(visaoAtual);
+    pintura = dadosDaVisao(visaoAtual);
     repintarTudo();
-    window.location.replace(enderecoDaVisao("turnos"));
+    window.location.replace(enderecoDaVisao(visaoAtual));
   }
 
   function baseDaVisao(nome) {
-    if (nome === "governador" || nome === "turnos") {
+    if (nome === "governador" || ehComparativo(nome)) {
       return nome;
     }
     return "presidente";
@@ -1348,7 +1808,11 @@ _PAGE_SCRIPT: Final = """\
     visaoAtual = nome;
     pintura = dadosDaVisao(nome);
     CRUZAMENTO = nome === "cruzamento";
-    COMPARATIVO = nome === "turnos";
+    COMPARATIVO = ehComparativo(nome);
+    if (COMPARATIVO) {
+      usarComparativo(nome);
+      montarControlesDosTurnos();
+    }
     repintarTudo();
     marcarVisao();
     if (visaoDoEndereco() !== nome) {
@@ -1367,10 +1831,14 @@ _PAGE_SCRIPT: Final = """\
   }
 
   function enderecoDaVisao(nome) {
-    if (nome !== "turnos") {
+    if (!ehComparativo(nome) || !ESTADOS[nome]) {
       return "#visao=" + nome;
     }
-    return "#visao=turnos&cenario=" + estadoTurnos.cenario + "&pintar=" + estadoTurnos.metrica;
+    var estado = ESTADOS[nome];
+    var escolhas = estado.cenario === PERSONALIZADO ?
+      "&personalizado=" + codigoDosDestinos() : "";
+    return "#visao=" + nome + "&cenario=" + estado.cenario + escolhas +
+      "&pintar=" + estado.metrica;
   }
 
   function montarSeletor() {
@@ -1393,6 +1861,11 @@ _PAGE_SCRIPT: Final = """\
     for (var i = 0; i < botoes.length; i++) {
       var ativo = botoes[i].getAttribute("data-visao") === visaoAtual;
       botoes[i].setAttribute("aria-pressed", ativo ? "true" : "false");
+      if (ativo && painelVisoes.scrollWidth > painelVisoes.clientWidth) {
+        // Em tela estreita a barra rola de lado; a visão ativa fica no meio dela.
+        painelVisoes.scrollLeft = botoes[i].offsetLeft -
+          (painelVisoes.clientWidth - botoes[i].offsetWidth) / 2;
+      }
     }
     var titulo = (base.titulos || {})[visaoAtual];
     if (titulo) {
@@ -1414,10 +1887,13 @@ _PAGE_SCRIPT: Final = """\
   var NOTA_DA_LEGENDA = painelLegenda.querySelector(".nota").textContent;
   var painelVisoes = document.getElementById("visoes");
   var painelTurnos = document.getElementById("turnos-controles");
+  // Mesmo corte do @media do CSS: em tela estreita, legenda e controles começam fechados.
+  var TELA_ESTREITA = window.matchMedia("(max-width: 640px)").matches;
+  var controlesAbertos = !TELA_ESTREITA;
   montarLegenda();
   montarSeletor();
   montarControlesDosTurnos();
-  alternarLegenda(painelLegenda.parentElement.clientWidth >= 640);
+  alternarLegenda(!TELA_ESTREITA);
   botaoLegenda.addEventListener("click", function () {
     alternarLegenda(botaoLegenda.getAttribute("aria-expanded") !== "true");
   });
@@ -1558,7 +2034,12 @@ def _payload(pagina: PaginaDoMapa) -> dict[str, object]:
         **_view(pagina.recorte),
         "visoes": _other_views(pagina),
         "titulos": _titles(pagina),
-        "turnos": None if pagina.turnos is None else _turnos(pagina.turnos),
+        "turnos": None
+        if pagina.turnos is None
+        else {**_turnos(pagina.turnos), "calibracao": pagina.calibracao},
+        "turnosgov": (
+            None if pagina.turnos_governador is None else _turnos(pagina.turnos_governador)
+        ),
         "brasilId": pagina.brasil_id,
         "ufsObjeto": pagina.ufs_objeto,
         "municipiosObjeto": pagina.municipios_objeto,
@@ -1570,35 +2051,51 @@ def _titles(pagina: PaginaDoMapa) -> dict[str, str]:
     titles = {cargo: _title_for(pagina, cargo) for cargo in _VIEWS}
     if pagina.turnos is not None:
         titles[_TURNOS] = f"Mapa de presidente — {pagina.ano}, 1º × 2º turno"
+    if pagina.turnos_governador is not None:
+        titles[_TURNOS_GOVERNADOR] = f"Mapa de governador — {pagina.ano}, 1º × 2º turno"
     return titles
 
 
 def _turnos(comparativo: ComparativoTurnos) -> dict[str, object]:
+    grupos = comparativo.eliminados
+    governador = comparativo.cargo == GOVERNADOR
     return {
-        "a": str(comparativo.a),
-        "b": str(comparativo.b),
+        "cargo": comparativo.cargo,
+        "a": None if governador else str(comparativo.a),
+        "b": None if governador else str(comparativo.b),
+        "finalistas": {uf: [str(a), str(b)] for uf, (a, b) in comparativo.finalistas_por_uf.items()}
+        if governador
+        else None,
         "padrao": comparativo.cenarios[0].chave,
         "cenarios": [
-            {"chave": item.chave, "rotulo": item.rotulo, "descricao": item.descricao}
+            {
+                "chave": item.chave,
+                "rotulo": item.rotulo,
+                "descricao": item.descricao,
+                "parte": None if item.parte_de_a is None else float(item.parte_de_a),
+            }
             for item in comparativo.cenarios
+        ],
+        "eliminados": [
+            {"numero": str(grupo.numero), "fatia": round(float(grupo.fatia), 4)} for grupo in grupos
         ],
         "cobertura": list(comparativo.ufs_com_segundo),
         "semComparacao": comparativo.sem_comparacao,
         "piso": PISO_DE_VOTOS,
         "minimo": MINIMO_NO_GRUPO,
         "limiares": {"moderado": LIMIAR_MODERADO, "fora": LIMIAR_FORA},
-        "pais": None if comparativo.pais is None else _lugar(comparativo.pais),
-        "ufs": [_lugar(item) for item in comparativo.ufs],
-        "municipios": [_lugar(item) for item in comparativo.municipios],
+        "pais": None if comparativo.pais is None else _lugar(comparativo.pais, grupos),
+        "ufs": [_lugar(item, grupos) for item in comparativo.ufs],
+        "municipios": [_lugar(item, grupos) for item in comparativo.municipios],
         "exterior": [
-            {**_lugar(ponto.lugar), "lon": ponto.lon, "lat": ponto.lat}
+            {**_lugar(ponto.lugar, grupos), "lon": ponto.lon, "lat": ponto.lat}
             for ponto in comparativo.exterior
         ],
     }
 
 
-def _lugar(lugar: LugarTurnos) -> dict[str, object]:
-    return {
+def _lugar(lugar: LugarTurnos, grupos: tuple[GrupoEliminado, ...]) -> dict[str, object]:
+    found: dict[str, object] = {
         "codigo": lugar.codigo,
         "nome": lugar.nome,
         "uf": lugar.uf,
@@ -1614,6 +2111,21 @@ def _lugar(lugar: LugarTurnos) -> dict[str, object]:
             for leitura in lugar.leituras
         ],
     }
+    if grupos:
+        # Votos de cada grupo de eliminados no 1º turno, na ordem de "eliminados" do comparativo.
+        found["eliminados"] = [lugar.primeiro.votos_do_grupo(grupo.numeros) for grupo in grupos]
+    participacao = _participacao(lugar.primeiro, lugar.segundo)
+    if participacao is not None:
+        found["participacao"] = participacao
+    return found
+
+
+def _participacao(primeiro: Apuracao, segundo: Apuracao) -> list[int] | None:
+    """Aptos e comparecimento do 1º e do 2º turno, só quando os dois turnos foram lidos."""
+    lidos = (primeiro.aptos, primeiro.comparecimento, segundo.aptos, segundo.comparecimento)
+    if any(valor is None for valor in lidos):
+        return None
+    return [valor for valor in lidos if valor is not None]
 
 
 def _contas(apuracao: Apuracao) -> list[int]:

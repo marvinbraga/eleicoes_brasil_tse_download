@@ -1,5 +1,6 @@
 """Port for boletim consultations. The adapter is chosen at the edge."""
 
+from datetime import datetime
 from typing import Protocol
 
 from eleicoes.domain.boletim_consulta import (
@@ -14,6 +15,7 @@ from eleicoes.domain.boletim_consulta import (
     SectionProjection,
     TotalCargo,
     VotosMunicipio,
+    VotosSecao,
     VotosZona,
 )
 
@@ -72,7 +74,15 @@ class BoletimReader(Protocol):
         self, ano: int, turno: int, uf: str, cargo: str
     ) -> tuple[BlankNullProjection, ...]: ...
 
+    def section_votes(
+        self, ano: int, turno: int, uf: str, cargo: str
+    ) -> tuple[VotosSecao, ...]: ...
+
     def present_ufs(self, ano: int, turno: int, cargo: str) -> tuple[str, ...]: ...
+
+    def last_load(self, ano: int, turno: int) -> datetime | None:
+        """Instante da carga de UF mais recente do turno. None se nenhuma deixou marca."""
+        ...
 
     def close(self) -> None: ...
 
@@ -130,5 +140,9 @@ class AsyncBoletimReader(Protocol):
     async def blank_projections(
         self, ano: int, turno: int, uf: str, cargo: str
     ) -> tuple[BlankNullProjection, ...]: ...
+
+    async def section_votes(
+        self, ano: int, turno: int, uf: str, cargo: str
+    ) -> tuple[VotosSecao, ...]: ...
 
     async def present_ufs(self, ano: int, turno: int, cargo: str) -> tuple[str, ...]: ...

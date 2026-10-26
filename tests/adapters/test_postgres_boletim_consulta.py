@@ -2,6 +2,7 @@
 
 import re
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
@@ -422,6 +423,23 @@ def test_present_ufs_binds_the_three_filters_and_normalizes_codes() -> None:
         reader.present_ufs(2026, 1, "presidente")
 
 
+def test_last_load_reads_the_newest_mark_of_the_round() -> None:
+    moment = datetime(2026, 10, 26, 14, 0, tzinfo=UTC)
+    connection = _Connection([(moment,)])
+    assert PostgresBoletimReader(lambda: connection).last_load(2026, 2) == moment
+    sql, params = connection.statements[0]
+    assert sql == (
+        "SELECT MAX(carregado_em) FROM raw.carga WHERE tabela = %s AND conjunto = %s AND turno = %s"
+    )
+    assert params == ("raw.boletim", "boletins-2026", "2")
+
+    assert PostgresBoletimReader(lambda: _Connection([(None,)])).last_load(2026, 2) is None
+    assert PostgresBoletimReader(lambda: _Connection([])).last_load(2026, 2) is None
+    naive = _Connection([(datetime(2026, 10, 26, 14, 0),)])
+    with pytest.raises(InvalidBoletimConsultaError):
+        PostgresBoletimReader(lambda: naive).last_load(2026, 2)
+
+
 def test_connection_is_reused_and_closed_once() -> None:
     connection = _Connection([])
     calls = {"opened": 0}
@@ -460,6 +478,45 @@ class _Cursor:
 
     def __exit__(self, *args: object) -> None:
         return None
+
+
+def test_section_votes_take_max_of_section_figures_and_group_the_numbers() -> None:
+    connection = _Connection(
+        [
+            (1120, 8, 3, 300, 2, 4, 5, 13, 40),
+            (1120, 8, 3, 300, 2, 4, 5, 22, Decimal("90")),
+            (1120, 8, 4, "120", 0, 0, 1, None, None),
+        ]
+    )
+    reader = PostgresBoletimReader(lambda: connection)
+    secoes = reader.section_votes(2026, 2, "AC", "presidente")
+    sql, params = connection.statements[0]
+    assert "MAX(eleitores_aptos)" in sql
+    assert "SUM(eleitores_aptos)" not in sql
+    assert "LEFT JOIN nominais" in sql
+    assert "presidente" not in sql
+    assert params == (2026, 2, "AC", "presidente", 2026, 2, "AC", "presidente")
+    assert len(secoes) == 2
+    first, empty = secoes
+    assert (first.municipio, first.zona, first.secao) == (1120, 8, 3)
+    assert first.nominais == ((13, 40), (22, 90))
+    assert (first.eleitores_aptos, first.eleitores_complemento) == (300, 2)
+    assert (first.branco, first.nulo, first.cedulas) == (4, 5, 139)
+    assert first.votos(22) == 90
+    assert first.votos(99) == 0
+    assert empty.nominais == ()
+    assert empty.cedulas == 1
+
+
+def test_section_votes_reject_a_section_whose_figures_disagree() -> None:
+    reader = PostgresBoletimReader(
+        lambda: _Connection([(1120, 8, 3, 300, 0, 4, 5, 13, 40), (1120, 8, 3, 301, 0, 4, 5, 22, 9)])
+    )
+    with pytest.raises(InvalidBoletimConsultaError):
+        reader.section_votes(2026, 2, "AC", "presidente")
+    reader = PostgresBoletimReader(lambda: _Connection([(1120, 8, 3, 300)]))
+    with pytest.raises(InvalidBoletimConsultaError):
+        reader.section_votes(2026, 2, "AC", "presidente")
 
 
 class _Connection:

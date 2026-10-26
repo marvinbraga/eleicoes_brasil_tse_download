@@ -1,4 +1,4 @@
-"""1º × 2º turno de presidente: variação, cenários de transferência e desvio local.
+"""1º × 2º turno de presidente ou governador: variação, cenários e desvio local.
 
 O modelo de cada cenário só redistribui os votos dos candidatos eliminados.
 A fatia esperada do finalista A entre os votos dos dois finalistas é
@@ -11,10 +11,13 @@ dois. O resíduo é a fatia real menos a esperada. O desvio local compara o
 resíduo de cada lugar com a mediana dos lugares do mesmo grupo (a UF, para
 municípios) pelo z robusto de Iglewicz e Hoaglin. Desvio grande não prova
 nada sobre a apuração: só aponta onde o cenário explica mal o voto.
+
+No governador, cada UF tem os seus finalistas. A é o mais votado dos dois no
+1º turno da UF, e só entram as UFs com 2º turno de governador.
 """
 
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from fractions import Fraction
 from statistics import median
 from typing import Final
@@ -28,6 +31,10 @@ PISO_DE_VOTOS: Final = 1000
 MINIMO_NO_GRUPO: Final = 8
 LIMIAR_MODERADO: Final = 2.0
 LIMIAR_FORA: Final = 3.5
+CORTE_DO_GRUPO: Final = Fraction(1, 100)
+PRESIDENTE: Final = "presidente"
+GOVERNADOR: Final = "governador"
+DEMAIS: Final = 0
 _K_MAD: Final = 0.6745
 _K_MEDIA: Final = 0.7979
 _EXTERIOR: Final = "ZZ"
@@ -47,13 +54,20 @@ class FinalistsMissingError(ElectionError):
 
 @dataclass(frozen=True, slots=True)
 class Apuracao:
-    """Votos de presidente de um turno num lugar, já separados pelos finalistas."""
+    """Votos de um cargo num turno e lugar, já separados pelos finalistas.
+
+    `eliminados` abre `outros` por partido, em pares (número, votos) ordenados pelo número.
+    `aptos` e `comparecimento` vêm do boletim do cargo; ficam None quando não foram lidos.
+    """
 
     a: int
     b: int
     outros: int
     branco: int
     nulo: int
+    eliminados: tuple[tuple[int, int], ...] = ()
+    aptos: int | None = None
+    comparecimento: int | None = None
 
     @property
     def validos(self) -> int:
@@ -70,7 +84,13 @@ class Apuracao:
             self.outros + other.outros,
             self.branco + other.branco,
             self.nulo + other.nulo,
+            _somar_eliminados(self.eliminados, other.eliminados),
+            _somar_opcional(self.aptos, other.aptos),
+            _somar_opcional(self.comparecimento, other.comparecimento),
         )
+
+    def votos_do_grupo(self, numeros: frozenset[int]) -> int:
+        return sum(votos for numero, votos in self.eliminados if numero in numeros)
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,8 +99,11 @@ class Cenario:
     rotulo: str
     descricao: str
     parte_de_a: Fraction | None
+    partes_por_uf: Mapping[str, Fraction] = field(default_factory=dict)
 
-    def parte(self, primeiro: Apuracao) -> Fraction:
+    def parte(self, primeiro: Apuracao, uf: str | None = None) -> Fraction:
+        if uf is not None and uf in self.partes_por_uf:
+            return self.partes_por_uf[uf]
         if self.parte_de_a is not None:
             return self.parte_de_a
         finalistas = primeiro.a + primeiro.b
@@ -122,6 +145,15 @@ class PontoTurnos:
 
 
 @dataclass(frozen=True, slots=True)
+class GrupoEliminado:
+    """Eliminados que o cenário personalizado move juntos. Número 0 é o grupo dos demais."""
+
+    numero: int
+    numeros: frozenset[int]
+    fatia: Fraction
+
+
+@dataclass(frozen=True, slots=True)
 class ComparativoTurnos:
     a: int
     b: int
@@ -133,6 +165,9 @@ class ComparativoTurnos:
     ufs_com_segundo: tuple[str, ...]
     sem_comparacao: int
     sem_poligono: tuple[str, ...]
+    eliminados: tuple[GrupoEliminado, ...] = ()
+    cargo: str = PRESIDENTE
+    finalistas_por_uf: Mapping[str, tuple[int, int]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -180,6 +215,120 @@ def cenarios(a: int, b: int) -> tuple[Cenario, ...]:
     )
 
 
+def cenario_estimado(
+    a: int,
+    partes_por_uf: Mapping[str, Fraction],
+    nacional: Fraction,
+    pequenas: frozenset[str] = frozenset(),
+) -> Cenario:
+    """A parte de A que a regressão ecológica estimou em cada UF; o resto usa a média do país."""
+    lista = "; ".join(
+        f"{uf} {_por_cento(partes_por_uf[uf])}{' (amostra pequena)' if uf in pequenas else ''}"
+        for uf in UF_CODES
+        if uf in partes_por_uf
+    )
+    return Cenario(
+        "estimado",
+        "Estimado pelos dados",
+        f"Dos votos dos eliminados que foram a um finalista, a parte do {a} estimada por "
+        f"regressão ecológica entre os municípios de cada UF ({lista}). UFs sem estimativa "
+        f"e o exterior usam a média ponderada, {_por_cento(nacional)}. A regressão também "
+        "move brancos, nulos e eleitores de um finalista para o outro, e o mapa só move os "
+        "eliminados: a diferença que sobra vem dessa parte, não de um erro do cenário.",
+        nacional,
+        dict(partes_por_uf),
+    )
+
+
+def parte_nacional(
+    pares: Sequence[tuple[str, Apuracao]], partes_por_uf: Mapping[str, Fraction]
+) -> Fraction:
+    """Média das partes estimadas, ponderada pelos votos dos eliminados de cada UF."""
+    peso = 0
+    soma = Fraction(0)
+    for uf, primeiro in pares:
+        parte = partes_por_uf.get(uf)
+        if parte is None:
+            continue
+        peso += primeiro.outros
+        soma += parte * primeiro.outros
+    return Fraction(1, 2) if peso == 0 else soma / peso
+
+
+def cenarios_de_governador() -> tuple[Cenario, ...]:
+    return (
+        Cenario(
+            "dividido",
+            "Metade para cada",
+            "Os votos dos eliminados se dividem igualmente entre os dois finalistas da UF.",
+            Fraction(1, 2),
+        ),
+        Cenario(
+            "proporcional",
+            "Como no 1º turno",
+            "Os eliminados se dividem como os eleitores dos finalistas no 1º turno, "
+            "o mesmo que não pesarem no resultado.",
+            None,
+        ),
+        Cenario(
+            "todosa",
+            "Todos para o 1º colocado do 1º turno",
+            "Os votos dos eliminados vão todos para o finalista mais votado no 1º turno da UF.",
+            Fraction(1),
+        ),
+        Cenario(
+            "todosb",
+            "Todos para o 2º colocado do 1º turno",
+            "Os votos dos eliminados vão todos para o finalista menos votado no 1º turno da UF.",
+            Fraction(0),
+        ),
+    )
+
+
+def finalistas_de_governador(
+    primeiro: Sequence[MunicipalPlace], segundo: Sequence[MunicipalPlace]
+) -> dict[str, tuple[int, int]]:
+    """Os dois mais votados do 2º turno de cada UF, o mais votado deles no 1º turno antes."""
+    depois = _totais_por_uf(segundo, _governador)
+    antes = _totais_por_uf(primeiro, _governador)
+    found: dict[str, tuple[int, int]] = {}
+    for uf in UF_CODES:
+        totais = depois.get(uf, {})
+        ordem = sorted(totais, key=lambda numero: (-totais[numero], numero))
+        if len(ordem) < 2:
+            continue
+        par = ordem[:2]
+        votos = antes.get(uf, {})
+        par.sort(key=lambda numero: (-votos.get(numero, 0), numero))
+        found[uf] = (par[0], par[1])
+    return found
+
+
+def grupos_eliminados(
+    primeiro: Sequence[MunicipalPlace], a: int, b: int, corte: Fraction = CORTE_DO_GRUPO
+) -> tuple[GrupoEliminado, ...]:
+    """Eliminados com ao menos `corte` dos válidos do país no 1º turno, um a um; o resto junto."""
+    totais: dict[int, int] = {}
+    for place in primeiro:
+        for party in place.presidente.parties:
+            totais[party.partido] = totais.get(party.partido, 0) + party.votos
+    validos = sum(totais.values())
+    fora = {numero: votos for numero, votos in totais.items() if numero not in (a, b) and votos}
+    if validos == 0 or not fora:
+        return ()
+    ordem = sorted(fora, key=lambda numero: (-fora[numero], numero))
+    grandes = tuple(numero for numero in ordem if Fraction(fora[numero], validos) >= corte)
+    found = [
+        GrupoEliminado(numero, frozenset({numero}), Fraction(fora[numero], validos))
+        for numero in grandes
+    ]
+    demais = frozenset(ordem) - frozenset(grandes)
+    if demais:
+        votos = sum(fora[numero] for numero in demais)
+        found.append(GrupoEliminado(DEMAIS, demais, Fraction(votos, validos)))
+    return tuple(found)
+
+
 def finalistas(segundo: Sequence[MunicipalPlace], apoiado: int | None = None) -> tuple[int, int]:
     """Os dois mais votados do 2º turno. O apoiado pelos eliminados, se for um deles, vem antes."""
     totais: dict[int, int] = {}
@@ -205,10 +354,24 @@ def comparar_turnos(
     *,
     exterior: Mapping[str, tuple[float, float]] | None = None,
     apoiado: int | None = None,
+    cargo: str = PRESIDENTE,
+    participacao: Mapping[tuple[int, str, str], tuple[int, int]] | None = None,
+    partes_estimadas: Mapping[str, Fraction] | None = None,
+    amostras_pequenas: frozenset[str] = frozenset(),
 ) -> ComparativoTurnos:
+    """``participacao`` usa a chave (turno, UF, código TSE de cinco dígitos) e o valor
+    (aptos, comparecimento). ``partes_estimadas`` acrescenta o cenário estimado."""
+    if cargo == GOVERNADOR:
+        return _comparar_governador(primeiro, segundo, ponte, codigos_municipio, codigos_uf)
     a, b = finalistas(segundo, apoiado)
+    pares, sem_comparacao = _pares(
+        primeiro, segundo, _presidente, lambda _uf: (a, b), participacao or {}
+    )
     escolhidos = cenarios(a, b)
-    pares, sem_comparacao = _pares(primeiro, segundo, a, b)
+    if partes_estimadas:
+        nacional = parte_nacional([(par.uf, par.primeiro) for par in pares], partes_estimadas)
+        estimado = cenario_estimado(a, partes_estimadas, nacional, amostras_pequenas)
+        escolhidos = (*escolhidos, estimado)
     cidades = tuple(par for par in pares if par.uf != _EXTERIOR)
     fora = tuple(par for par in pares if par.uf == _EXTERIOR)
     municipios, buracos = _municipios(cidades, escolhidos, ponte, codigos_municipio)
@@ -226,6 +389,39 @@ def comparar_turnos(
         tuple(code for code in UF_CODES if any(par.uf == code for par in pares)),
         sem_comparacao,
         tuple(sorted(buracos + buracos_exterior + buracos_uf)),
+        grupos_eliminados(primeiro, a, b),
+    )
+
+
+def _comparar_governador(
+    primeiro: Sequence[MunicipalPlace],
+    segundo: Sequence[MunicipalPlace],
+    ponte: PonteTseIbge,
+    codigos_municipio: frozenset[str],
+    codigos_uf: frozenset[str],
+) -> ComparativoTurnos:
+    """Sem país nem exterior: somar finalistas diferentes de cada UF não teria sentido."""
+    por_uf = finalistas_de_governador(primeiro, segundo)
+    if not por_uf:
+        raise FinalistsMissingError
+    escolhidos = cenarios_de_governador()
+    pares, sem_comparacao = _pares(primeiro, segundo, _governador, por_uf.get, {})
+    cidades = tuple(par for par in pares if par.uf != _EXTERIOR)
+    municipios, buracos = _municipios(cidades, escolhidos, ponte, codigos_municipio)
+    ufs, buracos_uf = _ufs(cidades, escolhidos, ponte, codigos_uf)
+    return ComparativoTurnos(
+        0,
+        0,
+        escolhidos,
+        None,
+        ufs,
+        municipios,
+        (),
+        tuple(code for code in UF_CODES if any(par.uf == code for par in cidades)),
+        sem_comparacao,
+        tuple(sorted(buracos + buracos_uf)),
+        cargo=GOVERNADOR,
+        finalistas_por_uf=por_uf,
     )
 
 
@@ -235,9 +431,16 @@ def leituras(
     *,
     piso: int = PISO_DE_VOTOS,
     minimo: int = MINIMO_NO_GRUPO,
+    ufs: Sequence[str] | None = None,
 ) -> tuple[Leitura, ...]:
-    """Lê um grupo de lugares sob um cenário e mede o desvio de cada um no grupo."""
-    brutos = tuple(_esperado_e_real(primeiro, segundo, cenario) for primeiro, segundo in pares)
+    """Lê um grupo de lugares sob um cenário e mede o desvio de cada um no grupo.
+
+    ``ufs`` dá a UF de cada par, para cenários com parte própria por UF."""
+    lista = tuple(ufs) if ufs is not None else (None,) * len(pares)
+    brutos = tuple(
+        _esperado_e_real(primeiro, segundo, cenario, uf)
+        for (primeiro, segundo), uf in zip(pares, lista, strict=True)
+    )
     base = tuple(
         float(real - esperado)
         for (primeiro, segundo), (esperado, real) in zip(pares, brutos, strict=True)
@@ -268,13 +471,16 @@ def classe_do_z(z: float) -> str:
 
 def apuracao(tally: CargoTally, a: int, b: int) -> Apuracao:
     votos = {party.partido: party.votos for party in tally.parties}
-    outros = sum(total for numero, total in votos.items() if numero not in (a, b))
+    eliminados = tuple(
+        sorted((numero, total) for numero, total in votos.items() if numero not in (a, b))
+    )
     return Apuracao(
         votos.get(a, 0),
         votos.get(b, 0),
-        outros,
+        sum(total for _, total in eliminados),
         tally.branco,
         tally.nulo,
+        eliminados,
     )
 
 
@@ -284,18 +490,37 @@ def chave_tse(codigo: str) -> str:
     return codigo
 
 
+def _somar_eliminados(
+    um: tuple[tuple[int, int], ...], outro: tuple[tuple[int, int], ...]
+) -> tuple[tuple[int, int], ...]:
+    totais = dict(um)
+    for numero, votos in outro:
+        totais[numero] = totais.get(numero, 0) + votos
+    return tuple(sorted(totais.items()))
+
+
 def _esperado_e_real(
-    primeiro: Apuracao, segundo: Apuracao, cenario: Cenario
+    primeiro: Apuracao, segundo: Apuracao, cenario: Cenario, uf: str | None = None
 ) -> tuple[Fraction, Fraction]:
     finalistas_1 = primeiro.validos
     esperado = (
         Fraction(1, 2)
         if finalistas_1 == 0
-        else (primeiro.a + cenario.parte(primeiro) * primeiro.outros) / finalistas_1
+        else (primeiro.a + cenario.parte(primeiro, uf) * primeiro.outros) / finalistas_1
     )
     finalistas_2 = segundo.a + segundo.b
     real = Fraction(1, 2) if finalistas_2 == 0 else Fraction(segundo.a, finalistas_2)
     return esperado, real
+
+
+def _somar_opcional(um: int | None, outro: int | None) -> int | None:
+    if um is None or outro is None:
+        return None
+    return um + outro
+
+
+def _por_cento(parte: Fraction) -> str:
+    return f"{float(parte) * 100:.0f}%"
 
 
 def _votos_de_diferenca(segundo: Apuracao, esperado: Fraction, real: Fraction) -> int:
@@ -318,28 +543,66 @@ def _escala(valores: tuple[float, ...]) -> float | None:
     return None
 
 
+def _presidente(place: MunicipalPlace) -> CargoTally | None:
+    return place.presidente
+
+
+def _governador(place: MunicipalPlace) -> CargoTally | None:
+    return place.governador
+
+
+def _totais_por_uf(
+    places: Sequence[MunicipalPlace], cargo: Callable[[MunicipalPlace], CargoTally | None]
+) -> dict[str, dict[int, int]]:
+    found: dict[str, dict[int, int]] = {}
+    for place in places:
+        tally = cargo(place)
+        if tally is None:
+            continue
+        totais = found.setdefault(place.uf, {})
+        for party in tally.parties:
+            totais[party.partido] = totais.get(party.partido, 0) + party.votos
+    return found
+
+
+def _por_chave(
+    places: Sequence[MunicipalPlace],
+    cargo: Callable[[MunicipalPlace], CargoTally | None],
+    finalistas_da_uf: Callable[[str], tuple[int, int] | None],
+) -> dict[tuple[str, str], tuple[str, CargoTally]]:
+    found: dict[tuple[str, str], tuple[str, CargoTally]] = {}
+    for place in places:
+        tally = cargo(place)
+        if tally is not None and finalistas_da_uf(place.uf) is not None:
+            found[(place.uf, chave_tse(place.codigo))] = (place.nome, tally)
+    return found
+
+
 def _pares(
     primeiro: Sequence[MunicipalPlace],
     segundo: Sequence[MunicipalPlace],
-    a: int,
-    b: int,
+    cargo: Callable[[MunicipalPlace], CargoTally | None],
+    finalistas_da_uf: Callable[[str], tuple[int, int] | None],
+    participacao: Mapping[tuple[int, str, str], tuple[int, int]],
 ) -> tuple[tuple[_Par, ...], int]:
-    antes = {(place.uf, chave_tse(place.codigo)): place for place in primeiro}
-    depois = {(place.uf, chave_tse(place.codigo)): place for place in segundo}
+    antes = _por_chave(primeiro, cargo, finalistas_da_uf)
+    depois = _por_chave(segundo, cargo, finalistas_da_uf)
     ufs_depois = {uf for uf, _ in depois}
     found: list[_Par] = []
-    for chave, place in depois.items():
+    for chave, (nome, tally) in depois.items():
         anterior = antes.get(chave)
-        if anterior is None:
+        dupla = finalistas_da_uf(chave[0])
+        if anterior is None or dupla is None:
             continue
         uf, codigo = chave
+        a, b = dupla
         found.append(
             _Par(
                 uf,
                 codigo,
-                place.nome,
-                apuracao(anterior.presidente, a, b),
-                apuracao(place.presidente, a, b),
+                nome,
+                _com_participacao(apuracao(anterior[1], a, b), participacao.get((1, uf, codigo))),
+                _com_participacao(apuracao(tally, a, b), participacao.get((2, uf, codigo))),
             )
         )
     sozinhos = sum(1 for chave in antes if chave[0] in ufs_depois and chave not in depois)
@@ -349,13 +612,20 @@ def _pares(
     return tuple(found), sozinhos
 
 
+def _com_participacao(conta: Apuracao, lida: tuple[int, int] | None) -> Apuracao:
+    if lida is None:
+        return conta
+    return replace(conta, aptos=lida[0], comparecimento=lida[1])
+
+
 def _lugares(
     grupo: Sequence[_Par],
     escolhidos: tuple[Cenario, ...],
     codigo: Callable[[_Par], str],
 ) -> tuple[LugarTurnos, ...]:
     contas = tuple((par.primeiro, par.segundo) for par in grupo)
-    por_cenario = tuple(leituras(contas, cenario) for cenario in escolhidos)
+    ufs = tuple(par.uf for par in grupo)
+    por_cenario = tuple(leituras(contas, cenario, ufs=ufs) for cenario in escolhidos)
     return tuple(
         LugarTurnos(
             codigo(par),
