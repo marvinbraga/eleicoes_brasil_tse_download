@@ -6,10 +6,20 @@ from html import escape
 from typing import Final
 
 from eleicoes.domain.mapa import PaginaDoMapa, Pintura, PontoPintado, RecortePintado
+from eleicoes.domain.mapa_turnos import (
+    LIMIAR_FORA,
+    LIMIAR_MODERADO,
+    MINIMO_NO_GRUPO,
+    PISO_DE_VOTOS,
+    Apuracao,
+    ComparativoTurnos,
+    LugarTurnos,
+)
 
 _IBGE: Final = "Malha municipal e de estados: IBGE. Licença compatível com CC BY 4.0."
 _CARGO_NO_TITULO: Final = {"cruzamento": "presidente × governador"}
 _VIEWS: Final = ("presidente", "governador", "cruzamento")
+_TURNOS: Final = "turnos"
 _BASE_VIEW: Final = {"cruzamento": "presidente"}
 _REGIONS: Final = (
     "O recorte das regiões não entra neste mapa. A malha desse recorte ainda não foi medida."
@@ -83,6 +93,23 @@ _PAGE_CSS: Final = (
     " #legenda .logo { width: 40px; height: 20px; flex: none; object-fit: contain; }"
     " #legenda small { display: block; opacity: .75; }"
     " #legenda .nota { margin: .4em 0 0; max-width: 16em; opacity: .75; }"
+    " #legenda .escala { height: 10px; border-radius: 2px; margin: .5em 0 .2em;"
+    " border: 1px solid rgba(0,0,0,.35); }"
+    " #legenda .marcas { display: flex; justify-content: space-between; }"
+    " #turnos-controles { position: absolute; left: .5em; bottom: 2.4em; display: flex;"
+    " flex-direction: column; gap: .35em; max-width: min(19em, calc(100% - 1em));"
+    " box-sizing: border-box; background: rgba(255,255,255,.92); border: 1px solid #cccccc;"
+    " border-radius: 6px; padding: .45em .6em; font: 12px/1.4 sans-serif; color: #111111; }"
+    " #turnos-controles[hidden] { display: none; }"
+    " #turnos-controles label { display: flex; flex-direction: column; gap: .15em;"
+    " font-weight: bold; }"
+    " #turnos-controles select { font: 12px sans-serif; color: #111111; background: #ffffff;"
+    " border: 1px solid #888888; border-radius: 4px; padding: .2em; max-width: 100%; }"
+    " #turnos-controles small { opacity: .8; }"
+    " #detalhe table { border-collapse: collapse; margin-top: .2em; }"
+    " #detalhe th, #detalhe td { padding: 0 .5em 0 0; text-align: right; font-weight: normal; }"
+    " #detalhe th:first-child { text-align: left; }"
+    " #detalhe thead th { opacity: .7; }"
 )
 _PAGE_SCRIPT: Final = """\
 (function () {
@@ -90,20 +117,44 @@ _PAGE_SCRIPT: Final = """\
   var municipios = JSON.parse(document.getElementById("municipios").textContent);
   var ufs = JSON.parse(document.getElementById("ufs").textContent);
   var paises = JSON.parse(document.getElementById("paises").textContent);
-  var VISOES = ["presidente", "governador", "cruzamento"];
+  var VISOES = ["presidente", "governador", "cruzamento", "turnos"];
   var NOMES_DAS_VISOES = {
     presidente: "Presidente",
     governador: "Governador",
-    cruzamento: "Presidente × governador"
+    cruzamento: "Presidente × governador",
+    turnos: "1º × 2º turno"
   };
+  var CLASSES_DOS_TURNOS = ["fora_a", "moderado_a", "dentro", "moderado_b", "fora_b", "sem_base"];
+  var METRICAS = ["desvio", "residuo", "a", "b", "branco", "nulo", "cedulas"];
+  var CORES_DAS_CLASSES = {
+    fora_a: "#2c5aa0",
+    moderado_a: "#9dc0e8",
+    dentro: "#efefef",
+    moderado_b: "#f2a37f",
+    fora_b: "#b2182b",
+    sem_base: "#a6a6a6"
+  };
+  var INDICE_DA_METRICA = {a: 0, b: 1, branco: 3, nulo: 4};
+  var LIMITES_DAS_METRICAS = {};
+  var COR_NEUTRA = [247, 247, 247];
+  var COR_POSITIVA = [27, 120, 55];
+  var COR_NEGATIVA = [118, 42, 131];
+  var LIMITE_DO_MODELO = "O modelo só move os votos dos eliminados; quem votou em branco ou " +
+    "nulo no 1º turno, faltou a um dos turnos ou trocou de finalista fica fora dele. ";
+  var TURNOS = base.turnos || null;
+  var estadoTurnos = lerEstadoTurnos();
   var BASES = {};
   BASES[baseDaVisao(base.cargo)] = base;
   Object.keys(base.visoes || {}).forEach(function (nome) {
     BASES[nome] = Object.assign({}, base, base.visoes[nome]);
   });
+  if (TURNOS) {
+    BASES.turnos = pinturaDosTurnos();
+  }
   var visaoAtual = visaoDoEndereco() || base.cargo;
   var pintura = dadosDaVisao(visaoAtual);
   var CRUZAMENTO = visaoAtual === "cruzamento";
+  var COMPARATIVO = visaoAtual === "turnos";
   var ORDEM_DAS_CLASSES = ["consolidacao", "terreno_de_virada", "em_aberto", "sem_governador"];
   var CLASSES = {
     consolidacao: {
@@ -161,6 +212,7 @@ _PAGE_SCRIPT: Final = """\
       properties.classe = item.classe;
       properties.governador = item.governador;
       properties.pesoGovernador = item.pesoGovernador;
+      properties.turnos = item.turnos;
     }
   }
 
@@ -246,6 +298,7 @@ _PAGE_SCRIPT: Final = """\
 
   function textoDoRotulo(feature, resolution, completo) {
     var texto = CRUZAMENTO ? rotuloCruzado(feature) :
+      COMPARATIVO ? rotuloDosTurnos(feature) :
       rotulo(feature.get("nome"), feature.get("numero"), feature.get("peso"));
     var nome = feature.get("nome");
     if (completo || !ehMunicipio(feature) || nome == null || String(nome) === "") {
@@ -383,7 +436,8 @@ _PAGE_SCRIPT: Final = """\
             nulo: item.nulo,
             classe: item.classe,
             governador: item.governador,
-            pesoGovernador: item.pesoGovernador
+            pesoGovernador: item.pesoGovernador,
+            turnos: item.turnos
           }
         };
       })
@@ -593,6 +647,10 @@ _PAGE_SCRIPT: Final = """\
     painelDetalhe.textContent = "";
     var nome = feature.get("nome");
     painelDetalhe.appendChild(elemento("strong", nome ? String(nome) : "—"));
+    if (COMPARATIVO) {
+      detalharTurnos(feature.get("turnos"));
+      return;
+    }
     var partes = String(feature.get("peso") == null ? "" : feature.get("peso")).split("/");
     var lider = Number(partes[0]);
     var validos = partes.length === 2 ? Number(partes[1]) : NaN;
@@ -733,6 +791,10 @@ _PAGE_SCRIPT: Final = """\
       montarLegendaCruzada();
       return;
     }
+    if (COMPARATIVO) {
+      montarLegendaDosTurnos();
+      return;
+    }
     var contagem = {};
     function contar(itens, campo) {
       for (var i = 0; i < itens.length; i++) {
@@ -809,8 +871,420 @@ _PAGE_SCRIPT: Final = """\
     return novo;
   }
 
+  function rotuloDaClasse(chave) {
+    var a = TURNOS ? TURNOS.a : "A";
+    var b = TURNOS ? TURNOS.b : "B";
+    return {
+      fora_a: "Fora do esperado: " + a + " acima",
+      moderado_a: "Desvio moderado: " + a + " acima",
+      dentro: "Dentro do esperado",
+      moderado_b: "Desvio moderado: " + b + " acima",
+      fora_b: "Fora do esperado: " + b + " acima",
+      sem_base: "Sem base de comparação"
+    }[chave];
+  }
+
+  function nomeDaMetrica(chave) {
+    var a = TURNOS ? nomeDoPartido(TURNOS.a) : "A";
+    var b = TURNOS ? nomeDoPartido(TURNOS.b) : "B";
+    return {
+      desvio: "Anomalia no cenário",
+      residuo: "Diferença do cenário (p.p.)",
+      a: "Votos do " + a,
+      b: "Votos do " + b,
+      branco: "Brancos",
+      nulo: "Nulos",
+      cedulas: "Total de cédulas"
+    }[chave];
+  }
+
+  function lerEstadoTurnos() {
+    var estado = {cenario: "", metrica: "desvio"};
+    if (!TURNOS) {
+      return estado;
+    }
+    estado.cenario = TURNOS.padrao;
+    var hash = window.location.hash;
+    var cenario = /(?:^|[#&])cenario=([a-z]+)/.exec(hash);
+    if (cenario && indiceDoCenario(cenario[1]) >= 0) {
+      estado.cenario = cenario[1];
+    }
+    var metrica = /(?:^|[#&])pintar=([a-z]+)/.exec(hash);
+    if (metrica && METRICAS.indexOf(metrica[1]) >= 0) {
+      estado.metrica = metrica[1];
+    }
+    return estado;
+  }
+
+  function indiceDoCenario(chave) {
+    for (var i = 0; i < TURNOS.cenarios.length; i++) {
+      if (TURNOS.cenarios[i].chave === chave) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  function cenarioAtual() {
+    return TURNOS.cenarios[indiceDoCenario(estadoTurnos.cenario)];
+  }
+
+  function cedulas(contas) {
+    return contas[0] + contas[1] + contas[2] + contas[3] + contas[4];
+  }
+
+  function leituraAtual(item) {
+    var lida = item.leituras[indiceDoCenario(estadoTurnos.cenario)];
+    var finalistas = item.segundo[0] + item.segundo[1];
+    return {
+      esperado: lida[0],
+      real: finalistas > 0 ? item.segundo[0] / finalistas : 0.5,
+      votos: lida[1],
+      z: lida[2],
+      classe: lida[3]
+    };
+  }
+
+  function classeVisivel(lida) {
+    if (lida.classe === "moderado") {
+      return lida.z >= 0 ? "moderado_a" : "moderado_b";
+    }
+    return lida.classe;
+  }
+
+  function valorDaMetrica(item, metrica) {
+    if (metrica === "residuo") {
+      var lida = leituraAtual(item);
+      return (lida.real - lida.esperado) * 100;
+    }
+    if (metrica === "cedulas") {
+      var antes = cedulas(item.primeiro);
+      return antes > 0 ? (cedulas(item.segundo) - antes) / antes * 100 : 0;
+    }
+    var indice = INDICE_DA_METRICA[metrica];
+    var total1 = cedulas(item.primeiro);
+    var total2 = cedulas(item.segundo);
+    if (total1 <= 0 || total2 <= 0) {
+      return 0;
+    }
+    return (item.segundo[indice] / total2 - item.primeiro[indice] / total1) * 100;
+  }
+
+  function unidadeDaMetrica(metrica) {
+    return metrica === "cedulas" ? "%" : " p.p.";
+  }
+
+  function limiteDaMetrica(metrica) {
+    var chave = metrica + "|" + estadoTurnos.cenario;
+    if (LIMITES_DAS_METRICAS[chave]) {
+      return LIMITES_DAS_METRICAS[chave];
+    }
+    var valores = TURNOS.municipios.map(function (item) {
+      return Math.abs(valorDaMetrica(item, metrica));
+    }).sort(function (x, y) {
+      return x - y;
+    });
+    var p95 = valores.length ? valores[Math.floor((valores.length - 1) * 0.95)] : 1;
+    var limite = Math.max(0.5, Math.ceil(p95 * 2) / 2);
+    LIMITES_DAS_METRICAS[chave] = limite;
+    return limite;
+  }
+
+  function corDivergente(valor, limite) {
+    var t = Math.max(-1, Math.min(1, valor / limite));
+    var alvo = t >= 0 ? COR_POSITIVA : COR_NEGATIVA;
+    var parte = Math.abs(t);
+    var rgb = [0, 1, 2].map(function (i) {
+      return Math.round(COR_NEUTRA[i] + (alvo[i] - COR_NEUTRA[i]) * parte);
+    });
+    return "#" + rgb.map(function (canal) {
+      var hex = canal.toString(16);
+      return hex.length < 2 ? "0" + hex : hex;
+    }).join("");
+  }
+
+  function agregado(item) {
+    return String(item.codigo).length < 6 && item.uf !== "ZZ";
+  }
+
+  function semGrupo(item) {
+    return estadoTurnos.metrica === "desvio" && agregado(item) && leituraAtual(item).z === null;
+  }
+
+  function corDosTurnos(item) {
+    var metrica = estadoTurnos.metrica;
+    if (semGrupo(item)) {
+      return corDivergente(valorDaMetrica(item, "residuo"), limiteDaMetrica("residuo"));
+    }
+    if (metrica === "desvio") {
+      return CORES_DAS_CLASSES[classeVisivel(leituraAtual(item))];
+    }
+    return corDivergente(valorDaMetrica(item, metrica), limiteDaMetrica(metrica));
+  }
+
+  function itemDosTurnos(item) {
+    var validos = item.segundo[0] + item.segundo[1];
+    var pintado = {
+      codigo: item.codigo,
+      nome: item.nome,
+      cor: corDosTurnos(item),
+      peso: validos + "/" + validos,
+      numero: "",
+      turnos: item
+    };
+    if (item.lon !== undefined) {
+      pintado.lon = item.lon;
+      pintado.lat = item.lat;
+    }
+    return pintado;
+  }
+
+  function pinturaDosTurnos() {
+    return Object.assign({}, base, {
+      cargo: "turnos",
+      pais: TURNOS.pais ? itemDosTurnos(TURNOS.pais) : null,
+      ufs: TURNOS.ufs.map(itemDosTurnos),
+      municipios: TURNOS.municipios.map(itemDosTurnos),
+      exterior: TURNOS.exterior.map(itemDosTurnos)
+    });
+  }
+
+  function decimal(valor, casas) {
+    var sinal = valor > 0 ? "+" : valor < 0 ? "−" : "";
+    var partes = Math.abs(valor).toFixed(casas).split(".");
+    return sinal + milhar(Number(partes[0])) + (partes.length > 1 ? "," + partes[1] : "");
+  }
+
+  function comSinal(valor) {
+    return (valor > 0 ? "+" : valor < 0 ? "−" : "") + milhar(Math.abs(valor));
+  }
+
+  function fatia(valor) {
+    return decimal(valor * 100, 2).replace("+", "") + "%";
+  }
+
+  function textoDaMetrica(item) {
+    var metrica = estadoTurnos.metrica;
+    if (semGrupo(item)) {
+      return decimal(valorDaMetrica(item, "residuo"), 1) + " p.p. do cenário";
+    }
+    if (metrica === "desvio") {
+      var lida = leituraAtual(item);
+      return lida.z === null ? "sem base" : "z " + decimal(lida.z, 1);
+    }
+    return decimal(valorDaMetrica(item, metrica), 1) + unidadeDaMetrica(metrica);
+  }
+
+  function rotuloDosTurnos(feature) {
+    var item = feature.get("turnos");
+    if (!item) {
+      return String(feature.get("nome") || "—");
+    }
+    return String(item.nome) + "\\n" + textoDaMetrica(item);
+  }
+
+  function detalharTurnos(item) {
+    if (!item) {
+      return;
+    }
+    var tabela = document.createElement("table");
+    var cabeca = tabela.createTHead().insertRow();
+    ["", "1º turno", "2º turno", "Variação"].forEach(function (texto) {
+      var celula = document.createElement("th");
+      celula.textContent = texto;
+      cabeca.appendChild(celula);
+    });
+    var corpo = tabela.createTBody();
+    var linhas = [
+      [nomeDoPartido(TURNOS.a), 0],
+      [nomeDoPartido(TURNOS.b), 1],
+      ["Eliminados", 2],
+      ["Brancos", 3],
+      ["Nulos", 4]
+    ];
+    linhas.forEach(function (linha) {
+      linhaDaTabela(corpo, linha[0], item.primeiro[linha[1]], item.segundo[linha[1]]);
+    });
+    linhaDaTabela(corpo, "Cédulas", cedulas(item.primeiro), cedulas(item.segundo));
+    painelDetalhe.appendChild(tabela);
+    var cenario = cenarioAtual();
+    var lida = leituraAtual(item);
+    painelDetalhe.appendChild(elemento("div", "Cenário: " + cenario.rotulo)).className = "secao";
+    painelDetalhe.appendChild(elemento("div",
+      "Esperado para o " + TURNOS.a + ": " + fatia(lida.esperado) +
+        " dos votos dos finalistas · real: " + fatia(lida.real)));
+    painelDetalhe.appendChild(elemento("div",
+      "Diferença: " + decimal((lida.real - lida.esperado) * 100, 2) + " p.p. (≈ " +
+        comSinal(lida.votos) + " votos para o " + TURNOS.a + ")"));
+    var classe = classeVisivel(lida);
+    var linha = elemento("div", "");
+    linha.className = "classe";
+    var amostra = elemento("span", "");
+    amostra.className = "amostra";
+    amostra.style.background = CORES_DAS_CLASSES[classe];
+    linha.appendChild(amostra);
+    linha.appendChild(document.createTextNode(
+      rotuloDaClasse(classe) + (lida.z === null ? "" : " · z " + decimal(lida.z, 2))));
+    painelDetalhe.appendChild(linha);
+    painelDetalhe.appendChild(elemento("small", explicacaoDoDesvio(item, lida)));
+  }
+
+  function linhaDaTabela(corpo, rotulo, antes, depois) {
+    var linha = corpo.insertRow();
+    var nome = document.createElement("th");
+    nome.textContent = rotulo;
+    linha.appendChild(nome);
+    [milhar(antes), milhar(depois), comSinal(depois - antes)].forEach(function (texto) {
+      linha.insertCell().textContent = texto;
+    });
+  }
+
+  function explicacaoDoDesvio(item, lida) {
+    var grupo = String(item.codigo).length >= 6 ? "dos municípios da mesma UF" :
+      item.uf === "ZZ" ? "das cidades do exterior" : "das UFs";
+    if (lida.z !== null) {
+      return "z robusto: a diferença deste lugar comparada com a mediana " + grupo +
+        ". Acima de " + decimal(TURNOS.limiares.fora, 1).replace("+", "") +
+        " em módulo, o cenário explica mal o voto aqui. Não é prova de irregularidade.";
+    }
+    if (agregado(item)) {
+      return "País e UFs sem grupo de comparação (menos de " + TURNOS.minimo +
+        " UFs importadas) são pintados pela diferença do cenário: verde, o " + TURNOS.a +
+        " acima do esperado; roxo, abaixo.";
+    }
+    return "Fica sem z quando o lugar tem menos de " + milhar(TURNOS.piso) +
+      " votos dos finalistas ou quando o grupo tem menos de " + TURNOS.minimo + " lugares.";
+  }
+
+  function montarLegendaDosTurnos() {
+    botaoLegenda.textContent = "1º × 2º turno";
+    var lista = painelLegenda.querySelector("ul");
+    var metrica = estadoTurnos.metrica;
+    if (metrica === "desvio") {
+      var contagem = {};
+      TURNOS.municipios.forEach(function (item) {
+        var classe = classeVisivel(leituraAtual(item));
+        contagem[classe] = (contagem[classe] || 0) + 1;
+      });
+      CLASSES_DOS_TURNOS.forEach(function (chave) {
+        var item = document.createElement("li");
+        var amostra = elemento("span", "");
+        amostra.className = "amostra";
+        amostra.style.background = CORES_DAS_CLASSES[chave];
+        item.appendChild(amostra);
+        var texto = elemento("span", rotuloDaClasse(chave));
+        var total = contagem[chave] || 0;
+        texto.appendChild(elemento("small", milhar(total) +
+          (total === 1 ? " município" : " municípios")));
+        item.appendChild(texto);
+        lista.appendChild(item);
+      });
+    } else {
+      var limite = limiteDaMetrica(metrica);
+      var faixa = elemento("li", "");
+      faixa.style.display = "block";
+      var escala = elemento("div", "");
+      escala.className = "escala";
+      escala.style.background = "linear-gradient(to right, " + corDivergente(-limite, limite) +
+        ", " + corDivergente(0, limite) + ", " + corDivergente(limite, limite) + ")";
+      faixa.appendChild(escala);
+      var marcas = elemento("div", "");
+      marcas.className = "marcas";
+      [-limite, 0, limite].forEach(function (valor) {
+        marcas.appendChild(elemento("span", decimal(valor, 1) + unidadeDaMetrica(metrica)));
+      });
+      faixa.appendChild(marcas);
+      lista.appendChild(faixa);
+    }
+    painelLegenda.querySelector(".nota").textContent = notaDosTurnos(metrica);
+  }
+
+  function notaDosTurnos(metrica) {
+    var cobertura = "2º turno importado em " + TURNOS.cobertura.length + " de 28 recortes (" +
+      TURNOS.cobertura.join(", ") + "). ";
+    var pais = TURNOS.pais ? resumoDoPais() : "";
+    if (metrica === "desvio") {
+      return nomeDaMetrica(metrica) + ". Cenário: " + cenarioAtual().descricao + " " + pais +
+        "Cada município é comparado com a mediana da sua UF (z robusto; |z| > " +
+        decimal(TURNOS.limiares.moderado, 1).replace("+", "") + " moderado, > " +
+        decimal(TURNOS.limiares.fora, 1).replace("+", "") + " fora do esperado). " +
+        "Desvio aponta onde o cenário explica mal o voto; não prova irregularidade. " +
+        "País e UFs sem grupo usam a diferença do cenário (verde: " + TURNOS.a +
+        " acima; roxo: abaixo). " + LIMITE_DO_MODELO + cobertura;
+    }
+    if (metrica === "residuo") {
+      return "Fatia real do " + TURNOS.a + " entre os finalistas menos a esperada no cenário. " +
+        cenarioAtual().descricao + " " + pais + LIMITE_DO_MODELO + cobertura;
+    }
+    if (metrica === "cedulas") {
+      return "Variação do total de cédulas de presidente (válidos, brancos e nulos) do 1º " +
+        "para o 2º turno. " + cobertura;
+    }
+    return nomeDaMetrica(metrica) + ": variação da fatia nas cédulas de presidente do 1º para " +
+      "o 2º turno, em pontos percentuais. A tabela do lugar mostra os votos. " + cobertura;
+  }
+
+  function resumoDoPais() {
+    var lida = leituraAtual(TURNOS.pais);
+    return "No total importado, o " + TURNOS.a + " teve " + fatia(lida.real) +
+      " dos votos dos finalistas contra " + fatia(lida.esperado) + " esperados (" +
+      comSinal(lida.votos) + " votos). ";
+  }
+
+  function montarControlesDosTurnos() {
+    if (!TURNOS) {
+      painelTurnos.hidden = true;
+      return;
+    }
+    var cenario = seletor("Cenário de apoio no 2º turno", TURNOS.cenarios.map(function (item) {
+      return [item.chave, item.rotulo];
+    }), estadoTurnos.cenario, function (valor) {
+      estadoTurnos.cenario = valor;
+      descricao.textContent = cenarioAtual().descricao;
+      atualizarTurnos();
+    });
+    var metrica = seletor("Pintar por", METRICAS.map(function (chave) {
+      return [chave, nomeDaMetrica(chave)];
+    }), estadoTurnos.metrica, function (valor) {
+      estadoTurnos.metrica = valor;
+      atualizarTurnos();
+    });
+    var descricao = elemento("small", cenarioAtual().descricao);
+    painelTurnos.appendChild(cenario);
+    painelTurnos.appendChild(descricao);
+    painelTurnos.appendChild(metrica);
+    painelTurnos.hidden = !COMPARATIVO;
+  }
+
+  function seletor(rotulo, opcoes, atual, aoMudar) {
+    var campo = elemento("label", rotulo);
+    var lista = document.createElement("select");
+    opcoes.forEach(function (opcao) {
+      var item = elemento("option", opcao[1]);
+      item.value = opcao[0];
+      item.selected = opcao[0] === atual;
+      lista.appendChild(item);
+    });
+    lista.addEventListener("change", function () {
+      aoMudar(lista.value);
+    });
+    campo.appendChild(lista);
+    return campo;
+  }
+
+  function atualizarTurnos() {
+    destacar(null, null, null);
+    BASES.turnos = pinturaDosTurnos();
+    pintura = dadosDaVisao("turnos");
+    repintarTudo();
+    window.location.replace(enderecoDaVisao("turnos"));
+  }
+
   function baseDaVisao(nome) {
-    return nome === "governador" ? "governador" : "presidente";
+    if (nome === "governador" || nome === "turnos") {
+      return nome;
+    }
+    return "presidente";
   }
 
   function dadosDaVisao(nome) {
@@ -828,7 +1302,7 @@ _PAGE_SCRIPT: Final = """\
 
   var CAMPOS_DA_PINTURA = [
     "cor", "peso", "numero", "logo", "codigo", "segundo", "votosSegundo", "branco", "nulo",
-    "classe", "governador", "pesoGovernador"
+    "classe", "governador", "pesoGovernador", "turnos"
   ];
 
   function codigoDaFeicao(feature) {
@@ -874,16 +1348,29 @@ _PAGE_SCRIPT: Final = """\
     visaoAtual = nome;
     pintura = dadosDaVisao(nome);
     CRUZAMENTO = nome === "cruzamento";
+    COMPARATIVO = nome === "turnos";
+    repintarTudo();
+    marcarVisao();
+    if (visaoDoEndereco() !== nome) {
+      window.location.replace(enderecoDaVisao(nome));
+    }
+  }
+
+  function repintarTudo() {
     repintar(camadaBrasil, pintura.pais ? [pintura.pais] : []);
     repintar(camadaUfs, pintura.ufs);
     repintar(camadaMunicipios, pintura.municipios);
     camadaPontos.getSource().clear();
     camadaPontos.getSource().addFeatures(lerPontos());
     montarLegenda();
-    marcarVisao();
-    if (visaoDoEndereco() !== nome) {
-      window.location.replace("#visao=" + nome);
+    painelTurnos.hidden = !COMPARATIVO;
+  }
+
+  function enderecoDaVisao(nome) {
+    if (nome !== "turnos") {
+      return "#visao=" + nome;
     }
+    return "#visao=turnos&cenario=" + estadoTurnos.cenario + "&pintar=" + estadoTurnos.metrica;
   }
 
   function montarSeletor() {
@@ -926,8 +1413,10 @@ _PAGE_SCRIPT: Final = """\
   var itensDaLegenda = document.getElementById("legenda-itens");
   var NOTA_DA_LEGENDA = painelLegenda.querySelector(".nota").textContent;
   var painelVisoes = document.getElementById("visoes");
+  var painelTurnos = document.getElementById("turnos-controles");
   montarLegenda();
   montarSeletor();
+  montarControlesDosTurnos();
   alternarLegenda(painelLegenda.parentElement.clientWidth >= 640);
   botaoLegenda.addEventListener("click", function () {
     alternarLegenda(botaoLegenda.getAttribute("aria-expanded") !== "true");
@@ -950,7 +1439,8 @@ _PAGE_SCRIPT: Final = """\
     controls: ol.control.defaults.defaults().extend([
       new ol.control.Control({element: painelZoom}),
       new ol.control.Control({element: painelLegenda}),
-      new ol.control.Control({element: painelVisoes})
+      new ol.control.Control({element: painelVisoes}),
+      new ol.control.Control({element: painelTurnos})
     ]),
     overlays: [cartao],
     view: vista
@@ -995,6 +1485,7 @@ def html_do_mapa(pagina: PaginaDoMapa) -> str:
         '<div id="mapa"><div id="zoom" aria-live="polite"></div>'
         '<div id="detalhe" role="tooltip" hidden></div>'
         '<div id="visoes" class="ol-unselectable" role="group" aria-label="Visão do mapa"></div>'
+        '<div id="turnos-controles" class="ol-unselectable" hidden></div>'
         '<div id="legenda" class="ol-unselectable"><button type="button" aria-expanded="true"'
         ' aria-controls="legenda-itens">Partidos</button><div id="legenda-itens">'
         '<ul></ul><p class="nota">Tom mais forte: fatia maior dos votos válidos do líder.</p>'
@@ -1066,12 +1557,67 @@ def _payload(pagina: PaginaDoMapa) -> dict[str, object]:
         "cargo": pagina.cargo,
         **_view(pagina.recorte),
         "visoes": _other_views(pagina),
-        "titulos": {cargo: _title_for(pagina, cargo) for cargo in _VIEWS},
+        "titulos": _titles(pagina),
+        "turnos": None if pagina.turnos is None else _turnos(pagina.turnos),
         "brasilId": pagina.brasil_id,
         "ufsObjeto": pagina.ufs_objeto,
         "municipiosObjeto": pagina.municipios_objeto,
         "paisesObjeto": pagina.paises_objeto,
     }
+
+
+def _titles(pagina: PaginaDoMapa) -> dict[str, str]:
+    titles = {cargo: _title_for(pagina, cargo) for cargo in _VIEWS}
+    if pagina.turnos is not None:
+        titles[_TURNOS] = f"Mapa de presidente — {pagina.ano}, 1º × 2º turno"
+    return titles
+
+
+def _turnos(comparativo: ComparativoTurnos) -> dict[str, object]:
+    return {
+        "a": str(comparativo.a),
+        "b": str(comparativo.b),
+        "padrao": comparativo.cenarios[0].chave,
+        "cenarios": [
+            {"chave": item.chave, "rotulo": item.rotulo, "descricao": item.descricao}
+            for item in comparativo.cenarios
+        ],
+        "cobertura": list(comparativo.ufs_com_segundo),
+        "semComparacao": comparativo.sem_comparacao,
+        "piso": PISO_DE_VOTOS,
+        "minimo": MINIMO_NO_GRUPO,
+        "limiares": {"moderado": LIMIAR_MODERADO, "fora": LIMIAR_FORA},
+        "pais": None if comparativo.pais is None else _lugar(comparativo.pais),
+        "ufs": [_lugar(item) for item in comparativo.ufs],
+        "municipios": [_lugar(item) for item in comparativo.municipios],
+        "exterior": [
+            {**_lugar(ponto.lugar), "lon": ponto.lon, "lat": ponto.lat}
+            for ponto in comparativo.exterior
+        ],
+    }
+
+
+def _lugar(lugar: LugarTurnos) -> dict[str, object]:
+    return {
+        "codigo": lugar.codigo,
+        "nome": lugar.nome,
+        "uf": lugar.uf,
+        "primeiro": _contas(lugar.primeiro),
+        "segundo": _contas(lugar.segundo),
+        "leituras": [
+            [
+                round(float(leitura.esperado), 6),
+                leitura.votos_de_diferenca,
+                None if leitura.z is None else round(leitura.z, 3),
+                leitura.classe,
+            ]
+            for leitura in lugar.leituras
+        ],
+    }
+
+
+def _contas(apuracao: Apuracao) -> list[int]:
+    return [apuracao.a, apuracao.b, apuracao.outros, apuracao.branco, apuracao.nulo]
 
 
 def _view(recorte: RecortePintado) -> dict[str, object]:

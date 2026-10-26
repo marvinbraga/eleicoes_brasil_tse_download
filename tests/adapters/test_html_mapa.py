@@ -2,6 +2,7 @@
 
 import json
 from dataclasses import replace
+from fractions import Fraction
 
 from eleicoes.adapters.html_mapa import html_do_mapa
 from eleicoes.domain.mapa import Marca, PaginaDoMapa, Pintura, PontoPintado, RecortePintado
@@ -339,10 +340,11 @@ def test_page_carries_the_other_views_for_the_switcher() -> None:
     assert "#visoes {" in html
     assert "function trocarVisao(nome)" in html
     assert "function repintar(camadaAlvo, itens)" in html
-    assert 'window.location.replace("#visao=" + nome);' in html
+    assert "window.location.replace(enderecoDaVisao(nome));" in html
+    assert 'return "#visao=" + nome;' in html
     assert 'window.addEventListener("hashchange", function () {' in html
     assert "new ol.control.Control({element: painelVisoes})" in html
-    assert 'return nome === "governador" ? "governador" : "presidente";' in html
+    assert 'if (nome === "governador" || nome === "turnos") {' in html
 
 
 def test_page_without_extra_views_has_no_other_views() -> None:
@@ -401,3 +403,43 @@ def test_missing_country_is_json_null() -> None:
     recorte = RecortePintado(None, base.recorte.ufs, base.recorte.municipios, ())
     html = html_do_mapa(replace(base, recorte=recorte))
     assert json.loads(_block(html, "pintura"))["pais"] is None
+
+
+def test_turnos_view_carries_scenarios_counts_and_readings() -> None:
+    from eleicoes.domain.mapa_turnos import Apuracao, Leitura, LugarTurnos, cenarios
+    from eleicoes.domain.mapa_turnos import ComparativoTurnos as Comparativo
+
+    lugar = LugarTurnos(
+        "1200138",
+        "BUJARI (AC)",
+        "AC",
+        Apuracao(400, 500, 100, 1, 2),
+        Apuracao(520, 480, 0, 3, 4),
+        tuple(
+            Leitura(Fraction(1, 2), Fraction(13, 25), 20, 1.23456, "dentro")
+            for _ in cenarios(22, 13)
+        ),
+    )
+    comparativo = Comparativo(
+        22, 13, cenarios(22, 13), lugar, (lugar,), (lugar,), (), ("AC",), 0, ()
+    )
+    html = html_do_mapa(replace(_page(), turnos=comparativo))
+    pintura = json.loads(_block(html, "pintura"))
+    turnos = pintura["turnos"]
+
+    assert turnos["a"] == "22"
+    assert turnos["padrao"] == "todosa"
+    assert turnos["cobertura"] == ["AC"]
+    assert turnos["municipios"][0]["primeiro"] == [400, 500, 100, 1, 2]
+    assert turnos["municipios"][0]["leituras"][0] == [0.5, 20, 1.235, "dentro"]
+    assert pintura["titulos"]["turnos"] == "Mapa de presidente — 2026, 1º × 2º turno"
+    assert '<div id="turnos-controles" class="ol-unselectable" hidden></div>' in html
+    assert 'turnos: "1º × 2º turno"' in html
+    assert 'return String(item.codigo).length < 6 && item.uf !== "ZZ";' in html
+
+
+def test_page_without_second_round_has_no_turnos() -> None:
+    pintura = json.loads(_block(html_do_mapa(_page()), "pintura"))
+
+    assert pintura["turnos"] is None
+    assert "turnos" not in pintura["titulos"]

@@ -21,6 +21,9 @@ const CSS_ESCURO = [
   "body #visoes { background: rgba(23,23,23,.92); border-color: #3a3a3a; }",
   "body #visoes button { color: #fafafa; }",
   "body #visoes button[aria-pressed='true'] { background: #fafafa; color: #111111; }",
+  "body #turnos-controles { background: rgba(23,23,23,.92); border-color: #3a3a3a; color: #fafafa; }",
+  "body #turnos-controles select { background: #262626; border-color: #3a3a3a; color: #fafafa; }",
+  "body #legenda .escala { border-color: rgba(255,255,255,.4); }",
 ].join(" ");
 
 const FUNDO_CLARO = 'data-fundo="#ffffff"';

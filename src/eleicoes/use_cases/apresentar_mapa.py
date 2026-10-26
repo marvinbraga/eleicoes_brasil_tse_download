@@ -5,7 +5,7 @@ import os
 import sys
 import webbrowser
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Final
@@ -28,6 +28,7 @@ from eleicoes.domain.mapa import (
     RecortePintado,
     recorte_pintado,
 )
+from eleicoes.domain.mapa_turnos import ComparativoTurnos, comparar_turnos
 from eleicoes.domain.presidente_governador import (
     CrossReportView,
     MunicipalPlace,
@@ -45,11 +46,16 @@ from eleicoes.ports.relatorio_presidente_governador import (
 from eleicoes.use_cases.presidente_governador import collect_places
 
 Collect = Callable[[int, int], tuple[MunicipalPlace, ...]]
+Present = Callable[[int, int], tuple[str, ...]]
 Render = Callable[[PaginaDoMapa], str]
 OpenReport = Callable[[Path], bool]
 _MESH_DIR = Path("downloads/malha")
 _EXTERIOR_CSV = Path("dados/exterior.csv")
 _VIEWS: Final = ("presidente", "governador")
+_PRIMEIRO_TURNO: Final = 1
+_SEGUNDO_TURNO: Final = 2
+_APOIADO: Final = 22
+_PRESIDENTE: Final = "presidente"
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,12 +78,16 @@ class PresentMap:
         assets: MeshAssets,
         render: Render,
         open_report: OpenReport,
+        present: Present | None = None,
+        apoiado: int | None = _APOIADO,
     ) -> None:
         self._collect = collect
         self._store = store
         self._assets = assets
         self._render = render
         self._open = open_report
+        self._present = present
+        self._apoiado = apoiado
 
     def execute(
         self,
@@ -90,9 +100,12 @@ class PresentMap:
     ) -> PresentedMap:
         _require_scope(ano, turno)
         stored, loaded = self._places(ano, turno, atualizar)
+        segundo = self._second_round(ano, turno, atualizar)
         mesh = self._assets.load()
         _require_country(mesh)
         page = _page(ano, turno, cargo, stored.places, mesh)
+        if segundo:
+            page = replace(page, turnos=_turnos(stored.places, segundo, mesh, self._apoiado))
         opened = _write(destino, self._render(page), self._open)
         return PresentedMap(destino, opened, loaded, stored.gerado_em)
 
@@ -110,6 +123,20 @@ class PresentMap:
         moment = self._store.save(ano, turno, places)
         return StoredCrossReport(places, moment), False
 
+    def _second_round(self, ano: int, turno: int, atualizar: bool) -> tuple[MunicipalPlace, ...]:
+        """O 2º turno ainda chega por UF: o gravado só vale se cobrir as mesmas UFs do banco."""
+        if turno != _PRIMEIRO_TURNO or self._present is None:
+            return ()
+        ufs = frozenset(self._present(ano, _SEGUNDO_TURNO))
+        if not ufs:
+            return ()
+        stored = None if atualizar else self._store.load(ano, _SEGUNDO_TURNO)
+        if stored is not None and frozenset(place.uf for place in stored.places) == ufs:
+            return stored.places
+        places = self._collect(ano, _SEGUNDO_TURNO)
+        self._store.save(ano, _SEGUNDO_TURNO, places)
+        return places
+
 
 def main(
     argv: Sequence[str] | None = None,
@@ -121,10 +148,11 @@ def main(
     collect: Collect | None = None,
     render: Render | None = None,
     open_report: OpenReport | None = None,
+    present: Present | None = None,
 ) -> int:
     args = _parser().parse_args(argv)
     try:
-        report = _present(args, reader, names, store, assets, collect, render, open_report)
+        report = _present(args, reader, names, store, assets, collect, render, open_report, present)
     except MeshMissingError as error:
         print(f"Falta {error.nome}.", file=sys.stderr)
         return EXIT_FAILURE
@@ -161,6 +189,15 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Relê os boletins e substitui os votos municipais gravados no banco.",
     )
+    parser.add_argument(
+        "--apoiado",
+        type=int,
+        default=_APOIADO,
+        help=(
+            "Finalista que os eliminados apoiaram no 2º turno."
+            f" Ordena os cenários do comparativo. Padrão: {_APOIADO}."
+        ),
+    )
     return parser
 
 
@@ -173,6 +210,7 @@ def _present(
     collect: Collect | None,
     render: Render | None,
     open_report: OpenReport | None,
+    present: Present | None,
 ) -> PresentedMap:
     destino = _destino(args)
     cache = store if store is not None else _production_store()
@@ -183,6 +221,8 @@ def _present(
             assets if assets is not None else _production_assets(),
             render if render is not None else html_do_mapa,
             _choose_opener(args, open_report),
+            _present_for(reader, collect, present),
+            int(args.apoiado),
         ).execute(args.ano, args.turno, str(args.cargo), destino, atualizar=bool(args.atualizar))
     finally:
         cache.close()
@@ -212,6 +252,27 @@ def _bound_collect(reader: BoletimReader, names: MunicipalityNames) -> Collect:
         return collect_places(reader, names, ano, turno)
 
     return collect
+
+
+def _present_for(
+    reader: BoletimReader | None,
+    collect: Collect | None,
+    present: Present | None,
+) -> Present | None:
+    if present is not None:
+        return present
+    if reader is not None:
+        return _bound_present(reader)
+    if collect is not None:
+        return None
+    return _production_present
+
+
+def _bound_present(reader: BoletimReader) -> Present:
+    def present(ano: int, turno: int) -> tuple[str, ...]:
+        return reader.present_ufs(ano, turno, _PRESIDENTE)
+
+    return present
 
 
 def _choose_opener(args: argparse.Namespace, open_report: OpenReport | None) -> OpenReport:
@@ -246,6 +307,16 @@ def _production_collect(ano: int, turno: int) -> tuple[MunicipalPlace, ...]:
     finally:
         reader.close()
         names.close()
+
+
+def _production_present(ano: int, turno: int) -> tuple[str, ...]:
+    from eleicoes.composition.boletim import build_boletim_reader
+
+    reader = build_boletim_reader(_environment())
+    try:
+        return reader.present_ufs(ano, turno, _PRESIDENTE)
+    finally:
+        reader.close()
 
 
 def _environment() -> Mapping[str, str]:
@@ -289,6 +360,24 @@ def _page(
         mesh.ol_css,
         mesh.topojson_js,
         _views(view, cargo, painted, mesh),
+    )
+
+
+def _turnos(
+    primeiro: tuple[MunicipalPlace, ...],
+    segundo: tuple[MunicipalPlace, ...],
+    mesh: MalhaCarregada,
+    apoiado: int | None,
+) -> ComparativoTurnos:
+    return comparar_turnos(
+        primeiro,
+        segundo,
+        mesh.ponte,
+        mesh.codigos_municipio,
+        mesh.codigos_uf,
+        mesh.manifesto.brasil_id,
+        exterior=mesh.exterior,
+        apoiado=apoiado,
     )
 
 

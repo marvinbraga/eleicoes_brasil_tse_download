@@ -352,6 +352,16 @@ O arquivo sai em `relatorios/mapa-{cargo}-{ano}-turno-{turno}.html`. `--atualiza
 | `--destino` | pasta `relatorios/` | Caminho completo do HTML. |
 | `--sem-navegador` | abre o navegador | Grava o HTML e deixa o navegador fechado. |
 | `--atualizar` | usa o que está no banco | Recalcula os votos municipais. |
+| `--apoiado` | `22` | Finalista que os eliminados apoiaram no 2º turno. Ordena os cenários do comparativo. |
+
+### Comparativo 1º × 2º turno
+
+Com o mapa do 1º turno, quando já há boletins do 2º turno importados, o arquivo ganha a visão **1º × 2º turno** (`#visao=turnos`). Ela mostra, por município, UF e país, os votos dos dois finalistas, dos eliminados, os brancos, os nulos e o total de cédulas nos dois turnos, com a variação.
+
+O seletor **Cenário de apoio no 2º turno** redistribui os votos dos eliminados: todos para o apoiado (padrão), 75% para ele, metade para cada, como no 1º turno ou 75% para o outro finalista. A fatia esperada do apoiado entre os votos dos finalistas é comparada com a real. A **anomalia** é o z robusto (mediana e MAD) dessa diferença contra os municípios da mesma UF: acima de 2 em módulo é desvio moderado, acima de 3,5 fica fora do esperado. Municípios com menos de 1.000 votos dos finalistas e grupos com menos de 8 lugares ficam sem z. País e UFs sem grupo são pintados pela diferença do cenário. Desvio indica onde o cenário explica mal o voto; não prova irregularidade. O modelo não move quem votou em branco ou nulo no 1º turno, quem faltou a um dos turnos nem quem trocou de finalista.
+
+O 2º turno gravado no banco só é reaproveitado enquanto cobre as mesmas UFs importadas. Depois de importar uma UF nova, rode o mapa de novo e o 2º turno é recalculado.
+
 
 ## Entender os arquivos da seção
 

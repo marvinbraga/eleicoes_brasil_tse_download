@@ -2,10 +2,13 @@
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
 from eleicoes.domain.errors import ElectionError
 from eleicoes.domain.presidente_governador import CargoReading, CrossReportView, PlaceReading
+
+if TYPE_CHECKING:
+    from eleicoes.domain.mapa_turnos import ComparativoTurnos
 
 _COLUMNS: Final = (
     "DT_GERACAO",
@@ -129,6 +132,7 @@ class PaginaDoMapa:
     ol_css: str
     topojson_js: str
     recortes: Mapping[str, RecortePintado] = field(default_factory=dict)
+    turnos: "ComparativoTurnos | None" = None
 
 
 def ponte_de_linhas(linhas: Sequence[Mapping[str, str]]) -> PonteTseIbge:

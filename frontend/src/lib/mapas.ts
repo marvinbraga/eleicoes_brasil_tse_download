@@ -9,6 +9,9 @@ export const ARQUIVOS_MAPA: Record<CargoMapa, string> = {
     "/run/media/marvinbraga/dados/marvin/eleicoes_brasil_tse_download/relatorios/mapa-governador-2026-turno-1.html",
   cruzamento:
     "/run/media/marvinbraga/dados/marvin/eleicoes_brasil_tse_download/relatorios/mapa-cruzamento-2026-turno-1.html",
+  // O comparativo entre turnos vive dentro do arquivo de presidente do 1º turno.
+  turnos:
+    "/run/media/marvinbraga/dados/marvin/eleicoes_brasil_tse_download/relatorios/mapa-presidente-2026-turno-1.html",
 };
 
 export function arquivoMapa(cargo: string): string | null {

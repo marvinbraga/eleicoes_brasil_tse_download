@@ -702,3 +702,75 @@ def test_outdated_schema_asks_for_the_migration(
     )
     assert code == 1
     assert capsys.readouterr().err == SCHEMA_OUTDATED_HINT + "\n"
+
+
+def _second_round_place(votos_22: int, votos_13: int) -> MunicipalPlace:
+    tally = CargoTally((PartyTally(22, votos_22, 0), PartyTally(13, votos_13, 0)), 0, 0)
+    return MunicipalPlace("AC", "01007", "Bujari", tally, None)
+
+
+def test_second_round_adds_the_turnos_view(tmp_path: Path) -> None:
+    destino = tmp_path / "mapa.html"
+    collected: list[int] = []
+
+    def collect(_ano: int, turno: int) -> tuple[MunicipalPlace, ...]:
+        collected.append(turno)
+        return (_bujari(),) if turno == 1 else (_second_round_place(6, 4),)
+
+    store = _Memory()
+    code = main(
+        ["--cargo", "presidente", "--destino", str(destino), "--sem-navegador"],
+        store=store,
+        assets=_Assets(),
+        collect=collect,
+        present=lambda _ano, _turno: ("AC",),
+    )
+    text = destino.read_text(encoding="utf-8")
+
+    assert code == 0
+    assert collected == [1, 2]
+    assert store.rows[(2026, 2)].places == (_second_round_place(6, 4),)
+    assert '"turnos": {"a": "22", "b": "13"' in text
+    assert "Mapa de presidente — 2026, 1º × 2º turno" in text
+
+
+def test_stored_second_round_is_reused_while_it_covers_the_same_ufs(tmp_path: Path) -> None:
+    store = _Memory()
+    store.save(2026, 1, (_bujari(),))
+    store.save(2026, 2, (_second_round_place(6, 4),))
+    collected: list[int] = []
+
+    def collect(_ano: int, turno: int) -> tuple[MunicipalPlace, ...]:
+        collected.append(turno)
+        return (_second_round_place(7, 3),)
+
+    main(
+        ["--cargo", "presidente", "--destino", str(tmp_path / "a.html"), "--sem-navegador"],
+        store=store,
+        assets=_Assets(),
+        collect=collect,
+        present=lambda _ano, _turno: ("AC",),
+    )
+    assert collected == []
+
+    main(
+        ["--cargo", "presidente", "--destino", str(tmp_path / "b.html"), "--sem-navegador"],
+        store=store,
+        assets=_Assets(),
+        collect=collect,
+        present=lambda _ano, _turno: ("AC", "AL"),
+    )
+    assert collected == [2]
+
+
+def test_no_second_round_keeps_the_page_without_turnos(tmp_path: Path) -> None:
+    destino = tmp_path / "mapa.html"
+    main(
+        ["--cargo", "presidente", "--destino", str(destino), "--sem-navegador"],
+        store=_Memory(),
+        assets=_Assets(),
+        collect=lambda _ano, _turno: (_bujari(),),
+        present=lambda _ano, _turno: (),
+    )
+
+    assert '"turnos": null' in destino.read_text(encoding="utf-8")

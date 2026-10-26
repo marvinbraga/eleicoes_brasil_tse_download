@@ -73,6 +73,7 @@ export const CARGOS_MAPA = [
   { value: "presidente", label: "Presidente" },
   { value: "governador", label: "Governador" },
   { value: "cruzamento", label: "Presidente × governador" },
+  { value: "turnos", label: "1º × 2º turno" },
 ] as const;
 
 export type Ano = (typeof ANOS)[number];
