@@ -95,6 +95,14 @@ uv run python scripts/manter_urnas_2026.py
 
 Cada falha espera 3 minutos e o download recomeça. Arquivo já gravado continua ignorado. Uma segunda cópia encerra com a mensagem `Já existe uma execução deste script.` O acompanhamento fica em `logs/urnas-2026/resumo.log`.
 
+Para o 2º turno, acrescente `--turno 2` a qualquer um dos dois scripts:
+
+```bash
+uv run python scripts/manter_urnas_2026.py --turno 2
+```
+
+Os logs do 2º turno ficam em `logs/urnas-2026-turno-2/`. Não rode os dois turnos ao mesmo tempo: cada processo usa até 80 requisições por segundo, e o TSE bloqueia acima de 100.
+
 Uma UF só, sem o script nacional:
 
 ```bash
@@ -108,7 +116,7 @@ uv run python -m eleicoes urnas --ano 2026 --turno 1 --uf DF
 | `--uf` | Sigla. Pode repetir. Sem esta opção, pede todas as UFs. |
 | `--destino` | Pasta de saída. Padrão: `downloads/{ano}`. |
 
-O script nacional fixa 2026 e o turno 1. Use-o para a varredura do país. Use `eleicoes urnas` quando quiser uma UF ou um turno específico.
+O script nacional fixa 2026 e usa o turno 1, a menos que receba `--turno 2`. Use-o para a varredura do país. Use `eleicoes urnas` quando quiser uma UF ou um turno específico.
 
 Os arquivos de cada seção vão para:
 
@@ -361,7 +369,6 @@ Com o mapa do 1º turno, quando já há boletins do 2º turno importados, o arqu
 O seletor **Cenário de apoio no 2º turno** redistribui os votos dos eliminados: todos para o apoiado (padrão), 75% para ele, metade para cada, como no 1º turno ou 75% para o outro finalista. A fatia esperada do apoiado entre os votos dos finalistas é comparada com a real. A **anomalia** é o z robusto (mediana e MAD) dessa diferença contra os municípios da mesma UF: acima de 2 em módulo é desvio moderado, acima de 3,5 fica fora do esperado. Municípios com menos de 1.000 votos dos finalistas e grupos com menos de 8 lugares ficam sem z. País e UFs sem grupo são pintados pela diferença do cenário. Desvio indica onde o cenário explica mal o voto; não prova irregularidade. O modelo não move quem votou em branco ou nulo no 1º turno, quem faltou a um dos turnos nem quem trocou de finalista.
 
 O 2º turno gravado no banco só é reaproveitado enquanto cobre as mesmas UFs importadas. Depois de importar uma UF nova, rode o mapa de novo e o 2º turno é recalculado.
-
 
 ## Entender os arquivos da seção
 

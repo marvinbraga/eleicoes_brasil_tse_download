@@ -1,12 +1,14 @@
-"""Baixa as urnas do 1º turno de 2026, uma UF por vez, gravando log.
+"""Baixa as urnas de um turno de 2026, uma UF por vez, gravando log.
 
 Uso, na raiz do projeto:
 
-    uv run python scripts/baixar_urnas_2026.py
+    uv run python scripts/baixar_urnas_2026.py              # 1º turno
+    uv run python scripts/baixar_urnas_2026.py --turno 2    # 2º turno
 
 Rodar de novo continua de onde parou. Arquivo já gravado é ignorado.
 """
 
+import argparse
 import os
 import sys
 from contextlib import redirect_stderr, redirect_stdout
@@ -23,7 +25,7 @@ from eleicoes.domain.report import EXIT_NOT_PUBLISHED, EXIT_SUCCESS  # noqa: E40
 from eleicoes.domain.values import UF_CODES  # noqa: E402
 
 ANO = "2026"
-TURNO = "1"
+TURNOS = ("1", "2")
 _CONTINUA = frozenset({EXIT_SUCCESS, EXIT_NOT_PUBLISHED})
 
 
@@ -57,14 +59,21 @@ def _registrar(resumo: TextIO, texto: str) -> None:
     resumo.flush()
 
 
-def _baixar(uf: str, arquivo: Path) -> int:
+def pasta_logs(turno: str) -> Path:
+    """O 1º turno mantém a pasta original; os outros ganham pasta própria."""
+    if turno == "1":
+        return RAIZ / "logs" / f"urnas-{ANO}"
+    return RAIZ / "logs" / f"urnas-{ANO}-turno-{turno}"
+
+
+def _baixar(uf: str, turno: str, arquivo: Path) -> int:
     with arquivo.open("a", encoding="utf-8") as destino:
         copia_saida = _Copia(sys.stdout, destino)
         copia_erro = _Copia(sys.stderr, destino)
         destino.write(f"\n===== {_agora()} início {uf} =====\n")
         destino.flush()
         with redirect_stdout(copia_saida), redirect_stderr(copia_erro):
-            codigo = main(["urnas", "--ano", ANO, "--turno", TURNO, "--uf", uf])
+            codigo = main(["urnas", "--ano", ANO, "--turno", turno, "--uf", uf])
         destino.write(f"===== {_agora()} fim {uf} saída={codigo} =====\n")
         destino.flush()
         return codigo
@@ -81,18 +90,26 @@ def _travar(caminho: Path) -> TextIO:
     return trava
 
 
-def executar() -> int:
+def ler_turno(argumentos: list[str]) -> str:
+    leitor = argparse.ArgumentParser(description="Baixa as urnas de 2026, uma UF por vez.")
+    leitor.add_argument("--turno", choices=TURNOS, default="1", help="Turno. Padrão: 1.")
+    turno: str = leitor.parse_args(argumentos).turno
+    return turno
+
+
+def executar(argumentos: list[str] | None = None) -> int:
+    turno = ler_turno(sys.argv[1:] if argumentos is None else argumentos)
     os.chdir(RAIZ)
-    pasta = RAIZ / "logs" / "urnas-2026"
+    pasta = pasta_logs(turno)
     pasta.mkdir(parents=True, exist_ok=True)
     trava = _travar(pasta / "execucao.lock")
     try:
         with (pasta / "resumo.log").open("a", encoding="utf-8") as resumo:
-            _registrar(resumo, f"início ano={ANO} turno={TURNO} ufs={len(UF_CODES)}")
+            _registrar(resumo, f"início ano={ANO} turno={turno} ufs={len(UF_CODES)}")
             _registrar(resumo, f"logs em {pasta}")
             for uf in UF_CODES:
                 _registrar(resumo, f"início {uf}")
-                codigo = _baixar(uf, pasta / f"{uf}.log")
+                codigo = _baixar(uf, turno, pasta / f"{uf}.log")
                 _registrar(resumo, f"fim {uf} saída={codigo}")
                 if codigo in _CONTINUA:
                     continue

@@ -2,7 +2,8 @@
 
 Uso, na raiz do projeto:
 
-    uv run python scripts/manter_urnas_2026.py
+    uv run python scripts/manter_urnas_2026.py              # 1º turno
+    uv run python scripts/manter_urnas_2026.py --turno 2    # 2º turno
 
 Cada falha espera 3 minutos e roda de novo. Arquivo já gravado é ignorado.
 """
@@ -21,6 +22,10 @@ RAIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAIZ / "src"))
 
 from eleicoes.domain.report import EXIT_SUCCESS  # noqa: E402
+
+sys.path.insert(0, str(RAIZ / "scripts"))
+
+from baixar_urnas_2026 import ler_turno, pasta_logs  # noqa: E402
 
 _ESPERA_SEGUNDOS = 180
 _DOWNLOAD = RAIZ / "scripts" / "baixar_urnas_2026.py"
@@ -49,11 +54,11 @@ def _travar(caminho: Path) -> TextIO:
     return trava
 
 
-def _rodar() -> int:
+def _rodar(turno: str) -> int:
     ambiente = os.environ.copy()
     ambiente["PYTHONUNBUFFERED"] = "1"
     concluido = subprocess.run(
-        [sys.executable, str(_DOWNLOAD)],
+        [sys.executable, str(_DOWNLOAD), "--turno", turno],
         cwd=RAIZ,
         env=ambiente,
         check=False,
@@ -78,14 +83,17 @@ def repetir(
         esperar(_ESPERA_SEGUNDOS)
 
 
-def executar() -> int:
+def executar(argumentos: list[str] | None = None) -> int:
+    turno = ler_turno(sys.argv[1:] if argumentos is None else argumentos)
     os.chdir(RAIZ)
-    pasta = RAIZ / "logs" / "urnas-2026"
+    pasta = pasta_logs(turno)
     pasta.mkdir(parents=True, exist_ok=True)
     trava = _travar(pasta / "manter.lock")
     try:
         with (pasta / "resumo.log").open("a", encoding="utf-8") as resumo:
-            return repetir(_rodar, time.sleep, lambda texto: _registrar(resumo, texto))
+            return repetir(
+                lambda: _rodar(turno), time.sleep, lambda texto: _registrar(resumo, texto)
+            )
     finally:
         trava.close()
 
