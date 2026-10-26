@@ -120,7 +120,7 @@ _PAGE_CSS: Final = (
     " #detalhe th:first-child { text-align: left; }"
     " #detalhe thead th { opacity: .7; }"
     " #legenda .saldo { display: block; margin: .2em 0 .5em; }"
-    " #legenda .saldo table { border-collapse: collapse; }"
+    " #legenda .saldo table { border-collapse: collapse; font-size: 11px; }"
     " #legenda .saldo th, #legenda .saldo td { padding: 0 .45em 0 0; text-align: right;"
     " font-weight: normal; white-space: nowrap; }"
     " #legenda .saldo th:first-child { text-align: left; font-weight: bold; }"
@@ -1462,9 +1462,11 @@ _PAGE_SCRIPT: Final = """\
     var ordem = item.segundo[1] > item.segundo[0] ? [1, 0] : [0, 1];
     var tabela = document.createElement("table");
     var cabeca = tabela.createTHead().insertRow();
-    ["", "1º turno", "2º turno", "Diferença"].forEach(function (texto) {
+    var colunas = [["", ""], ["1º", "1º turno"], ["2º", "2º turno"], ["Dif.", "Diferença"]];
+    colunas.forEach(function (par) {
       var celula = document.createElement("th");
-      celula.textContent = texto;
+      celula.textContent = par[0];
+      celula.title = par[1];
       cabeca.appendChild(celula);
     });
     var corpo = tabela.createTBody();
