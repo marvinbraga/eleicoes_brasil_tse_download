@@ -362,6 +362,8 @@ O seletor **Cenário de apoio no 2º turno** redistribui os votos dos eliminados
 
 Quando alguma UF importada tem 2º turno de governador, o mesmo arquivo ganha a visão **Governador 1º × 2º** (`#visao=turnosgov`). Só entram essas UFs, e cada uma tem os seus finalistas: os dois mais votados do 2º turno na UF, com o mais votado deles no 1º turno como 1º colocado. Os cenários são metade para cada, como no 1º turno, todos para o 1º colocado e todos para o 2º colocado do 1º turno. Os municípios são comparados dentro da UF, como no presidente. Não há país nem exterior. Sem 2º turno de governador importado, a visão não aparece.
 
+O botão **Baixar CSV**, no painel do cenário das duas visões, grava os municípios (e as cidades do exterior) no cenário escolhido: nome, UF, código IBGE (o do TSE no exterior), finalistas, votos de cada grupo nos dois turnos, fatia esperada e real do finalista A, diferença em pontos e em votos, z e classe. As linhas vêm do maior |z| para o menor. O arquivo usa ponto e vírgula, vírgula decimal e BOM de UTF-8, e abre direto no Excel em português.
+
 O 2º turno gravado no banco só é reaproveitado enquanto cobre as mesmas UFs importadas e nenhuma UF foi importada depois que ele foi gravado. Cada `boletins` deixa uma marca em `raw.carga` (conjunto `boletins-<ano>`). Assim, importar de novo uma UF que já estava no banco, por exemplo depois de baixar boletins que faltavam, também refaz o 2º turno na próxima vez que o mapa rodar. UFs importadas antes dessa marca existir valem só pela checagem das UFs.
 
 #### Importar o 2º turno enquanto ele chega

@@ -23,6 +23,8 @@ const CSS_ESCURO = [
   "body #visoes button[aria-pressed='true'] { background: #fafafa; color: #111111; }",
   "body #turnos-controles { background: rgba(23,23,23,.92); border-color: #3a3a3a; color: #fafafa; }",
   "body #turnos-controles select { background: #262626; border-color: #3a3a3a; color: #fafafa; }",
+  "body #turnos-controles button { background: #262626; border-color: #3a3a3a; color: #fafafa; }",
+  "body #turnos-controles .personalizado { border-color: #3a3a3a; }",
   "body #legenda .escala { border-color: rgba(255,255,255,.4); }",
 ].join(" ");
 

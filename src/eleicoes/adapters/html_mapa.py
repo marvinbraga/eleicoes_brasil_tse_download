@@ -113,6 +113,8 @@ _PAGE_CSS: Final = (
     " padding-left: .5em; border-left: 2px solid #cccccc; }"
     " #turnos-controles .personalizado[hidden] { display: none; }"
     " #turnos-controles .personalizado label { font-weight: normal; }"
+    " #turnos-controles button { font: 12px sans-serif; color: #111111; background: #ffffff;"
+    " border: 1px solid #888888; border-radius: 4px; padding: .3em .6em; cursor: pointer; }"
     " #detalhe table { border-collapse: collapse; margin-top: .2em; }"
     " #detalhe th, #detalhe td { padding: 0 .5em 0 0; text-align: right; font-weight: normal; }"
     " #detalhe th:first-child { text-align: left; }"
@@ -1542,6 +1544,11 @@ _PAGE_SCRIPT: Final = """\
     painelTurnos.appendChild(personalizado);
     painelTurnos.appendChild(descricao);
     painelTurnos.appendChild(metrica);
+    var baixar = elemento("button", "Baixar CSV");
+    baixar.type = "button";
+    baixar.className = "baixar";
+    baixar.addEventListener("click", baixarCsv);
+    painelTurnos.appendChild(baixar);
     painelTurnos.hidden = !COMPARATIVO;
   }
 
@@ -1567,6 +1574,71 @@ _PAGE_SCRIPT: Final = """\
     for (var i = 0; i < listas.length; i++) {
       listas[i].value = estadoTurnos.destinos[listas[i].getAttribute("data-grupo")];
     }
+  }
+
+  // CSV para o Excel em português: ponto e vírgula, vírgula decimal e BOM de UTF-8.
+  function baixarCsv() {
+    var linhas = linhasDoCsv().map(function (campos) {
+      return campos.map(campoDoCsv).join(";");
+    });
+    var arquivo = new Blob(["\\uFEFF" + linhas.join("\\r\\n") + "\\r\\n"],
+      {type: "text/csv;charset=utf-8"});
+    var endereco = URL.createObjectURL(arquivo);
+    var link = document.createElement("a");
+    link.href = endereco;
+    link.download = (doGovernador() ? "governador" : "presidente") + "-1o-x-2o-turno-" +
+      estadoTurnos.cenario + ".csv";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(function () {
+      URL.revokeObjectURL(endereco);
+    }, 1000);
+  }
+
+  function linhasDoCsv() {
+    var lugares = TURNOS.municipios.concat(TURNOS.exterior).map(function (item) {
+      return {item: item, lida: leituraAtual(item)};
+    });
+    lugares.sort(function (x, y) {
+      var zx = x.lida.z === null ? -1 : Math.abs(x.lida.z);
+      var zy = y.lida.z === null ? -1 : Math.abs(y.lida.z);
+      return zy - zx ||
+        Math.abs(y.lida.real - y.lida.esperado) - Math.abs(x.lida.real - x.lida.esperado);
+    });
+    var cabecalho = ["Nome", "UF", "Código IBGE (TSE no exterior)", "Finalista A", "Finalista B"];
+    ["1º turno", "2º turno"].forEach(function (turno) {
+      ["A", "B", "Eliminados", "Brancos", "Nulos", "Cédulas"].forEach(function (grupo) {
+        cabecalho.push(grupo + " " + turno);
+      });
+    });
+    cabecalho.push("Esperado A (%)", "Real A (%)", "Diferença (p.p.)", "Diferença (votos)", "z",
+      "Classe", "Cenário");
+    var cenario = cenarioAtual().rotulo;
+    return [cabecalho].concat(lugares.map(function (lugar) {
+      var item = lugar.item;
+      var lida = lugar.lida;
+      var dupla = finalistasDe(item);
+      var campos = [String(item.nome).replace(/ \\([A-Z]{2}\\)$/, ""), item.uf,
+        String(item.codigo), dupla[0], dupla[1]];
+      [item.primeiro, item.segundo].forEach(function (contas) {
+        campos.push(contas[0], contas[1], contas[2], contas[3], contas[4], cedulas(contas));
+      });
+      campos.push(numeroDoCsv(lida.esperado * 100, 3), numeroDoCsv(lida.real * 100, 3),
+        numeroDoCsv((lida.real - lida.esperado) * 100, 3), lida.votos,
+        lida.z === null ? "" : numeroDoCsv(lida.z, 3), rotuloDaClasse(classeVisivel(lida)),
+        cenario);
+      return campos;
+    }));
+  }
+
+  function numeroDoCsv(valor, casas) {
+    return valor.toFixed(casas).replace(".", ",");
+  }
+
+  function campoDoCsv(valor) {
+    var texto = String(valor);
+    return /[;"\\r\\n]/.test(texto) ? '"' + texto.replace(/"/g, '""') + '"' : texto;
   }
 
   function seletor(rotulo, opcoes, atual, aoMudar) {
