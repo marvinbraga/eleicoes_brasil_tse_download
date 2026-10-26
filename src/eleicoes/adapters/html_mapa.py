@@ -1251,7 +1251,7 @@ _PAGE_SCRIPT: Final = """\
   }
 
   function limiteDaMetrica(metrica) {
-    var chave = metrica + "|" + estadoTurnos.cenario +
+    var chave = TURNOS.cargo + "|" + metrica + "|" + estadoTurnos.cenario +
       (estadoTurnos.cenario === PERSONALIZADO ? "|" + codigoDosDestinos() : "");
     if (LIMITES_DAS_METRICAS[chave]) {
       return LIMITES_DAS_METRICAS[chave];
@@ -1484,7 +1484,7 @@ _PAGE_SCRIPT: Final = """\
         TURNOS.cobertura.map(function (uf) {
           var dupla = TURNOS.finalistas[uf];
           return uf + ": " + nomeDoPartido(dupla[0]) + " × " + nomeDoPartido(dupla[1]);
-        }).join("; ") + "). " :
+        }).join("; ") + "). Sem soma do país: aproxime o mapa para ver essas UFs. " :
       "2º turno importado em " + TURNOS.cobertura.length + " de 28 recortes (" +
         TURNOS.cobertura.join(", ") + "). ";
     var cargo = doGovernador() ? "governador" : "presidente";

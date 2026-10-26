@@ -529,6 +529,7 @@ def test_governor_turnos_carry_the_finalists_of_each_uf() -> None:
     assert pintura["turnosgov"]["padrao"] == "dividido"
     assert pintura["titulos"]["turnosgov"] == "Mapa de governador — 2026, 1º × 2º turno"
     assert 'turnosgov: "Governador 1º × 2º"' in html
+    assert 'var chave = TURNOS.cargo + "|" + metrica + "|" + estadoTurnos.cenario +' in html
 
 
 def test_turnos_controls_export_a_csv_for_excel() -> None:
