@@ -530,6 +530,7 @@ def _turnos(
     apoiado: int | None,
     participacao: Mapping[tuple[int, str, str], tuple[int, int]],
 ) -> ComparativoTurnos:
+    partes, pequenas = _partes_estimadas(primeiro, segundo, apoiado)
     return comparar_turnos(
         primeiro,
         segundo,
@@ -540,7 +541,8 @@ def _turnos(
         exterior=mesh.exterior,
         apoiado=apoiado,
         participacao=participacao,
-        partes_estimadas=_partes_estimadas(primeiro, segundo, apoiado),
+        partes_estimadas=partes,
+        amostras_pequenas=pequenas,
     )
 
 
@@ -548,15 +550,18 @@ def _partes_estimadas(
     primeiro: tuple[MunicipalPlace, ...],
     segundo: tuple[MunicipalPlace, ...],
     apoiado: int | None,
-) -> dict[str, Fraction]:
-    """Parte de A por UF, da regressão ecológica. Sem reamostras: o mapa só usa o ponto."""
+) -> tuple[dict[str, Fraction], frozenset[str]]:
+    """Parte de A por UF, da regressão ecológica, e as UFs de amostra pequena.
+
+    Sem reamostras: o mapa só usa o ponto."""
     try:
         a, b = finalistas(segundo, apoiado)
     except FinalistsMissingError:
-        return {}
+        return {}, frozenset()
     grupos = grupos_do_primeiro(primeiro, a, b)
     estimadas, _ = estimar_por_uf(observacoes(primeiro, segundo, grupos), grupos, reamostras=0)
-    return {estimativa.uf: parte_estimada_de_a(estimativa) for estimativa in estimadas}
+    partes = {estimativa.uf: parte_estimada_de_a(estimativa) for estimativa in estimadas}
+    return partes, frozenset(item.uf for item in estimadas if item.amostra_pequena)
 
 
 def _turnos_de_governador(

@@ -313,7 +313,7 @@ def test_estimated_scenario_uses_each_uf_share_and_a_weighted_national_one() -> 
         ],
         partes,
     )
-    cenario = cenario_estimado(22, partes, nacional)
+    cenario = cenario_estimado(22, partes, nacional, frozenset({"AC"}))
     primeiro = Apuracao(400, 500, 100, 0, 0)
     segundo = Apuracao(500, 500, 0, 0, 0)
 
@@ -323,7 +323,9 @@ def test_estimated_scenario_uses_each_uf_share_and_a_weighted_national_one() -> 
 
     assert nacional == Fraction(5, 8)
     assert cenario.chave == "estimado"
-    assert "AC 25%" in cenario.descricao and "AL 75%" in cenario.descricao
+    assert "AC 25% (amostra pequena)" in cenario.descricao
+    assert "AL 75%;" not in cenario.descricao and "AL 75%)" in cenario.descricao
+    assert "só move os eliminados" in cenario.descricao
     assert no_ac.esperado == Fraction(425, 1000)
     assert no_al.esperado == Fraction(475, 1000)
     assert fora.esperado == Fraction(4625, 10000)

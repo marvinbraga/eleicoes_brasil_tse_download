@@ -215,17 +215,26 @@ def cenarios(a: int, b: int) -> tuple[Cenario, ...]:
     )
 
 
-def cenario_estimado(a: int, partes_por_uf: Mapping[str, Fraction], nacional: Fraction) -> Cenario:
+def cenario_estimado(
+    a: int,
+    partes_por_uf: Mapping[str, Fraction],
+    nacional: Fraction,
+    pequenas: frozenset[str] = frozenset(),
+) -> Cenario:
     """A parte de A que a regressão ecológica estimou em cada UF; o resto usa a média do país."""
     lista = "; ".join(
-        f"{uf} {_por_cento(partes_por_uf[uf])}" for uf in UF_CODES if uf in partes_por_uf
+        f"{uf} {_por_cento(partes_por_uf[uf])}{' (amostra pequena)' if uf in pequenas else ''}"
+        for uf in UF_CODES
+        if uf in partes_por_uf
     )
     return Cenario(
         "estimado",
         "Estimado pelos dados",
         f"Dos votos dos eliminados que foram a um finalista, a parte do {a} estimada por "
         f"regressão ecológica entre os municípios de cada UF ({lista}). UFs sem estimativa "
-        f"e o exterior usam a média ponderada, {_por_cento(nacional)}.",
+        f"e o exterior usam a média ponderada, {_por_cento(nacional)}. A regressão também "
+        "move brancos, nulos e eleitores de um finalista para o outro, e o mapa só move os "
+        "eliminados: a diferença que sobra vem dessa parte, não de um erro do cenário.",
         nacional,
         dict(partes_por_uf),
     )
@@ -348,6 +357,7 @@ def comparar_turnos(
     cargo: str = PRESIDENTE,
     participacao: Mapping[tuple[int, str, str], tuple[int, int]] | None = None,
     partes_estimadas: Mapping[str, Fraction] | None = None,
+    amostras_pequenas: frozenset[str] = frozenset(),
 ) -> ComparativoTurnos:
     """``participacao`` usa a chave (turno, UF, código TSE de cinco dígitos) e o valor
     (aptos, comparecimento). ``partes_estimadas`` acrescenta o cenário estimado."""
@@ -360,7 +370,8 @@ def comparar_turnos(
     escolhidos = cenarios(a, b)
     if partes_estimadas:
         nacional = parte_nacional([(par.uf, par.primeiro) for par in pares], partes_estimadas)
-        escolhidos = (*escolhidos, cenario_estimado(a, partes_estimadas, nacional))
+        estimado = cenario_estimado(a, partes_estimadas, nacional, amostras_pequenas)
+        escolhidos = (*escolhidos, estimado)
     cidades = tuple(par for par in pares if par.uf != _EXTERIOR)
     fora = tuple(par for par in pares if par.uf == _EXTERIOR)
     municipios, buracos = _municipios(cidades, escolhidos, ponte, codigos_municipio)
