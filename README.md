@@ -350,7 +350,7 @@ Para só gravar o arquivo:
 uv run python scripts/relatorio_mapa.py --ano 2026 --turno 1 --cargo governador --sem-navegador
 ```
 
-O arquivo sai em `relatorios/mapa-{cargo}-{ano}-turno-{turno}.html`. `--atualizar` relê os boletins e substitui os votos municipais que o relatório de presidente e governador também usa.
+O arquivo sai em `relatorios/mapa-{cargo}-{ano}-turno-{turno}.html`. O mapa do 2º turno sai com `--turno 2` e soma só as UFs com 2º turno já importado; no frontend, o seletor **1º turno / 2º turno** acima do mapa troca o arquivo (`/mapa?cargo=presidente&turno=2`). O 2º turno gravado no banco passa pela mesma checagem de UFs e de marca de carga do comparativo. `--atualizar` relê os boletins e substitui os votos municipais que o relatório de presidente e governador também usa.
 
 | Opção | Padrão | Efeito |
 | --- | --- | --- |
@@ -384,12 +384,12 @@ Com o download do 2º turno rodando (`scripts/manter_urnas_2026.py --turno 2`), 
 uv run python scripts/acompanhar_turno_2026.py
 ```
 
-A cada 120 s o script lê `logs/urnas-2026-turno-2/resumo.log`. Quando a última linha de uma UF é `fim XX saída=0` e ela ainda não foi importada depois dessa linha, ele roda `boletins --ano 2026 --turno 2 --uf XX` e, depois do lote, refaz o mapa de presidente sem abrir o navegador. O exterior (`ZZ`) entra como as outras UFs. Se o download passa de novo por uma UF sem trazer arquivo novo, ela não é importada outra vez. O script para quando as 27 UFs e o exterior estão importados, ou com Ctrl+C.
+A cada 120 s o script lê `logs/urnas-2026-turno-2/resumo.log`. Quando a última linha de uma UF é `fim XX saída=0` e ela ainda não foi importada depois dessa linha, ele roda `boletins --ano 2026 --turno 2 --uf XX` e, depois do lote, refaz os mapas de presidente do 1º e do 2º turno e o relatório de seções, sem abrir o navegador. O exterior (`ZZ`) entra como as outras UFs. Se o download passa de novo por uma UF sem trazer arquivo novo, ela não é importada outra vez. O script para quando as 27 UFs e o exterior estão importados, ou com Ctrl+C.
 
 - `--intervalo 300` muda a espera entre as passadas.
 - `--uma-vez` faz uma passada só e sai.
 
-Ficam na mesma pasta: `importados.log` (o que já foi importado), `acompanhar.log` (o resumo), `importar-XX.log` (a saída de cada importação) e `mapa.log`. Só uma cópia do script roda por vez.
+Ficam na mesma pasta: `importados.log` (o que já foi importado), `acompanhar.log` (o resumo), `importar-XX.log` (a saída de cada importação), `mapa.log` (os dois mapas) e `secoes.log`. Só uma cópia do script roda por vez.
 
 ### Seções no 1º × 2º turno
 

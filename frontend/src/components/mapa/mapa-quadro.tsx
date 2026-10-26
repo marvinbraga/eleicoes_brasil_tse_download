@@ -11,6 +11,7 @@ import {
   CARGO_DO_ARQUIVO_DO_MAPA,
   CARGOS_MAPA,
   type CargoMapa,
+  type Turno,
 } from "@/lib/eleicoes";
 
 const VISAO_NO_ENDERECO = /(?:^|[#&])visao=([a-z]+)/;
@@ -21,7 +22,7 @@ function visaoDoQuadro(janela: Window): CargoMapa | null {
   return CARGOS_MAPA.some((item) => item.value === visao) ? (visao as CargoMapa) : null;
 }
 
-export function MapaQuadro({ cargo }: { cargo: CargoMapa }) {
+export function MapaQuadro({ cargo, turno }: { cargo: CargoMapa; turno: Turno }) {
   const { resolvedTheme } = useTheme();
   const montado = useMounted();
   const router = useRouter();
@@ -45,11 +46,14 @@ export function MapaQuadro({ cargo }: { cargo: CargoMapa }) {
       }
       const params = new URLSearchParams();
       params.set("cargo", visao);
+      if (turno !== "1") {
+        params.set("turno", turno);
+      }
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     };
     janela.addEventListener("hashchange", sincronizar);
     return () => janela.removeEventListener("hashchange", sincronizar);
-  }, [cargo, carregado, pathname, router]);
+  }, [cargo, carregado, pathname, router, turno]);
 
   useEffect(() => {
     const quadro = dialogo.current;
@@ -115,9 +119,9 @@ export function MapaQuadro({ cargo }: { cargo: CargoMapa }) {
       </Button>
       <iframe
         ref={quadro}
-        key={tema}
+        key={`${tema}-${turno}`}
         title="Mapa eleitoral"
-        src={`/mapa/arquivo?cargo=${CARGO_DO_ARQUIVO_DO_MAPA}&tema=${tema}#visao=${cargo}`}
+        src={`/mapa/arquivo?cargo=${CARGO_DO_ARQUIVO_DO_MAPA}&turno=${turno}&tema=${tema}#visao=${cargo}`}
         onLoad={() => setCarregado((vezes) => vezes + 1)}
         className="min-h-0 w-full flex-1 rounded-lg border border-border bg-background"
       />

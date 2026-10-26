@@ -989,3 +989,50 @@ def test_calibration_summary_reads_the_tracked_2022_file(tmp_path: Path) -> None
     assert set(resumo["fora"]) >= {"todosa", "proporcional"}  # type: ignore[arg-type]
     assert ler_calibracao(quebrado) is None
     assert ler_calibracao(tmp_path / "ausente.json") is None
+
+
+def test_second_round_map_recollects_when_the_stored_round_misses_a_uf(tmp_path: Path) -> None:
+    destino = tmp_path / "mapa.html"
+    store = _Memory()
+    store.save(2026, 2, (_second_round_place(6, 4),))
+    collected: list[int] = []
+
+    def collect(_ano: int, turno: int) -> tuple[MunicipalPlace, ...]:
+        collected.append(turno)
+        return (_second_round_place(7, 3),)
+
+    code = main(
+        ["--turno", "2", "--cargo", "presidente", "--destino", str(destino), "--sem-navegador"],
+        store=store,
+        assets=_Assets(),
+        collect=collect,
+        present=lambda _ano, _turno: ("AC", "AL"),
+    )
+
+    assert code == 0
+    assert collected == [2]
+    assert "Mapa de presidente — 2026, turno 2" in destino.read_text(encoding="utf-8")
+
+
+def test_second_round_map_reuses_a_stored_round_that_still_holds(tmp_path: Path) -> None:
+    store = _Memory()
+    store.save(2026, 2, (_second_round_place(6, 4),))
+    collected: list[int] = []
+
+    main(
+        [
+            "--turno",
+            "2",
+            "--cargo",
+            "presidente",
+            "--destino",
+            str(tmp_path / "m.html"),
+            "--sem-navegador",
+        ],
+        store=store,
+        assets=_Assets(),
+        collect=lambda _ano, turno: collected.append(turno) or (),
+        present=lambda _ano, _turno: ("AC",),
+    )
+
+    assert collected == []

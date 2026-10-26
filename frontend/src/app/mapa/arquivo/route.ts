@@ -54,7 +54,8 @@ export function htmlComTema(html: string, tema: string | null): string {
 export async function GET(request: NextRequest) {
   const cargo = request.nextUrl.searchParams.get("cargo") ?? "";
   const tema = request.nextUrl.searchParams.get("tema");
-  const arquivo = arquivoMapa(cargo);
+  const turno = request.nextUrl.searchParams.get("turno") ?? "1";
+  const arquivo = arquivoMapa(cargo, turno);
 
   if (!arquivo) {
     return new NextResponse("Cargo não suportado.", {

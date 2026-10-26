@@ -148,6 +148,8 @@ class PresentMap:
         turno: int,
         atualizar: bool,
     ) -> tuple[StoredCrossReport, bool]:
+        if turno == _SEGUNDO_TURNO and self._present is not None:
+            return self._checked_second_round(ano, atualizar)
         if not atualizar:
             stored = self._store.load(ano, turno)
             if stored is not None:
@@ -161,15 +163,19 @@ class PresentMap:
         e se nenhuma UF foi importada de novo depois que ele foi gravado."""
         if turno != _PRIMEIRO_TURNO or self._present is None:
             return ()
-        ufs = frozenset(self._present(ano, _SEGUNDO_TURNO))
-        if not ufs:
+        if not self._present(ano, _SEGUNDO_TURNO):
             return ()
+        return self._checked_second_round(ano, atualizar)[0].places
+
+    def _checked_second_round(self, ano: int, atualizar: bool) -> tuple[StoredCrossReport, bool]:
+        """O 2º turno gravado, se ainda vale; senão, recolhido e gravado de novo."""
+        ufs = frozenset(self._present(ano, _SEGUNDO_TURNO)) if self._present else frozenset()
         stored = None if atualizar else self._store.load(ano, _SEGUNDO_TURNO)
         if stored is not None and self._still_valid(ano, stored, ufs):
-            return stored.places
+            return stored, True
         places = self._collect(ano, _SEGUNDO_TURNO)
-        self._store.save(ano, _SEGUNDO_TURNO, places)
-        return places
+        moment = self._store.save(ano, _SEGUNDO_TURNO, places)
+        return StoredCrossReport(places, moment), False
 
     def _turnout(
         self, ano: int, segundo: tuple[MunicipalPlace, ...]

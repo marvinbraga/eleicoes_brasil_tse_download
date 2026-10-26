@@ -245,10 +245,26 @@ def _importar(uf: str) -> int:
 
 
 def _gerar_mapa() -> int:
+    """Refaz o mapa dos dois turnos e o relatório de seções; devolve a primeira falha."""
     from eleicoes.use_cases.apresentar_mapa import main
+    from eleicoes.use_cases.apresentar_secoes_turnos import main as secoes
 
-    argumentos = ["--ano", ANO, "--turno", "1", "--cargo", "presidente", "--sem-navegador"]
-    return rodar_com_log(PASTA / "mapa.log", lambda: main(argumentos), "mapa")
+    codigos = [
+        rodar_com_log(
+            PASTA / "mapa.log",
+            lambda turno=turno: main(
+                ["--ano", ANO, "--turno", turno, "--cargo", "presidente", "--sem-navegador"]
+            ),
+            f"mapa turno {turno}",
+        )
+        for turno in ("1", "2")
+    ]
+    codigos.append(
+        rodar_com_log(
+            PASTA / "secoes.log", lambda: secoes(["--ano", ANO, "--sem-navegador"]), "seções"
+        )
+    )
+    return next((codigo for codigo in codigos if codigo != 0), 0)
 
 
 def _assinar(uf: str) -> str:
