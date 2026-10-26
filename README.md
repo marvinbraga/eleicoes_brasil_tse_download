@@ -360,7 +360,22 @@ Com o mapa do 1º turno, quando já há boletins do 2º turno importados, o arqu
 
 O seletor **Cenário de apoio no 2º turno** redistribui os votos dos eliminados: todos para o apoiado (padrão), 75% para ele, metade para cada, como no 1º turno ou 75% para o outro finalista. A fatia esperada do apoiado entre os votos dos finalistas é comparada com a real. A **anomalia** é o z robusto (mediana e MAD) dessa diferença contra os municípios da mesma UF: acima de 2 em módulo é desvio moderado, acima de 3,5 fica fora do esperado. Municípios com menos de 1.000 votos dos finalistas e grupos com menos de 8 lugares ficam sem z. País e UFs sem grupo são pintados pela diferença do cenário. Desvio indica onde o cenário explica mal o voto; não prova irregularidade. O modelo não move quem votou em branco ou nulo no 1º turno, quem faltou a um dos turnos nem quem trocou de finalista.
 
-O 2º turno gravado no banco só é reaproveitado enquanto cobre as mesmas UFs importadas. Depois de importar uma UF nova, rode o mapa de novo e o 2º turno é recalculado.
+O 2º turno gravado no banco só é reaproveitado enquanto cobre as mesmas UFs importadas e nenhuma UF foi importada depois que ele foi gravado. Cada `boletins` deixa uma marca em `raw.carga` (conjunto `boletins-<ano>`). Assim, importar de novo uma UF que já estava no banco, por exemplo depois de baixar boletins que faltavam, também refaz o 2º turno na próxima vez que o mapa rodar. UFs importadas antes dessa marca existir valem só pela checagem das UFs.
+
+#### Importar o 2º turno enquanto ele chega
+
+Com o download do 2º turno rodando (`scripts/manter_urnas_2026.py --turno 2`), abra outro terminal na raiz do projeto:
+
+```bash
+uv run python scripts/acompanhar_turno_2026.py
+```
+
+A cada 120 s o script lê `logs/urnas-2026-turno-2/resumo.log`. Quando a última linha de uma UF é `fim XX saída=0` e ela ainda não foi importada depois dessa linha, ele roda `boletins --ano 2026 --turno 2 --uf XX` e, depois do lote, refaz o mapa de presidente sem abrir o navegador. O exterior (`ZZ`) entra como as outras UFs. Se o download passa de novo por uma UF sem trazer arquivo novo, ela não é importada outra vez. O script para quando as 27 UFs e o exterior estão importados, ou com Ctrl+C.
+
+- `--intervalo 300` muda a espera entre as passadas.
+- `--uma-vez` faz uma passada só e sai.
+
+Ficam na mesma pasta: `importados.log` (o que já foi importado), `acompanhar.log` (o resumo), `importar-XX.log` (a saída de cada importação) e `mapa.log`. Só uma cópia do script roda por vez.
 
 
 ## Entender os arquivos da seção

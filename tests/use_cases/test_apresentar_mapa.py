@@ -670,6 +670,9 @@ class _QuietReader:
         self.calls.append((ano, turno, cargo))
         return ()
 
+    def last_load(self, _ano: int, _turno: int) -> datetime | None:
+        return None
+
     def close(self) -> None:
         self.closed = True
 
@@ -774,3 +777,107 @@ def test_no_second_round_keeps_the_page_without_turnos(tmp_path: Path) -> None:
     )
 
     assert '"turnos": null' in destino.read_text(encoding="utf-8")
+
+
+def _reuse_run(
+    tmp_path: Path,
+    last_load: datetime | None,
+    ufs: tuple[str, ...] = ("AC",),
+) -> list[int]:
+    """Grava o 2º turno em _MOMENT e roda o mapa com a marca de carga pedida."""
+    store = _Memory()
+    store.save(2026, 1, (_bujari(),))
+    store.save(2026, 2, (_second_round_place(6, 4),))
+    collected: list[int] = []
+    asked: list[tuple[int, int]] = []
+
+    def collect(_ano: int, turno: int) -> tuple[MunicipalPlace, ...]:
+        collected.append(turno)
+        return (_second_round_place(7, 3),)
+
+    def load(ano: int, turno: int) -> datetime | None:
+        asked.append((ano, turno))
+        return last_load
+
+    code = main(
+        ["--cargo", "presidente", "--destino", str(tmp_path / "mapa.html"), "--sem-navegador"],
+        store=store,
+        assets=_Assets(),
+        collect=collect,
+        present=lambda _ano, _turno: ufs,
+        last_load=load,
+    )
+    assert code == 0
+    if collected:
+        assert store.rows[(2026, 2)].places == (_second_round_place(7, 3),)
+    if ufs == ("AC",):
+        assert asked == [(2026, 2)]
+    return collected
+
+
+def test_reimport_after_the_store_was_saved_collects_again(tmp_path: Path) -> None:
+    assert _reuse_run(tmp_path, _MOMENT + timedelta(minutes=5)) == [2]
+
+
+def test_load_mark_older_than_the_store_keeps_the_stored_round(tmp_path: Path) -> None:
+    assert _reuse_run(tmp_path, _MOMENT - timedelta(minutes=5)) == []
+
+
+def test_load_mark_equal_to_the_store_collects_again(tmp_path: Path) -> None:
+    assert _reuse_run(tmp_path, _MOMENT) == [2]
+
+
+def test_round_without_load_marks_falls_back_to_the_uf_check(tmp_path: Path) -> None:
+    assert _reuse_run(tmp_path, None) == []
+
+
+def test_new_uf_collects_again_even_with_an_old_mark(tmp_path: Path) -> None:
+    assert _reuse_run(tmp_path, _MOMENT - timedelta(minutes=5), ("AC", "AL")) == [2]
+
+
+class _RoundReader(_QuietReader):
+    def __init__(self, carga: datetime | None) -> None:
+        super().__init__()
+        self._carga = carga
+        self.loads: list[tuple[int, int]] = []
+
+    def present_ufs(self, ano: int, turno: int, cargo: str) -> tuple[str, ...]:
+        self.calls.append((ano, turno, cargo))
+        return ("AC",) if turno == 2 else ()
+
+    def last_load(self, ano: int, turno: int) -> datetime | None:
+        self.loads.append((ano, turno))
+        return self._carga
+
+
+def test_injected_reader_answers_the_load_mark(tmp_path: Path) -> None:
+    store = _Memory()
+    store.save(2026, 1, (_bujari(),))
+    store.save(2026, 2, (_second_round_place(6, 4),))
+    reader = _RoundReader(_MOMENT + timedelta(seconds=1))
+    collected: list[int] = []
+
+    def collect(_ano: int, turno: int) -> tuple[MunicipalPlace, ...]:
+        collected.append(turno)
+        return (_second_round_place(7, 3),)
+
+    code = main(
+        _command(tmp_path / "mapa.html"),
+        reader=reader,
+        store=store,
+        assets=_Assets(),
+        collect=collect,
+    )
+    assert code == 0
+    assert reader.loads == [(2026, 2)]
+    assert collected == [2]
+
+
+def test_production_last_load_closes_the_reader(monkeypatch: pytest.MonkeyPatch) -> None:
+    from eleicoes.use_cases.apresentar_mapa import _production_last_load
+
+    reader = _RoundReader(_MOMENT)
+    monkeypatch.setattr("eleicoes.composition.boletim.build_boletim_reader", lambda _env: reader)
+    assert _production_last_load(2026, 2) == _MOMENT
+    assert reader.loads == [(2026, 2)]
+    assert reader.closed is True

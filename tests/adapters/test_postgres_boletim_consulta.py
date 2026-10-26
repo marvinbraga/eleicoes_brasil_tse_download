@@ -2,6 +2,7 @@
 
 import re
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
@@ -420,6 +421,23 @@ def test_present_ufs_binds_the_three_filters_and_normalizes_codes() -> None:
     reader = PostgresBoletimReader(lambda: _Connection([(1,)]))
     with pytest.raises(InvalidBoletimConsultaError):
         reader.present_ufs(2026, 1, "presidente")
+
+
+def test_last_load_reads_the_newest_mark_of_the_round() -> None:
+    moment = datetime(2026, 10, 26, 14, 0, tzinfo=UTC)
+    connection = _Connection([(moment,)])
+    assert PostgresBoletimReader(lambda: connection).last_load(2026, 2) == moment
+    sql, params = connection.statements[0]
+    assert sql == (
+        "SELECT MAX(carregado_em) FROM raw.carga WHERE tabela = %s AND conjunto = %s AND turno = %s"
+    )
+    assert params == ("raw.boletim", "boletins-2026", "2")
+
+    assert PostgresBoletimReader(lambda: _Connection([(None,)])).last_load(2026, 2) is None
+    assert PostgresBoletimReader(lambda: _Connection([])).last_load(2026, 2) is None
+    naive = _Connection([(datetime(2026, 10, 26, 14, 0),)])
+    with pytest.raises(InvalidBoletimConsultaError):
+        PostgresBoletimReader(lambda: naive).last_load(2026, 2)
 
 
 def test_connection_is_reused_and_closed_once() -> None:

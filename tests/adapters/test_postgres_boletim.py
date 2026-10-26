@@ -35,7 +35,9 @@ def test_replace_deletes_only_the_requested_uf_and_copies_nulls() -> None:
     sink.replace_uf(ElectionYear(2026), Turno(1), Uf("AL"), (item,))
     assert inserted == 2
     deletes = [
-        params for statement, params in connection.cursor_obj.statements if "DELETE" in statement
+        params
+        for statement, params in connection.cursor_obj.statements
+        if statement.startswith("DELETE FROM raw.boletim")
     ]
     assert deletes == [(2026, 1, "AC"), (2026, 1, "AL")]
     assert connection.cursor_obj.copies[0].count(b"\n") == 2
@@ -57,6 +59,33 @@ def test_replace_without_votes_only_deletes_the_scope() -> None:
     statement, params = connection.cursor_obj.statements[0]
     assert statement == "DELETE FROM raw.boletim WHERE ano = %s AND turno = %s AND uf = %s"
     assert params == (2024, 2, "RR")
+    assert "INSERT INTO raw.carga" in connection.cursor_obj.statements[-1][0]
+
+
+def test_replace_leaves_one_load_mark_per_uf_after_the_copy() -> None:
+    connection = _Connection()
+    sink = PostgresBoletimSink(lambda: connection)
+    sink.replace_uf(ElectionYear(2026), Turno(2), Uf("AM"), (bulletin(),))
+    statements = connection.cursor_obj.statements
+    kinds = [statement.split(" (")[0].split(" WHERE")[0] for statement, _ in statements]
+    assert kinds == [
+        "DELETE FROM raw.boletim",
+        "COPY raw.boletim",
+        "DELETE FROM raw.carga",
+        "INSERT INTO raw.carga",
+    ]
+    assert statements[2][1] == ("boletins/2026/turno-2/AM", "bu.dat")
+    insert, params = statements[3]
+    assert "clock_timestamp()" in insert
+    assert params == (
+        "boletins-2026",
+        "2",
+        "AM",
+        "boletins/2026/turno-2/AM",
+        "bu.dat",
+        "raw.boletim",
+        1,
+    )
 
 
 def test_missing_database_settings_fail_before_a_socket() -> None:

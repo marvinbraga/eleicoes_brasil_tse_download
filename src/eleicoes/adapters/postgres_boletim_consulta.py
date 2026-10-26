@@ -6,9 +6,11 @@ User values are bound, never interpolated.
 """
 
 from collections.abc import Sequence
+from datetime import datetime
 from decimal import Decimal
 from typing import Final
 
+from eleicoes.adapters.postgres_boletim import LOAD_TABLE, load_set
 from eleicoes.adapters.postgres_sink import ConnectionFactory, SqlConnection
 from eleicoes.domain.boletim_consulta import (
     BlankNullProjection,
@@ -48,6 +50,10 @@ _PLACE_COLUMNS: Final[dict[str, tuple[str, ...]]] = {
 
 _PRESENT_UFS: Final = (
     "SELECT DISTINCT uf FROM raw.boletim WHERE ano = %s AND turno = %s AND cargo = %s ORDER BY uf"
+)
+
+_LAST_LOAD: Final = (
+    "SELECT MAX(carregado_em) FROM raw.carga WHERE tabela = %s AND conjunto = %s AND turno = %s"
 )
 
 _TOTALS: Final = """
@@ -633,6 +639,13 @@ class PostgresBoletimReader:
         rows = self._rows(_PRESENT_UFS, (ano, turno, cargo))
         return tuple(_uf_code(row) for row in rows)
 
+    def last_load(self, ano: int, turno: int) -> datetime | None:
+        rows = self._rows(_LAST_LOAD, (LOAD_TABLE, load_set(ano), str(turno)))
+        if not rows:
+            return None
+        _require_width(rows[0], 1)
+        return _moment(rows[0][0])
+
     def close(self) -> None:
         connection = self._connection
         self._connection = None
@@ -649,6 +662,14 @@ class PostgresBoletimReader:
         if self._connection is None:
             self._connection = self._connect()
         return self._connection
+
+
+def _moment(value: object) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime) and value.tzinfo is not None:
+        return value
+    raise InvalidBoletimConsultaError("carregado_em")
 
 
 def _uf_code(row: Sequence[object]) -> str:

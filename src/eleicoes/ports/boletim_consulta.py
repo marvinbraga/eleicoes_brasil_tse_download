@@ -1,5 +1,6 @@
 """Port for boletim consultations. The adapter is chosen at the edge."""
 
+from datetime import datetime
 from typing import Protocol
 
 from eleicoes.domain.boletim_consulta import (
@@ -73,6 +74,10 @@ class BoletimReader(Protocol):
     ) -> tuple[BlankNullProjection, ...]: ...
 
     def present_ufs(self, ano: int, turno: int, cargo: str) -> tuple[str, ...]: ...
+
+    def last_load(self, ano: int, turno: int) -> datetime | None:
+        """Instante da carga de UF mais recente do turno. None se nenhuma deixou marca."""
+        ...
 
     def close(self) -> None: ...
 

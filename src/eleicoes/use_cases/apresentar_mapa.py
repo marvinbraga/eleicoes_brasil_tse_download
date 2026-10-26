@@ -47,6 +47,7 @@ from eleicoes.use_cases.presidente_governador import collect_places
 
 Collect = Callable[[int, int], tuple[MunicipalPlace, ...]]
 Present = Callable[[int, int], tuple[str, ...]]
+LastLoad = Callable[[int, int], datetime | None]
 Render = Callable[[PaginaDoMapa], str]
 OpenReport = Callable[[Path], bool]
 _MESH_DIR = Path("downloads/malha")
@@ -80,6 +81,7 @@ class PresentMap:
         open_report: OpenReport,
         present: Present | None = None,
         apoiado: int | None = _APOIADO,
+        last_load: LastLoad | None = None,
     ) -> None:
         self._collect = collect
         self._store = store
@@ -88,6 +90,7 @@ class PresentMap:
         self._open = open_report
         self._present = present
         self._apoiado = apoiado
+        self._last_load = last_load
 
     def execute(
         self,
@@ -124,18 +127,28 @@ class PresentMap:
         return StoredCrossReport(places, moment), False
 
     def _second_round(self, ano: int, turno: int, atualizar: bool) -> tuple[MunicipalPlace, ...]:
-        """O 2º turno ainda chega por UF: o gravado só vale se cobrir as mesmas UFs do banco."""
+        """O 2º turno ainda chega por UF: o gravado só vale se cobrir as mesmas UFs do banco
+        e se nenhuma UF foi importada de novo depois que ele foi gravado."""
         if turno != _PRIMEIRO_TURNO or self._present is None:
             return ()
         ufs = frozenset(self._present(ano, _SEGUNDO_TURNO))
         if not ufs:
             return ()
         stored = None if atualizar else self._store.load(ano, _SEGUNDO_TURNO)
-        if stored is not None and frozenset(place.uf for place in stored.places) == ufs:
+        if stored is not None and self._still_valid(ano, stored, ufs):
             return stored.places
         places = self._collect(ano, _SEGUNDO_TURNO)
         self._store.save(ano, _SEGUNDO_TURNO, places)
         return places
+
+    def _still_valid(self, ano: int, stored: StoredCrossReport, ufs: frozenset[str]) -> bool:
+        if frozenset(place.uf for place in stored.places) != ufs:
+            return False
+        if self._last_load is None:
+            return True
+        # Sem marca de carga (UFs importadas antes dela existir) vale só a checagem das UFs.
+        carga = self._last_load(ano, _SEGUNDO_TURNO)
+        return carga is None or carga < stored.gerado_em
 
 
 def main(
@@ -149,10 +162,21 @@ def main(
     render: Render | None = None,
     open_report: OpenReport | None = None,
     present: Present | None = None,
+    last_load: LastLoad | None = None,
 ) -> int:
     args = _parser().parse_args(argv)
     try:
-        report = _present(args, reader, names, store, assets, collect, render, open_report, present)
+        report = _present(
+            args,
+            reader,
+            names,
+            store,
+            assets,
+            collect,
+            render,
+            open_report,
+            (present, last_load),
+        )
     except MeshMissingError as error:
         print(f"Falta {error.nome}.", file=sys.stderr)
         return EXIT_FAILURE
@@ -210,7 +234,7 @@ def _present(
     collect: Collect | None,
     render: Render | None,
     open_report: OpenReport | None,
-    present: Present | None,
+    rounds: tuple[Present | None, LastLoad | None],
 ) -> PresentedMap:
     destino = _destino(args)
     cache = store if store is not None else _production_store()
@@ -221,8 +245,9 @@ def _present(
             assets if assets is not None else _production_assets(),
             render if render is not None else html_do_mapa,
             _choose_opener(args, open_report),
-            _present_for(reader, collect, present),
+            _present_for(reader, collect, rounds[0]),
             int(args.apoiado),
+            _last_load_for(reader, collect, rounds[1]),
         ).execute(args.ano, args.turno, str(args.cargo), destino, atualizar=bool(args.atualizar))
     finally:
         cache.close()
@@ -275,6 +300,27 @@ def _bound_present(reader: BoletimReader) -> Present:
     return present
 
 
+def _last_load_for(
+    reader: BoletimReader | None,
+    collect: Collect | None,
+    last_load: LastLoad | None,
+) -> LastLoad | None:
+    if last_load is not None:
+        return last_load
+    if reader is not None:
+        return _bound_last_load(reader)
+    if collect is not None:
+        return None
+    return _production_last_load
+
+
+def _bound_last_load(reader: BoletimReader) -> LastLoad:
+    def last_load(ano: int, turno: int) -> datetime | None:
+        return reader.last_load(ano, turno)
+
+    return last_load
+
+
 def _choose_opener(args: argparse.Namespace, open_report: OpenReport | None) -> OpenReport:
     if open_report is not None:
         return open_report
@@ -315,6 +361,16 @@ def _production_present(ano: int, turno: int) -> tuple[str, ...]:
     reader = build_boletim_reader(_environment())
     try:
         return reader.present_ufs(ano, turno, _PRESIDENTE)
+    finally:
+        reader.close()
+
+
+def _production_last_load(ano: int, turno: int) -> datetime | None:
+    from eleicoes.composition.boletim import build_boletim_reader
+
+    reader = build_boletim_reader(_environment())
+    try:
+        return reader.last_load(ano, turno)
     finally:
         reader.close()
 
