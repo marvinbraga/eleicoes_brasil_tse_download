@@ -28,6 +28,8 @@ PISO_DE_VOTOS: Final = 1000
 MINIMO_NO_GRUPO: Final = 8
 LIMIAR_MODERADO: Final = 2.0
 LIMIAR_FORA: Final = 3.5
+CORTE_DO_GRUPO: Final = Fraction(1, 100)
+DEMAIS: Final = 0
 _K_MAD: Final = 0.6745
 _K_MEDIA: Final = 0.7979
 _EXTERIOR: Final = "ZZ"
@@ -47,13 +49,17 @@ class FinalistsMissingError(ElectionError):
 
 @dataclass(frozen=True, slots=True)
 class Apuracao:
-    """Votos de presidente de um turno num lugar, já separados pelos finalistas."""
+    """Votos de presidente de um turno num lugar, já separados pelos finalistas.
+
+    `eliminados` abre `outros` por partido, em pares (número, votos) ordenados pelo número.
+    """
 
     a: int
     b: int
     outros: int
     branco: int
     nulo: int
+    eliminados: tuple[tuple[int, int], ...] = ()
 
     @property
     def validos(self) -> int:
@@ -70,7 +76,11 @@ class Apuracao:
             self.outros + other.outros,
             self.branco + other.branco,
             self.nulo + other.nulo,
+            _somar_eliminados(self.eliminados, other.eliminados),
         )
+
+    def votos_do_grupo(self, numeros: frozenset[int]) -> int:
+        return sum(votos for numero, votos in self.eliminados if numero in numeros)
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,6 +132,15 @@ class PontoTurnos:
 
 
 @dataclass(frozen=True, slots=True)
+class GrupoEliminado:
+    """Eliminados que o cenário personalizado move juntos. Número 0 é o grupo dos demais."""
+
+    numero: int
+    numeros: frozenset[int]
+    fatia: Fraction
+
+
+@dataclass(frozen=True, slots=True)
 class ComparativoTurnos:
     a: int
     b: int
@@ -133,6 +152,7 @@ class ComparativoTurnos:
     ufs_com_segundo: tuple[str, ...]
     sem_comparacao: int
     sem_poligono: tuple[str, ...]
+    eliminados: tuple[GrupoEliminado, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -178,6 +198,31 @@ def cenarios(a: int, b: int) -> tuple[Cenario, ...]:
             Fraction(1, 4),
         ),
     )
+
+
+def grupos_eliminados(
+    primeiro: Sequence[MunicipalPlace], a: int, b: int, corte: Fraction = CORTE_DO_GRUPO
+) -> tuple[GrupoEliminado, ...]:
+    """Eliminados com ao menos `corte` dos válidos do país no 1º turno, um a um; o resto junto."""
+    totais: dict[int, int] = {}
+    for place in primeiro:
+        for party in place.presidente.parties:
+            totais[party.partido] = totais.get(party.partido, 0) + party.votos
+    validos = sum(totais.values())
+    fora = {numero: votos for numero, votos in totais.items() if numero not in (a, b) and votos}
+    if validos == 0 or not fora:
+        return ()
+    ordem = sorted(fora, key=lambda numero: (-fora[numero], numero))
+    grandes = tuple(numero for numero in ordem if Fraction(fora[numero], validos) >= corte)
+    found = [
+        GrupoEliminado(numero, frozenset({numero}), Fraction(fora[numero], validos))
+        for numero in grandes
+    ]
+    demais = frozenset(ordem) - frozenset(grandes)
+    if demais:
+        votos = sum(fora[numero] for numero in demais)
+        found.append(GrupoEliminado(DEMAIS, demais, Fraction(votos, validos)))
+    return tuple(found)
 
 
 def finalistas(segundo: Sequence[MunicipalPlace], apoiado: int | None = None) -> tuple[int, int]:
@@ -226,6 +271,7 @@ def comparar_turnos(
         tuple(code for code in UF_CODES if any(par.uf == code for par in pares)),
         sem_comparacao,
         tuple(sorted(buracos + buracos_exterior + buracos_uf)),
+        grupos_eliminados(primeiro, a, b),
     )
 
 
@@ -268,13 +314,16 @@ def classe_do_z(z: float) -> str:
 
 def apuracao(tally: CargoTally, a: int, b: int) -> Apuracao:
     votos = {party.partido: party.votos for party in tally.parties}
-    outros = sum(total for numero, total in votos.items() if numero not in (a, b))
+    eliminados = tuple(
+        sorted((numero, total) for numero, total in votos.items() if numero not in (a, b))
+    )
     return Apuracao(
         votos.get(a, 0),
         votos.get(b, 0),
-        outros,
+        sum(total for _, total in eliminados),
         tally.branco,
         tally.nulo,
+        eliminados,
     )
 
 
@@ -282,6 +331,15 @@ def chave_tse(codigo: str) -> str:
     if codigo.isdigit() and len(codigo) < 5:
         return codigo.zfill(5)
     return codigo
+
+
+def _somar_eliminados(
+    um: tuple[tuple[int, int], ...], outro: tuple[tuple[int, int], ...]
+) -> tuple[tuple[int, int], ...]:
+    totais = dict(um)
+    for numero, votos in outro:
+        totais[numero] = totais.get(numero, 0) + votos
+    return tuple(sorted(totais.items()))
 
 
 def _esperado_e_real(

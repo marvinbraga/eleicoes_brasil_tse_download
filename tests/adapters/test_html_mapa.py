@@ -6,6 +6,7 @@ from fractions import Fraction
 
 from eleicoes.adapters.html_mapa import html_do_mapa
 from eleicoes.domain.mapa import Marca, PaginaDoMapa, Pintura, PontoPintado, RecortePintado
+from eleicoes.domain.mapa_turnos import Apuracao, Leitura, LugarTurnos
 
 _LOGO = "data:image/png;base64,QQ=="
 _MUNICIPIOS = (
@@ -443,3 +444,54 @@ def test_page_without_second_round_has_no_turnos() -> None:
 
     assert pintura["turnos"] is None
     assert "turnos" not in pintura["titulos"]
+
+
+def _lugar_de_bujari(primeiro: Apuracao) -> LugarTurnos:
+    leitura = Leitura(Fraction(1, 2), Fraction(13, 25), 20, None, "sem_base")
+    return LugarTurnos(
+        "1200138",
+        "BUJARI (AC)",
+        "AC",
+        primeiro,
+        Apuracao(520, 480, 0, 3, 4),
+        (leitura,) * 5,
+    )
+
+
+def test_turnos_payload_carries_the_eliminated_groups_per_place() -> None:
+    from eleicoes.domain.mapa_turnos import ComparativoTurnos as Comparativo
+    from eleicoes.domain.mapa_turnos import GrupoEliminado, cenarios
+
+    lugar = _lugar_de_bujari(Apuracao(400, 500, 100, 1, 2, ((30, 20), (70, 70), (80, 10))))
+    grupos = (
+        GrupoEliminado(70, frozenset({70}), Fraction(289, 10000)),
+        GrupoEliminado(0, frozenset({30, 80}), Fraction(37, 10000)),
+    )
+    comparativo = Comparativo(
+        22, 13, cenarios(22, 13), None, (), (lugar,), (), ("AC",), 0, (), grupos
+    )
+    html = html_do_mapa(replace(_page(), turnos=comparativo))
+    turnos = json.loads(_block(html, "pintura"))["turnos"]
+
+    assert turnos["eliminados"] == [
+        {"numero": "70", "fatia": 0.0289},
+        {"numero": "0", "fatia": 0.0037},
+    ]
+    assert turnos["municipios"][0]["eliminados"] == [70, 30]
+    assert [item["parte"] for item in turnos["cenarios"]] == [1.0, 0.75, 0.5, None, 0.25]
+    assert 'opcoes.push([PERSONALIZADO, "Personalizado"]);' in html
+    assert '"&personalizado=" + codigoDosDestinos()' in html
+
+
+def test_turnos_without_groups_omit_the_breakdown() -> None:
+    from eleicoes.domain.mapa_turnos import ComparativoTurnos as Comparativo
+    from eleicoes.domain.mapa_turnos import cenarios
+
+    lugar = _lugar_de_bujari(Apuracao(400, 500, 0, 1, 2))
+    comparativo = Comparativo(22, 13, cenarios(22, 13), None, (), (lugar,), (), ("AC",), 0, ())
+    turnos = json.loads(_block(html_do_mapa(replace(_page(), turnos=comparativo)), "pintura"))[
+        "turnos"
+    ]
+
+    assert turnos["eliminados"] == []
+    assert "eliminados" not in turnos["municipios"][0]

@@ -6,6 +6,7 @@ import pytest
 
 from eleicoes.domain.mapa import PonteTseIbge, ponte_de_linhas
 from eleicoes.domain.mapa_turnos import (
+    DEMAIS,
     DENTRO,
     FORA_A,
     FORA_B,
@@ -13,11 +14,13 @@ from eleicoes.domain.mapa_turnos import (
     SEM_BASE,
     Apuracao,
     FinalistsMissingError,
+    GrupoEliminado,
     apuracao,
     cenarios,
     classe_do_z,
     comparar_turnos,
     finalistas,
+    grupos_eliminados,
     leituras,
 )
 from eleicoes.domain.presidente_governador import CargoTally, MunicipalPlace, PartyTally
@@ -131,7 +134,7 @@ def test_finalists_need_two_candidates() -> None:
 def test_absent_party_counts_as_zero() -> None:
     tally = CargoTally((PartyTally(22, 10, 0), PartyTally(30, 5, 0)), 1, 2)
 
-    assert apuracao(tally, 22, 13) == Apuracao(10, 0, 5, 1, 2)
+    assert apuracao(tally, 22, 13) == Apuracao(10, 0, 5, 1, 2, ((30, 5),))
 
 
 def test_comparison_joins_rounds_and_maps_mesh_codes() -> None:
@@ -160,7 +163,7 @@ def test_comparison_joins_rounds_and_maps_mesh_codes() -> None:
     assert found.ufs_com_segundo == ("AC", "ZZ")
     assert found.sem_comparacao == 1
     assert [item.codigo for item in found.municipios] == ["1200138"]
-    assert found.municipios[0].primeiro == Apuracao(400, 500, 100, 0, 0)
+    assert found.municipios[0].primeiro == Apuracao(400, 500, 100, 0, 0, ((30, 100),))
     assert found.municipios[0].leituras[0].esperado == Fraction(1, 2)
     assert [item.codigo for item in found.ufs] == ["12"]
     assert found.pais is not None and found.pais.codigo == "076"
@@ -178,6 +181,37 @@ def test_places_without_polygon_are_listed() -> None:
     assert found.municipios == ()
     assert found.ufs == ()
     assert found.sem_poligono == ("Acre (AC)", "BUJARI (AC)")
+
+
+def test_sum_keeps_the_eliminated_breakdown() -> None:
+    um = Apuracao(1, 2, 7, 0, 0, ((30, 3), (70, 4)))
+    outro = Apuracao(1, 2, 5, 0, 0, ((14, 1), (70, 4)))
+
+    soma = um + outro
+
+    assert soma.eliminados == ((14, 1), (30, 3), (70, 8))
+    assert sum(votos for _, votos in soma.eliminados) == soma.outros
+    assert soma.votos_do_grupo(frozenset({70, 14})) == 9
+
+
+def test_big_eliminated_parties_stand_alone_and_the_rest_are_grouped() -> None:
+    primeiro = (
+        _place("AC", "01007", "BUJARI (AC)", {22: 480, 13: 470, 70: 30, 14: 15, 30: 4, 80: 1}),
+    )
+
+    found = grupos_eliminados(primeiro, 22, 13)
+
+    assert found == (
+        GrupoEliminado(70, frozenset({70}), Fraction(3, 100)),
+        GrupoEliminado(14, frozenset({14}), Fraction(15, 1000)),
+        GrupoEliminado(DEMAIS, frozenset({30, 80}), Fraction(5, 1000)),
+    )
+
+
+def test_no_eliminated_party_means_no_group() -> None:
+    primeiro = (_place("AC", "01007", "BUJARI (AC)", {22: 480, 13: 470}),)
+
+    assert grupos_eliminados(primeiro, 22, 13) == ()
 
 
 def _place(uf: str, codigo: str, nome: str, votos: dict[int, int]) -> MunicipalPlace:

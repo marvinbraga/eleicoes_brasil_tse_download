@@ -13,6 +13,7 @@ from eleicoes.domain.mapa_turnos import (
     PISO_DE_VOTOS,
     Apuracao,
     ComparativoTurnos,
+    GrupoEliminado,
     LugarTurnos,
 )
 
@@ -106,6 +107,10 @@ _PAGE_CSS: Final = (
     " #turnos-controles select { font: 12px sans-serif; color: #111111; background: #ffffff;"
     " border: 1px solid #888888; border-radius: 4px; padding: .2em; max-width: 100%; }"
     " #turnos-controles small { opacity: .8; }"
+    " #turnos-controles .personalizado { display: flex; flex-direction: column; gap: .3em;"
+    " padding-left: .5em; border-left: 2px solid #cccccc; }"
+    " #turnos-controles .personalizado[hidden] { display: none; }"
+    " #turnos-controles .personalizado label { font-weight: normal; }"
     " #detalhe table { border-collapse: collapse; margin-top: .2em; }"
     " #detalhe th, #detalhe td { padding: 0 .5em 0 0; text-align: right; font-weight: normal; }"
     " #detalhe th:first-child { text-align: left; }"
@@ -141,6 +146,108 @@ _PAGE_SCRIPT: Final = """\
   var COR_NEGATIVA = [118, 42, 131];
   var LIMITE_DO_MODELO = "O modelo só move os votos dos eliminados; quem votou em branco ou " +
     "nulo no 1º turno, faltou a um dos turnos ou trocou de finalista fica fora dele. ";
+  var PERSONALIZADO = "personalizado";
+  var DEMAIS = "0";
+  var DESTINOS = [
+    {letra: "a", parte: 1},
+    {letra: "q", parte: 0.75},
+    {letra: "m", parte: 0.5},
+    {letra: "u", parte: 0.25},
+    {letra: "b", parte: 0},
+    {letra: "p", parte: null}
+  ];
+
+  // <matematica-dos-turnos>
+  // Espelha leituras() de mapa_turnos.py para o cenário personalizado. Não toca no DOM:
+  // o teste de paridade recorta este trecho e o roda no node.
+  var K_MAD = 0.6745;
+  var K_MEDIA = 0.7979;
+
+  function esperadoDoCenario(primeiro, porGrupo, partes) {
+    var validos = primeiro[0] + primeiro[1] + primeiro[2];
+    if (validos === 0) {
+      return 0.5;
+    }
+    var finalistas = primeiro[0] + primeiro[1];
+    var proporcional = finalistas === 0 ? 0.5 : primeiro[0] / finalistas;
+    var movidos = 0;
+    for (var i = 0; i < partes.length; i++) {
+      movidos += (partes[i] === null ? proporcional : partes[i]) * porGrupo[i];
+    }
+    return (primeiro[0] + movidos) / validos;
+  }
+
+  function mediana(valores) {
+    var ordem = valores.slice().sort(function (x, y) {
+      return x - y;
+    });
+    var meio = Math.floor(ordem.length / 2);
+    return ordem.length % 2 ? ordem[meio] : (ordem[meio - 1] + ordem[meio]) / 2;
+  }
+
+  function escalaRobusta(valores) {
+    var centro = mediana(valores);
+    var desvios = valores.map(function (valor) {
+      return Math.abs(valor - centro);
+    });
+    var mad = mediana(desvios);
+    if (mad > 0) {
+      return mad / K_MAD;
+    }
+    var soma = 0;
+    for (var i = 0; i < desvios.length; i++) {
+      soma += desvios[i];
+    }
+    var media = soma / desvios.length;
+    return media > 0 ? media / K_MEDIA : null;
+  }
+
+  function arredondarParaPar(valor) {
+    var piso = Math.floor(valor);
+    if (Math.abs(valor - piso - 0.5) < 1e-9) {
+      return piso % 2 === 0 ? piso : piso + 1;
+    }
+    return Math.round(valor);
+  }
+
+  function classeDoZ(z, limiares) {
+    if (z > limiares.fora) {
+      return "fora_a";
+    }
+    if (z < -limiares.fora) {
+      return "fora_b";
+    }
+    return Math.abs(z) > limiares.moderado ? "moderado" : "dentro";
+  }
+
+  function lerGrupo(itens, esperados, regras) {
+    var reais = [];
+    var comparaveis = [];
+    var base = [];
+    for (var i = 0; i < itens.length; i++) {
+      var primeiro = itens[i].primeiro;
+      var finalistas = itens[i].segundo[0] + itens[i].segundo[1];
+      reais.push(finalistas > 0 ? itens[i].segundo[0] / finalistas : 0.5);
+      comparaveis.push(primeiro[0] + primeiro[1] + primeiro[2] >= regras.piso &&
+        finalistas >= regras.piso);
+      if (comparaveis[i]) {
+        base.push(reais[i] - esperados[i]);
+      }
+    }
+    var escala = base.length >= regras.minimo ? escalaRobusta(base) : null;
+    var centro = escala !== null ? mediana(base) : 0;
+    return itens.map(function (item, indice) {
+      var residuo = reais[indice] - esperados[indice];
+      var votos = arredondarParaPar(residuo * (item.segundo[0] + item.segundo[1]));
+      if (escala === null || !comparaveis[indice]) {
+        return [esperados[indice], votos, null, "sem_base"];
+      }
+      var z = (residuo - centro) / escala;
+      return [esperados[indice], votos, z, classeDoZ(z, regras.limiares)];
+    });
+  }
+  // </matematica-dos-turnos>
+
   var TURNOS = base.turnos || null;
   var estadoTurnos = lerEstadoTurnos();
   var BASES = {};
@@ -149,6 +256,7 @@ _PAGE_SCRIPT: Final = """\
     BASES[nome] = Object.assign({}, base, base.visoes[nome]);
   });
   if (TURNOS) {
+    recalcularPersonalizado();
     BASES.turnos = pinturaDosTurnos();
   }
   var visaoAtual = visaoDoEndereco() || base.cargo;
@@ -899,21 +1007,103 @@ _PAGE_SCRIPT: Final = """\
   }
 
   function lerEstadoTurnos() {
-    var estado = {cenario: "", metrica: "desvio"};
+    var estado = {cenario: "", metrica: "desvio", destinos: {}};
     if (!TURNOS) {
       return estado;
     }
     estado.cenario = TURNOS.padrao;
+    semearDestinos(estado, TURNOS.cenarios[0].parte);
     var hash = window.location.hash;
     var cenario = /(?:^|[#&])cenario=([a-z]+)/.exec(hash);
-    if (cenario && indiceDoCenario(cenario[1]) >= 0) {
+    if (cenario && (indiceDoCenario(cenario[1]) >= 0 ||
+        cenario[1] === PERSONALIZADO && temPersonalizado())) {
       estado.cenario = cenario[1];
+    }
+    var escolhas = /(?:^|[#&])personalizado=([a-z0-9]+)/.exec(hash);
+    if (escolhas) {
+      lerDestinos(estado, escolhas[1]);
     }
     var metrica = /(?:^|[#&])pintar=([a-z]+)/.exec(hash);
     if (metrica && METRICAS.indexOf(metrica[1]) >= 0) {
       estado.metrica = metrica[1];
     }
     return estado;
+  }
+
+  function temPersonalizado() {
+    return Boolean(TURNOS && TURNOS.eliminados && TURNOS.eliminados.length);
+  }
+
+  function destinoDaLetra(letra) {
+    for (var i = 0; i < DESTINOS.length; i++) {
+      if (DESTINOS[i].letra === letra) {
+        return DESTINOS[i];
+      }
+    }
+    return null;
+  }
+
+  function letraDaParte(parte) {
+    for (var i = 0; i < DESTINOS.length; i++) {
+      if (DESTINOS[i].parte === parte) {
+        return DESTINOS[i].letra;
+      }
+    }
+    return "p";
+  }
+
+  function semearDestinos(estado, parte) {
+    (TURNOS.eliminados || []).forEach(function (grupo) {
+      estado.destinos[grupo.numero] = letraDaParte(parte);
+    });
+  }
+
+  function lerDestinos(estado, codigo) {
+    var par = /([0-9]+)([a-z])/g;
+    var achado = par.exec(codigo);
+    while (achado) {
+      if (estado.destinos.hasOwnProperty(achado[1]) && destinoDaLetra(achado[2])) {
+        estado.destinos[achado[1]] = achado[2];
+      }
+      achado = par.exec(codigo);
+    }
+  }
+
+  function codigoDosDestinos() {
+    return (TURNOS.eliminados || []).map(function (grupo) {
+      return grupo.numero + estadoTurnos.destinos[grupo.numero];
+    }).join("");
+  }
+
+  function partesEscolhidas() {
+    return TURNOS.eliminados.map(function (grupo) {
+      return destinoDaLetra(estadoTurnos.destinos[grupo.numero]).parte;
+    });
+  }
+
+  function recalcularPersonalizado() {
+    if (estadoTurnos.cenario !== PERSONALIZADO) {
+      return;
+    }
+    var partes = partesEscolhidas();
+    var regras = {piso: TURNOS.piso, minimo: TURNOS.minimo, limiares: TURNOS.limiares};
+    var porUf = {};
+    TURNOS.municipios.forEach(function (item) {
+      (porUf[item.uf] = porUf[item.uf] || []).push(item);
+    });
+    var grupos = Object.keys(porUf).map(function (uf) {
+      return porUf[uf];
+    });
+    grupos.push(TURNOS.exterior, TURNOS.ufs, TURNOS.pais ? [TURNOS.pais] : []);
+    grupos.forEach(function (itens) {
+      var esperados = itens.map(function (item) {
+        return esperadoDoCenario(item.primeiro, item.eliminados, partes);
+      });
+      var lidas = lerGrupo(itens, esperados, regras);
+      itens.forEach(function (item, indice) {
+        item.personalizada = lidas[indice];
+      });
+    });
   }
 
   function indiceDoCenario(chave) {
@@ -926,7 +1116,33 @@ _PAGE_SCRIPT: Final = """\
   }
 
   function cenarioAtual() {
+    if (estadoTurnos.cenario === PERSONALIZADO) {
+      return {
+        chave: PERSONALIZADO,
+        rotulo: "Personalizado",
+        descricao: "Cada eliminado segue o destino escolhido: " +
+          TURNOS.eliminados.map(function (grupo) {
+            return nomeDoGrupo(grupo) + ", " +
+              nomeDoDestino(estadoTurnos.destinos[grupo.numero]).toLowerCase();
+          }).join("; ") + "."
+      };
+    }
     return TURNOS.cenarios[indiceDoCenario(estadoTurnos.cenario)];
+  }
+
+  function nomeDoGrupo(grupo) {
+    return grupo.numero === DEMAIS ? "Demais" : nomeDoPartido(grupo.numero);
+  }
+
+  function nomeDoDestino(letra) {
+    return {
+      a: "Todos para o " + TURNOS.a,
+      q: "75% para o " + TURNOS.a,
+      m: "Metade para cada",
+      u: "25% para o " + TURNOS.a,
+      b: "Todos para o " + TURNOS.b,
+      p: "Como no 1º turno"
+    }[letra];
   }
 
   function cedulas(contas) {
@@ -934,7 +1150,8 @@ _PAGE_SCRIPT: Final = """\
   }
 
   function leituraAtual(item) {
-    var lida = item.leituras[indiceDoCenario(estadoTurnos.cenario)];
+    var lida = estadoTurnos.cenario === PERSONALIZADO ? item.personalizada :
+      item.leituras[indiceDoCenario(estadoTurnos.cenario)];
     var finalistas = item.segundo[0] + item.segundo[1];
     return {
       esperado: lida[0],
@@ -975,7 +1192,8 @@ _PAGE_SCRIPT: Final = """\
   }
 
   function limiteDaMetrica(metrica) {
-    var chave = metrica + "|" + estadoTurnos.cenario;
+    var chave = metrica + "|" + estadoTurnos.cenario +
+      (estadoTurnos.cenario === PERSONALIZADO ? "|" + codigoDosDestinos() : "");
     if (LIMITES_DAS_METRICAS[chave]) {
       return LIMITES_DAS_METRICAS[chave];
     }
@@ -1236,13 +1454,24 @@ _PAGE_SCRIPT: Final = """\
       painelTurnos.hidden = true;
       return;
     }
-    var cenario = seletor("Cenário de apoio no 2º turno", TURNOS.cenarios.map(function (item) {
+    var opcoes = TURNOS.cenarios.map(function (item) {
       return [item.chave, item.rotulo];
-    }), estadoTurnos.cenario, function (valor) {
-      estadoTurnos.cenario = valor;
-      descricao.textContent = cenarioAtual().descricao;
-      atualizarTurnos();
     });
+    if (temPersonalizado()) {
+      opcoes.push([PERSONALIZADO, "Personalizado"]);
+    }
+    var cenario = seletor("Cenário de apoio no 2º turno", opcoes, estadoTurnos.cenario,
+      function (valor) {
+        var anterior = TURNOS.cenarios[indiceDoCenario(estadoTurnos.cenario)];
+        if (valor === PERSONALIZADO && anterior) {
+          semearDestinos(estadoTurnos, anterior.parte);
+          marcarDestinos(personalizado);
+        }
+        estadoTurnos.cenario = valor;
+        personalizado.hidden = valor !== PERSONALIZADO;
+        atualizarTurnos();
+        descricao.textContent = cenarioAtual().descricao;
+      });
     var metrica = seletor("Pintar por", METRICAS.map(function (chave) {
       return [chave, nomeDaMetrica(chave)];
     }), estadoTurnos.metrica, function (valor) {
@@ -1250,10 +1479,40 @@ _PAGE_SCRIPT: Final = """\
       atualizarTurnos();
     });
     var descricao = elemento("small", cenarioAtual().descricao);
+    var personalizado = seletoresDosDestinos(function () {
+      atualizarTurnos();
+      descricao.textContent = cenarioAtual().descricao;
+    });
+    personalizado.hidden = estadoTurnos.cenario !== PERSONALIZADO;
     painelTurnos.appendChild(cenario);
+    painelTurnos.appendChild(personalizado);
     painelTurnos.appendChild(descricao);
     painelTurnos.appendChild(metrica);
     painelTurnos.hidden = !COMPARATIVO;
+  }
+
+  function seletoresDosDestinos(aoMudar) {
+    var caixa = elemento("div", "");
+    caixa.className = "personalizado";
+    (TURNOS.eliminados || []).forEach(function (grupo) {
+      var rotulo = nomeDoGrupo(grupo) + " · " + fatia(grupo.fatia) + " no país";
+      var campo = seletor(rotulo, DESTINOS.map(function (destino) {
+        return [destino.letra, nomeDoDestino(destino.letra)];
+      }), estadoTurnos.destinos[grupo.numero], function (valor) {
+        estadoTurnos.destinos[grupo.numero] = valor;
+        aoMudar();
+      });
+      campo.querySelector("select").setAttribute("data-grupo", grupo.numero);
+      caixa.appendChild(campo);
+    });
+    return caixa;
+  }
+
+  function marcarDestinos(caixa) {
+    var listas = caixa.querySelectorAll("select");
+    for (var i = 0; i < listas.length; i++) {
+      listas[i].value = estadoTurnos.destinos[listas[i].getAttribute("data-grupo")];
+    }
   }
 
   function seletor(rotulo, opcoes, atual, aoMudar) {
@@ -1274,6 +1533,7 @@ _PAGE_SCRIPT: Final = """\
 
   function atualizarTurnos() {
     destacar(null, null, null);
+    recalcularPersonalizado();
     BASES.turnos = pinturaDosTurnos();
     pintura = dadosDaVisao("turnos");
     repintarTudo();
@@ -1370,7 +1630,10 @@ _PAGE_SCRIPT: Final = """\
     if (nome !== "turnos") {
       return "#visao=" + nome;
     }
-    return "#visao=turnos&cenario=" + estadoTurnos.cenario + "&pintar=" + estadoTurnos.metrica;
+    var escolhas = estadoTurnos.cenario === PERSONALIZADO ?
+      "&personalizado=" + codigoDosDestinos() : "";
+    return "#visao=turnos&cenario=" + estadoTurnos.cenario + escolhas +
+      "&pintar=" + estadoTurnos.metrica;
   }
 
   function montarSeletor() {
@@ -1574,31 +1837,40 @@ def _titles(pagina: PaginaDoMapa) -> dict[str, str]:
 
 
 def _turnos(comparativo: ComparativoTurnos) -> dict[str, object]:
+    grupos = comparativo.eliminados
     return {
         "a": str(comparativo.a),
         "b": str(comparativo.b),
         "padrao": comparativo.cenarios[0].chave,
         "cenarios": [
-            {"chave": item.chave, "rotulo": item.rotulo, "descricao": item.descricao}
+            {
+                "chave": item.chave,
+                "rotulo": item.rotulo,
+                "descricao": item.descricao,
+                "parte": None if item.parte_de_a is None else float(item.parte_de_a),
+            }
             for item in comparativo.cenarios
+        ],
+        "eliminados": [
+            {"numero": str(grupo.numero), "fatia": round(float(grupo.fatia), 4)} for grupo in grupos
         ],
         "cobertura": list(comparativo.ufs_com_segundo),
         "semComparacao": comparativo.sem_comparacao,
         "piso": PISO_DE_VOTOS,
         "minimo": MINIMO_NO_GRUPO,
         "limiares": {"moderado": LIMIAR_MODERADO, "fora": LIMIAR_FORA},
-        "pais": None if comparativo.pais is None else _lugar(comparativo.pais),
-        "ufs": [_lugar(item) for item in comparativo.ufs],
-        "municipios": [_lugar(item) for item in comparativo.municipios],
+        "pais": None if comparativo.pais is None else _lugar(comparativo.pais, grupos),
+        "ufs": [_lugar(item, grupos) for item in comparativo.ufs],
+        "municipios": [_lugar(item, grupos) for item in comparativo.municipios],
         "exterior": [
-            {**_lugar(ponto.lugar), "lon": ponto.lon, "lat": ponto.lat}
+            {**_lugar(ponto.lugar, grupos), "lon": ponto.lon, "lat": ponto.lat}
             for ponto in comparativo.exterior
         ],
     }
 
 
-def _lugar(lugar: LugarTurnos) -> dict[str, object]:
-    return {
+def _lugar(lugar: LugarTurnos, grupos: tuple[GrupoEliminado, ...]) -> dict[str, object]:
+    found: dict[str, object] = {
         "codigo": lugar.codigo,
         "nome": lugar.nome,
         "uf": lugar.uf,
@@ -1614,6 +1886,10 @@ def _lugar(lugar: LugarTurnos) -> dict[str, object]:
             for leitura in lugar.leituras
         ],
     }
+    if grupos:
+        # Votos de cada grupo de eliminados no 1º turno, na ordem de "eliminados" do comparativo.
+        found["eliminados"] = [lugar.primeiro.votos_do_grupo(grupo.numeros) for grupo in grupos]
+    return found
 
 
 def _contas(apuracao: Apuracao) -> list[int]:
