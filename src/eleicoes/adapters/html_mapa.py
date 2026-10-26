@@ -432,7 +432,44 @@ _PAGE_SCRIPT: Final = """\
 
   function corDoLugar(feature) {
     var classe = CLASSES[feature.get("classe")];
-    return CRUZAMENTO && classe ? classe.cor : feature.get("cor");
+    if (CRUZAMENTO && classe) {
+      return classe.cor;
+    }
+    return COMPARATIVO ? feature.get("cor") : corComSegundo(feature, feature.get("cor"));
+  }
+
+  // Disputa apertada: abaixo desta margem entre o 1º e o 2º colocado, a cor do 2º entra na
+  // mistura, crescendo até o empate. Ela nunca passa do teto: a cor do líder segue majoritária.
+  var MARGEM_DA_MESCLA = 0.10;
+  var TETO_DO_SEGUNDO = 0.45;
+
+  function corComSegundo(feature, cor) {
+    var segundo = feature.get("segundo");
+    var votosSegundo = Number(feature.get("votosSegundo"));
+    var partes = String(feature.get("peso") == null ? "" : feature.get("peso")).split("/");
+    var lider = Number(partes[0]);
+    var validos = partes.length === 2 ? Number(partes[1]) : NaN;
+    var outra = segundo ? (base.cores || {})[segundo] : null;
+    if (!outra || !eInteiro(votosSegundo) || !eInteiro(lider) || !(validos > 0)) {
+      return cor;
+    }
+    var margem = (lider - votosSegundo) / validos;
+    if (margem >= MARGEM_DA_MESCLA) {
+      return cor;
+    }
+    return mesclarCores(cor, outra, TETO_DO_SEGUNDO * (1 - Math.max(0, margem) / MARGEM_DA_MESCLA));
+  }
+
+  function mesclarCores(cor, outra, parte) {
+    var a = canais(cor);
+    var b = canais(outra);
+    if (!a || !b) {
+      return cor;
+    }
+    return "#" + [0, 1, 2].map(function (i) {
+      var hex = Math.round(a[i] + (b[i] - a[i]) * parte).toString(16);
+      return hex.length < 2 ? "0" + hex : hex;
+    }).join("");
   }
 
   function rotuloCruzado(feature) {
@@ -2214,7 +2251,9 @@ def html_do_mapa(pagina: PaginaDoMapa) -> str:
         '<div id="turnos-controles" class="ol-unselectable" hidden></div>'
         '<div id="legenda" class="ol-unselectable"><button type="button" aria-expanded="true"'
         ' aria-controls="legenda-itens">Partidos</button><div id="legenda-itens">'
-        '<ul></ul><p class="nota">Tom mais forte: fatia maior dos votos válidos do líder.</p>'
+        '<ul></ul><p class="nota">Tom mais forte: fatia maior dos votos válidos do líder. '
+        "Disputa apertada (menos de 10 p.p. entre o 1º e o 2º): a cor do 2º colocado entra "
+        "na mistura, sem passar da cor do líder.</p>"
         "</div></div></div>\n"
         f"{_footer(pagina)}\n"
         f"{_scripts(pagina)}\n"

@@ -299,7 +299,8 @@ def test_cross_map_paints_by_class_and_explains_it() -> None:
     assert 'cor: "#d95f02"' in html
     assert 'cor: "#3a5fcd"' in html
     assert 'cor: "#7570b3"' not in html
-    assert 'return CRUZAMENTO && classe ? classe.cor : feature.get("cor");' in html
+    assert "if (CRUZAMENTO && classe) {" in html
+    assert "return classe.cor;" in html
     assert "function rotuloCruzado(feature)" in html
     assert "function detalharClasse(feature)" in html
     assert "function detalharGovernador(feature)" in html
@@ -552,3 +553,12 @@ def test_narrow_screens_fold_the_turnos_controls_and_scroll_the_views_bar() -> N
     assert 'var alternar = elemento("button", "Cenário e pintura");' in html
     assert "var controlesAbertos = !TELA_ESTREITA;" in html
     assert "painelVisoes.scrollLeft = botoes[i].offsetLeft -" in html
+
+
+def test_close_races_blend_the_runner_up_color_under_the_leader() -> None:
+    html = html_do_mapa(_page())
+
+    assert "var MARGEM_DA_MESCLA = 0.10;" in html
+    assert "var TETO_DO_SEGUNDO = 0.45;" in html
+    assert "function corComSegundo(feature, cor) {" in html
+    assert "Disputa apertada (menos de 10 p.p. entre o 1º e o 2º)" in html
