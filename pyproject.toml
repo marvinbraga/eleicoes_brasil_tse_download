@@ -33,6 +33,7 @@ packages = ["src/eleicoes"]
 "src/eleicoes/adapters/orm/migrations/script.py.mako" = "eleicoes/adapters/orm/migrations/script.py.mako"
 "src/eleicoes/adapters/sql/views.sql" = "eleicoes/adapters/sql/views.sql"
 "src/eleicoes/adapters/asn1/bu.asn1" = "eleicoes/adapters/asn1/bu.asn1"
+"src/eleicoes/adapters/asn1/rdv.asn1" = "eleicoes/adapters/asn1/rdv.asn1"
 
 [tool.hatch.build.targets.sdist]
 include = ["src/eleicoes", "tests", "pyproject.toml", ".env.example"]
