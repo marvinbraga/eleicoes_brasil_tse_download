@@ -119,6 +119,12 @@ _PAGE_CSS: Final = (
     " #detalhe th, #detalhe td { padding: 0 .5em 0 0; text-align: right; font-weight: normal; }"
     " #detalhe th:first-child { text-align: left; }"
     " #detalhe thead th { opacity: .7; }"
+    " #legenda .saldo { display: block; margin: .2em 0 .5em; }"
+    " #legenda .saldo table { border-collapse: collapse; }"
+    " #legenda .saldo th, #legenda .saldo td { padding: 0 .45em 0 0; text-align: right;"
+    " font-weight: normal; white-space: nowrap; }"
+    " #legenda .saldo th:first-child { text-align: left; font-weight: bold; }"
+    " #legenda .saldo thead th { opacity: .7; }"
     " #turnos-controles { max-height: calc(100% - 6em); overflow: auto; }"
     " #turnos-controles .corpo { display: flex; flex-direction: column; gap: .35em; }"
     " #turnos-controles .corpo[hidden] { display: none; }"
@@ -1400,6 +1406,7 @@ _PAGE_SCRIPT: Final = """\
       linhaDaTabela(corpo, "Abstenção", p[0] - p[1], p[2] - p[3]);
     }
     painelDetalhe.appendChild(tabela);
+    painelDetalhe.appendChild(elemento("small", origemDosVotos(item)));
     var cenario = cenarioAtual();
     var lida = leituraAtual(item);
     painelDetalhe.appendChild(elemento("div", "Cenário: " + cenario.rotulo)).className = "secao";
@@ -1449,9 +1456,57 @@ _PAGE_SCRIPT: Final = """\
       " votos dos finalistas ou quando o grupo tem menos de " + TURNOS.minimo + " lugares.";
   }
 
+  // Os finalistas do mais votado ao menos votado no 2º turno: votos nos dois turnos e saldo.
+  function tabelaDoSaldo(item) {
+    var dupla = finalistasDe(item);
+    var ordem = item.segundo[1] > item.segundo[0] ? [1, 0] : [0, 1];
+    var tabela = document.createElement("table");
+    var cabeca = tabela.createTHead().insertRow();
+    ["", "1º turno", "2º turno", "Diferença"].forEach(function (texto) {
+      var celula = document.createElement("th");
+      celula.textContent = texto;
+      cabeca.appendChild(celula);
+    });
+    var corpo = tabela.createTBody();
+    ordem.forEach(function (indice) {
+      linhaDaTabela(corpo, nomeDoPartido(dupla[indice]), item.primeiro[indice],
+        item.segundo[indice]);
+    });
+    return tabela;
+  }
+
+  // De onde saíram os votos que os finalistas ganharam: a conta fecha com o boletim.
+  function origemDosVotos(item) {
+    var p = item.participacao;
+    var brancosNulos = (item.segundo[3] + item.segundo[4]) - (item.primeiro[3] + item.primeiro[4]);
+    var partes = ["eliminados no 1º turno " + milhar(item.primeiro[2]),
+      "brancos e nulos " + comSinal(brancosNulos)];
+    if (p) {
+      partes.push("comparecimento " + comSinal(p[3] - p[1]));
+    }
+    return "Votos ganhos pelos finalistas: " +
+      comSinal(item.segundo[0] + item.segundo[1] - item.primeiro[0] - item.primeiro[1]) +
+      ". Fontes: " + partes.join(" · ") + ".";
+  }
+
+  function saldoNaLegenda(lista) {
+    var total = TURNOS.pais;
+    if (!total || doGovernador()) {
+      return;
+    }
+    var bloco = elemento("li", "");
+    bloco.className = "saldo";
+    bloco.appendChild(elemento("strong", "Total importado (" + TURNOS.cobertura.length +
+      (TURNOS.cobertura.length === 1 ? " recorte)" : " recortes)")));
+    bloco.appendChild(tabelaDoSaldo(total));
+    bloco.appendChild(elemento("small", origemDosVotos(total)));
+    lista.appendChild(bloco);
+  }
+
   function montarLegendaDosTurnos() {
     botaoLegenda.textContent = NOMES_DAS_VISOES[visaoAtual];
     var lista = painelLegenda.querySelector("ul");
+    saldoNaLegenda(lista);
     var metrica = estadoTurnos.metrica;
     if (metrica === "desvio") {
       var contagem = {};
