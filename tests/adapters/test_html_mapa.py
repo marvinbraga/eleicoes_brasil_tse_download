@@ -270,7 +270,8 @@ def test_legend_lists_parties_with_marks_and_acronyms() -> None:
     assert "function montarLegenda()" in html
     assert "function resumoDaLideranca(linha)" in html
     assert "new ol.control.Control({element: painelLegenda})" in html
-    assert "alternarLegenda(painelLegenda.parentElement.clientWidth >= 640);" in html
+    assert 'var TELA_ESTREITA = window.matchMedia("(max-width: 640px)").matches;' in html
+    assert "alternarLegenda(!TELA_ESTREITA);" in html
     assert 'return sigla ? sigla + " " + numero : String(numero);' in html
     assert 'posicao + " · " + nomeDoPartido(numero)' in html
     assert "amostra.style.background = linha.cor;" in html
@@ -537,3 +538,14 @@ def test_turnos_controls_export_a_csv_for_excel() -> None:
     assert 'new Blob(["\\uFEFF" + linhas.join("\\r\\n") + "\\r\\n"],' in html
     assert 'return campos.map(campoDoCsv).join(";");' in html
     assert 'return valor.toFixed(casas).replace(".", ",");' in html
+
+
+def test_narrow_screens_fold_the_turnos_controls_and_scroll_the_views_bar() -> None:
+    html = html_do_mapa(_page())
+
+    assert " @media (max-width: 640px) {" in html
+    assert " #visoes { left: 2.6em; right: .5em; transform: none; overflow-x: auto;" in html
+    assert " #turnos-controles .alternar { display: block; } }" in html
+    assert 'var alternar = elemento("button", "Cenário e pintura");' in html
+    assert "var controlesAbertos = !TELA_ESTREITA;" in html
+    assert "painelVisoes.scrollLeft = botoes[i].offsetLeft -" in html

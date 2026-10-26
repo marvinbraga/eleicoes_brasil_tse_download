@@ -119,6 +119,19 @@ _PAGE_CSS: Final = (
     " #detalhe th, #detalhe td { padding: 0 .5em 0 0; text-align: right; font-weight: normal; }"
     " #detalhe th:first-child { text-align: left; }"
     " #detalhe thead th { opacity: .7; }"
+    " #turnos-controles { max-height: calc(100% - 6em); overflow: auto; }"
+    " #turnos-controles .corpo { display: flex; flex-direction: column; gap: .35em; }"
+    " #turnos-controles .corpo[hidden] { display: none; }"
+    " #turnos-controles .alternar { display: none; font-weight: bold; text-align: left; }"
+    " #turnos-controles .alternar::after { content: ' ▾'; }"
+    " #turnos-controles .alternar[aria-expanded='false']::after { content: ' ▸'; }"
+    " @media (max-width: 640px) {"
+    " #visoes { left: 2.6em; right: .5em; transform: none; overflow-x: auto;"
+    " scrollbar-width: none; }"
+    " #visoes button { flex: none; }"
+    " #legenda { top: 3.4em; max-height: calc(100% - 7.5em); }"
+    " #turnos-controles .alternar { display: block; } }"
+    " @media (min-width: 641px) { #turnos-controles .corpo[hidden] { display: flex; } }"
 )
 _PAGE_SCRIPT: Final = """\
 (function () {
@@ -1540,16 +1553,34 @@ _PAGE_SCRIPT: Final = """\
       descricao.textContent = cenarioAtual().descricao;
     });
     personalizado.hidden = estadoTurnos.cenario !== PERSONALIZADO;
-    painelTurnos.appendChild(cenario);
-    painelTurnos.appendChild(personalizado);
-    painelTurnos.appendChild(descricao);
-    painelTurnos.appendChild(metrica);
     var baixar = elemento("button", "Baixar CSV");
     baixar.type = "button";
     baixar.className = "baixar";
     baixar.addEventListener("click", baixarCsv);
-    painelTurnos.appendChild(baixar);
+    var corpo = elemento("div", "");
+    corpo.id = "turnos-corpo";
+    corpo.className = "corpo";
+    [cenario, personalizado, descricao, metrica, baixar].forEach(function (parte) {
+      corpo.appendChild(parte);
+    });
+    // O botão só aparece em telas estreitas (CSS); nas largas o corpo fica sempre à vista.
+    var alternar = elemento("button", "Cenário e pintura");
+    alternar.type = "button";
+    alternar.className = "alternar";
+    alternar.setAttribute("aria-controls", "turnos-corpo");
+    alternar.addEventListener("click", function () {
+      controlesAbertos = !controlesAbertos;
+      abrirControles(alternar, corpo);
+    });
+    abrirControles(alternar, corpo);
+    painelTurnos.appendChild(alternar);
+    painelTurnos.appendChild(corpo);
     painelTurnos.hidden = !COMPARATIVO;
+  }
+
+  function abrirControles(alternar, corpo) {
+    alternar.setAttribute("aria-expanded", controlesAbertos ? "true" : "false");
+    corpo.hidden = !controlesAbertos;
   }
 
   function seletoresDosDestinos(aoMudar) {
@@ -1787,6 +1818,11 @@ _PAGE_SCRIPT: Final = """\
     for (var i = 0; i < botoes.length; i++) {
       var ativo = botoes[i].getAttribute("data-visao") === visaoAtual;
       botoes[i].setAttribute("aria-pressed", ativo ? "true" : "false");
+      if (ativo && painelVisoes.scrollWidth > painelVisoes.clientWidth) {
+        // Em tela estreita a barra rola de lado; a visão ativa fica no meio dela.
+        painelVisoes.scrollLeft = botoes[i].offsetLeft -
+          (painelVisoes.clientWidth - botoes[i].offsetWidth) / 2;
+      }
     }
     var titulo = (base.titulos || {})[visaoAtual];
     if (titulo) {
@@ -1808,10 +1844,13 @@ _PAGE_SCRIPT: Final = """\
   var NOTA_DA_LEGENDA = painelLegenda.querySelector(".nota").textContent;
   var painelVisoes = document.getElementById("visoes");
   var painelTurnos = document.getElementById("turnos-controles");
+  // Mesmo corte do @media do CSS: em tela estreita, legenda e controles começam fechados.
+  var TELA_ESTREITA = window.matchMedia("(max-width: 640px)").matches;
+  var controlesAbertos = !TELA_ESTREITA;
   montarLegenda();
   montarSeletor();
   montarControlesDosTurnos();
-  alternarLegenda(painelLegenda.parentElement.clientWidth >= 640);
+  alternarLegenda(!TELA_ESTREITA);
   botaoLegenda.addEventListener("click", function () {
     alternarLegenda(botaoLegenda.getAttribute("aria-expanded") !== "true");
   });
