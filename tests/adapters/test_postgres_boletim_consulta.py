@@ -259,27 +259,34 @@ def test_party_power_aggregate_has_no_place_and_maps_decimals() -> None:
 
 
 def test_participation_maxes_each_section_before_adding() -> None:
-    connection = _Connection([(1120, Decimal("613742"), Decimal("610115"))])
+    connection = _Connection([(1120, Decimal("613742"), Decimal("488330"))])
     reader = PostgresBoletimReader(lambda: connection)
     found = reader.participation(2026, 1, "AC", "presidente", "municipio")
     sql, params = connection.statements[0]
     assert params == (2026, 1, "AC", "presidente")
     assert "MAX(eleitores_aptos)" in sql
-    assert "MAX(qtd_comparecimento)" in sql
+    assert "MAX(comparecimento_cargo)" in sql
     assert "SUM(eleitores_aptos)" not in sql
-    assert "SUM(qtd_comparecimento)" not in sql
     assert "SUM(comparecimento_cargo)" not in sql
-    assert "comparecimento_cargo" not in sql
     assert "eleitores_computados" not in sql
     assert "2026" not in sql
     assert "presidente" not in sql
     row = found[0]
     assert row.zona is None
     assert row.eleitores_aptos == 613742
-    assert row.comparecimento == 610115
+    assert row.comparecimento == 488330
     assert isinstance(row.eleitores_aptos, int)
     assert isinstance(row.comparecimento, int)
-    assert row.abstencao == 3627
+    assert row.abstencao == 125412
+
+
+@pytest.mark.parametrize("nivel", ["municipio", "zona"])
+def test_participation_never_reads_the_election_level_turnout(nivel: str) -> None:
+    # qtd_comparecimento is apt minus extra voters in the 2026 BU, so it would
+    # put AC presidential turnout at 99.4% instead of the 79.6% of ballots cast.
+    connection = _Connection([])
+    PostgresBoletimReader(lambda: connection).participation(2026, 2, "AC", "presidente", nivel)
+    assert "qtd_comparecimento" not in connection.statements[0][0]
 
     zoned = _Connection([(1120, 8, 100, 90)])
     zone = PostgresBoletimReader(lambda: zoned).participation(2026, 1, "AC", "senador", "zona")[0]

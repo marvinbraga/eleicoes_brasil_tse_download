@@ -365,6 +365,8 @@ END
 
 
 def _participation_sql(columns: tuple[str, ...]) -> str:
+    # The election-level qtd_comparecimento in the 2026 BU is apt minus extra
+    # voters, not turnout. The cargo-level count matches the ballots cast.
     selected = ", ".join(columns)
     return f"""
 WITH secoes AS (
@@ -373,7 +375,7 @@ WITH secoes AS (
         zona,
         secao,
         MAX(eleitores_aptos) AS aptos,
-        MAX(qtd_comparecimento) AS comparecimento
+        MAX(comparecimento_cargo) AS comparecimento
     FROM raw.boletim
     WHERE ano = %s
       AND turno = %s
