@@ -11,6 +11,7 @@ from html import escape
 from pathlib import Path
 from typing import Final
 
+from eleicoes.adapters.arquivo_atomico import gravar_texto
 from eleicoes.domain.errors import ElectionError
 from eleicoes.domain.integridade_urna import (
     CONFERE,
@@ -160,7 +161,7 @@ def main(argv: Sequence[str] | None = None, verificar_uma: Verificar = verificar
     destino = Path(args.destino or f"relatorios/integridade-urnas-{args.ano}-turno-{args.turno}")
     gravar_csv(destino.with_suffix(".csv"), resultados)
     html = html_da_verificacao(int(args.ano), int(args.turno), resultados)
-    destino.with_suffix(".html").write_text(html, encoding="utf-8")
+    gravar_texto(destino.with_suffix(".html"), html)
     _imprimir(destino, resultados)
     return EXIT_SUCCESS
 

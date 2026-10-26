@@ -14,6 +14,7 @@ from typing import Final
 
 from dotenv import load_dotenv
 
+from eleicoes.adapters.arquivo_atomico import gravar_texto
 from eleicoes.adapters.html_mapa import html_do_mapa
 from eleicoes.domain.errors import (
     SCHEMA_OUTDATED_HINT,
@@ -621,8 +622,7 @@ def _views(
 
 
 def _write(destino: Path, html: str, open_report: OpenReport) -> bool:
-    destino.parent.mkdir(parents=True, exist_ok=True)
-    destino.write_text(html, encoding="utf-8")
+    gravar_texto(destino, html)
     return open_report(destino)
 
 

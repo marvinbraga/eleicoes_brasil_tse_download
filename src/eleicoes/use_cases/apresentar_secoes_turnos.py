@@ -12,6 +12,7 @@ from typing import Final
 
 from dotenv import load_dotenv
 
+from eleicoes.adapters.arquivo_atomico import gravar_texto
 from eleicoes.adapters.csv_secoes_turnos import csv_das_secoes
 from eleicoes.adapters.html_secoes_turnos import CENARIO_INICIAL, html_das_secoes
 from eleicoes.domain.anomalia_secao import AnaliseSecoes, analisar_secoes
@@ -79,8 +80,8 @@ class PresentSections:
         analise = analisar_secoes(primeiro, segundo, nomes, apoiado=self._apoiado)
         tabela = destino.with_suffix(".csv")
         destino.parent.mkdir(parents=True, exist_ok=True)
-        destino.write_text(self._render(year, self._clock(), analise), encoding="utf-8")
-        tabela.write_text(self._tabulate(analise), encoding="utf-8")
+        gravar_texto(destino, self._render(year, self._clock(), analise))
+        gravar_texto(tabela, self._tabulate(analise))
         return PresentedSections(destino, tabela, self._open(destino), analise)
 
     def _votes(self, ano: int, turno: int, uf: str) -> tuple[VotosSecao, ...]:
