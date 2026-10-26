@@ -1384,10 +1384,15 @@ _PAGE_SCRIPT: Final = """\
     return antes > 0 ? decimal((depois - antes) / antes * 100, 1) + "%" : comSinal(depois);
   }
 
+  // O rótulo mostra a mesma medida que dá o tom: quem ganhou mais e por quanto, em p.p.
   function ganhoDosFinalistas(item) {
+    var vantagem = vantagemNoGanho(item);
+    if (vantagem === 0) {
+      return "empate no ganho";
+    }
     var dupla = finalistasDe(item);
-    return dupla[1] + " " + crescimento(item.primeiro[1], item.segundo[1]) + " · " +
-      dupla[0] + " " + crescimento(item.primeiro[0], item.segundo[0]);
+    var quem = vantagem > 0 ? dupla[0] : dupla[1];
+    return quem + " à frente " + decimal(Math.abs(vantagem), 1) + " p.p.";
   }
 
   function saldoDosFinalistas(item) {
@@ -1486,7 +1491,7 @@ _PAGE_SCRIPT: Final = """\
     }
     var tabela = document.createElement("table");
     var cabeca = tabela.createTHead().insertRow();
-    ["", "1º turno", "2º turno", "Variação"].forEach(function (texto) {
+    ["", "1º turno", "2º turno", "Variação", "%"].forEach(function (texto) {
       var celula = document.createElement("th");
       celula.textContent = texto;
       cabeca.appendChild(celula);
@@ -1501,13 +1506,13 @@ _PAGE_SCRIPT: Final = """\
       ["Nulos", 4]
     ];
     linhas.forEach(function (linha) {
-      linhaDaTabela(corpo, linha[0], item.primeiro[linha[1]], item.segundo[linha[1]]);
+      linhaDaTabela(corpo, linha[0], item.primeiro[linha[1]], item.segundo[linha[1]], true);
     });
-    linhaDaTabela(corpo, "Cédulas", cedulas(item.primeiro), cedulas(item.segundo));
+    linhaDaTabela(corpo, "Cédulas", cedulas(item.primeiro), cedulas(item.segundo), true);
     var p = item.participacao;
     if (p) {
-      linhaDaTabela(corpo, "Comparecimento", p[1], p[3]);
-      linhaDaTabela(corpo, "Abstenção", p[0] - p[1], p[2] - p[3]);
+      linhaDaTabela(corpo, "Comparecimento", p[1], p[3], true);
+      linhaDaTabela(corpo, "Abstenção", p[0] - p[1], p[2] - p[3], true);
     }
     painelDetalhe.appendChild(tabela);
     painelDetalhe.appendChild(elemento("small", origemDosVotos(item)));
@@ -1533,12 +1538,16 @@ _PAGE_SCRIPT: Final = """\
     painelDetalhe.appendChild(elemento("small", explicacaoDoDesvio(item, lida)));
   }
 
-  function linhaDaTabela(corpo, rotulo, antes, depois) {
+  function linhaDaTabela(corpo, rotulo, antes, depois, comPercentual) {
     var linha = corpo.insertRow();
     var nome = document.createElement("th");
     nome.textContent = rotulo;
     linha.appendChild(nome);
-    [milhar(antes), milhar(depois), comSinal(depois - antes)].forEach(function (texto) {
+    var celulas = [milhar(antes), milhar(depois), comSinal(depois - antes)];
+    if (comPercentual) {
+      celulas.push(antes > 0 ? crescimento(antes, depois) : "—");
+    }
+    celulas.forEach(function (texto) {
       linha.insertCell().textContent = texto;
     });
   }
@@ -1751,8 +1760,10 @@ _PAGE_SCRIPT: Final = """\
       return "Cor do finalista que ganhou mais votos do 1º para o 2º turno. O tom mede a " +
         "vantagem no ganho: votos ganhos por ele menos os ganhos pelo outro, em pontos " +
         "percentuais das cédulas do 1º turno, para comparar municípios de qualquer tamanho " +
-        "sem exagerar onde um deles partia de poucos votos. O rótulo traz o crescimento de " +
-        "cada um em percentual; a tabela do lugar, em votos. " + cobertura;
+        "sem exagerar onde um deles partia de poucos votos. O rótulo traz essa mesma " +
+        "vantagem; a tabela do lugar traz os votos e o crescimento percentual de cada um. " +
+        "Crescer muito em percentual não basta: se o outro também cresce, a vantagem é " +
+        "pequena (Goiás: 13 +33%, 22 +14%). " + cobertura;
     }
     if (metrica === "perdas") {
       return "Municípios onde cada finalista teve menos votos no 2º turno do que no 1º. O " +
