@@ -154,7 +154,16 @@ _PAGE_SCRIPT: Final = """\
     turnosgov: "Governador 1º × 2º"
   };
   var CLASSES_DOS_TURNOS = ["fora_a", "moderado_a", "dentro", "moderado_b", "fora_b", "sem_base"];
-  var METRICAS = ["desvio", "residuo", "a", "b", "branco", "nulo", "cedulas", "abstencao"];
+  var METRICAS = [
+    "desvio", "residuo", "perdas", "a", "b", "branco", "nulo", "cedulas", "abstencao"
+  ];
+  var ORDEM_DAS_PERDAS = ["perdeu_b", "perdeu_a", "os_dois", "nenhum"];
+  var CORES_DAS_PERDAS = {
+    perdeu_b: "#e08214",
+    perdeu_a: "#5e3c99",
+    os_dois: "#3a3a3a",
+    nenhum: "#efefef"
+  };
   var CORES_DAS_CLASSES = {
     fora_a: "#2c5aa0",
     moderado_a: "#9dc0e8",
@@ -1067,7 +1076,8 @@ _PAGE_SCRIPT: Final = """\
       branco: "Brancos",
       nulo: "Nulos",
       cedulas: "Total de cédulas",
-      abstencao: "Abstenção"
+      abstencao: "Abstenção",
+      perdas: "Quem perdeu votos"
     }[chave];
   }
 
@@ -1306,8 +1316,36 @@ _PAGE_SCRIPT: Final = """\
     return estadoTurnos.metrica === "desvio" && agregado(item) && leituraAtual(item).z === null;
   }
 
+  // Quem teve menos votos no 2º turno do que no 1º; A é o primeiro da dupla de finalistas.
+  function classeDaPerda(item) {
+    var perdeuA = item.segundo[0] < item.primeiro[0];
+    var perdeuB = item.segundo[1] < item.primeiro[1];
+    if (perdeuA && perdeuB) {
+      return "os_dois";
+    }
+    return perdeuA ? "perdeu_a" : perdeuB ? "perdeu_b" : "nenhum";
+  }
+
+  function rotuloDaPerda(chave) {
+    return {
+      perdeu_b: "Só o " + rotuloB() + " perdeu votos",
+      perdeu_a: "Só o " + rotuloA() + " perdeu votos",
+      os_dois: "Os dois perderam votos",
+      nenhum: "Os dois ganharam votos"
+    }[chave];
+  }
+
+  function saldoDosFinalistas(item) {
+    var dupla = finalistasDe(item);
+    return dupla[1] + " " + comSinal(item.segundo[1] - item.primeiro[1]) + " · " +
+      dupla[0] + " " + comSinal(item.segundo[0] - item.primeiro[0]);
+  }
+
   function corDosTurnos(item) {
     var metrica = estadoTurnos.metrica;
+    if (metrica === "perdas") {
+      return CORES_DAS_PERDAS[classeDaPerda(item)];
+    }
     if (semGrupo(item)) {
       return corDivergente(valorDaMetrica(item, "residuo"), limiteDaMetrica("residuo"));
     }
@@ -1360,6 +1398,9 @@ _PAGE_SCRIPT: Final = """\
 
   function textoDaMetrica(item) {
     var metrica = estadoTurnos.metrica;
+    if (metrica === "perdas") {
+      return saldoDosFinalistas(item);
+    }
     if (semGrupo(item)) {
       return decimal(valorDaMetrica(item, "residuo"), 1) + " p.p. do cenário";
     }
@@ -1512,7 +1553,9 @@ _PAGE_SCRIPT: Final = """\
     var lista = painelLegenda.querySelector("ul");
     saldoNaLegenda(lista);
     var metrica = estadoTurnos.metrica;
-    if (metrica === "desvio") {
+    if (metrica === "perdas") {
+      legendaDasPerdas(lista);
+    } else if (metrica === "desvio") {
       var contagem = {};
       TURNOS.municipios.forEach(function (item) {
         var classe = classeVisivel(leituraAtual(item));
@@ -1551,6 +1594,36 @@ _PAGE_SCRIPT: Final = """\
     painelLegenda.querySelector(".nota").textContent = notaDosTurnos(metrica);
   }
 
+  function legendaDasPerdas(lista) {
+    var contagem = {};
+    var perdidos = {perdeu_a: 0, perdeu_b: 0};
+    TURNOS.municipios.forEach(function (item) {
+      var classe = classeDaPerda(item);
+      contagem[classe] = (contagem[classe] || 0) + 1;
+      perdidos.perdeu_a += Math.min(0, item.segundo[0] - item.primeiro[0]);
+      perdidos.perdeu_b += Math.min(0, item.segundo[1] - item.primeiro[1]);
+    });
+    ORDEM_DAS_PERDAS.forEach(function (chave) {
+      var item = document.createElement("li");
+      var amostra = elemento("span", "");
+      amostra.className = "amostra";
+      amostra.style.background = CORES_DAS_PERDAS[chave];
+      item.appendChild(amostra);
+      var texto = elemento("span", rotuloDaPerda(chave));
+      var total = contagem[chave] || 0;
+      texto.appendChild(elemento("small", milhar(total) +
+        (total === 1 ? " município" : " municípios")));
+      item.appendChild(texto);
+      lista.appendChild(item);
+    });
+    var resumo = elemento("li", "");
+    resumo.style.display = "block";
+    resumo.appendChild(elemento("small", "Votos perdidos onde perdeu: " + rotuloB() + " " +
+      comSinal(perdidos.perdeu_b) + " · " + rotuloA() + " " + comSinal(perdidos.perdeu_a) +
+      ", contando também os municípios onde os dois perderam."));
+    lista.appendChild(resumo);
+  }
+
   function notaDosTurnos(metrica) {
     var cobertura = doGovernador() ?
       "2º turno de governador importado em " + TURNOS.cobertura.length +
@@ -1576,6 +1649,11 @@ _PAGE_SCRIPT: Final = """\
     if (metrica === "residuo") {
       return "Fatia real do " + rotuloA() + " entre os finalistas menos a esperada no cenário. " +
         cenarioAtual().descricao + " " + pais + LIMITE_DO_MODELO + cobertura;
+    }
+    if (metrica === "perdas") {
+      return "Municípios onde cada finalista teve menos votos no 2º turno do que no 1º. O " +
+        "rótulo traz o saldo de cada um. Perder votos acompanha, quase sempre, a queda do " +
+        "comparecimento (veja Total de cédulas). " + cobertura;
     }
     if (metrica === "abstencao") {
       return "Variação da taxa de abstenção (eleitores aptos que não votaram) do 1º para o 2º " +
