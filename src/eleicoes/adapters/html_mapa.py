@@ -155,8 +155,9 @@ _PAGE_SCRIPT: Final = """\
   };
   var CLASSES_DOS_TURNOS = ["fora_a", "moderado_a", "dentro", "moderado_b", "fora_b", "sem_base"];
   var METRICAS = [
-    "desvio", "residuo", "perdas", "a", "b", "branco", "nulo", "cedulas", "abstencao"
+    "desvio", "residuo", "ganhos", "perdas", "a", "b", "branco", "nulo", "cedulas", "abstencao"
   ];
+  var COR_SEM_PARTIDO = "#8c8c8c";
   var ORDEM_DAS_PERDAS = ["perdeu_b", "perdeu_a", "os_dois", "nenhum"];
   var CORES_DAS_PERDAS = {
     perdeu_b: "#e08214",
@@ -1077,7 +1078,8 @@ _PAGE_SCRIPT: Final = """\
       nulo: "Nulos",
       cedulas: "Total de cédulas",
       abstencao: "Abstenção",
-      perdas: "Quem perdeu votos"
+      perdas: "Quem perdeu votos",
+      ganhos: "Quem ganhou votos"
     }[chave];
   }
 
@@ -1253,6 +1255,9 @@ _PAGE_SCRIPT: Final = """\
   }
 
   function valorDaMetrica(item, metrica) {
+    if (metrica === "ganhos") {
+      return vantagemNoGanho(item);
+    }
     if (metrica === "abstencao") {
       var p = item.participacao;
       return p ? (taxaDeAbstencao(p[2], p[3]) - taxaDeAbstencao(p[0], p[1])) * 100 : 0;
@@ -1335,6 +1340,56 @@ _PAGE_SCRIPT: Final = """\
     }[chave];
   }
 
+  // Vantagem no ganho, em p.p. das cédulas do 1º turno: compara municípios de qualquer
+  // tamanho sem inflar quem partia de poucos votos. Positivo: A ganhou mais que B.
+  function vantagemNoGanho(item) {
+    var cedulas1 = cedulas(item.primeiro);
+    if (cedulas1 <= 0) {
+      return 0;
+    }
+    var ganhoA = item.segundo[0] - item.primeiro[0];
+    var ganhoB = item.segundo[1] - item.primeiro[1];
+    return (ganhoA - ganhoB) / cedulas1 * 100;
+  }
+
+  function corDoPartido(numero) {
+    // base, e não pintura: a pintura inicial dos turnos é montada antes de pintura existir.
+    return (base.cores || {})[numero] || COR_SEM_PARTIDO;
+  }
+
+  // O partido que ganhou mais votos, com o tom mais forte quanto maior a vantagem.
+  function corDoGanho(item) {
+    var vantagem = vantagemNoGanho(item);
+    if (vantagem === 0) {
+      return "#efefef";
+    }
+    var dupla = finalistasDe(item);
+    var cor = corDoPartido(vantagem > 0 ? dupla[0] : dupla[1]);
+    var parte = Math.min(1, Math.abs(vantagem) / limiteDaMetrica("ganhos"));
+    return clarear(cor, 0.15 + 0.85 * parte);
+  }
+
+  function clarear(cor, parte) {
+    var origem = canais(cor) || [140, 140, 140];
+    var rgb = origem.map(function (canal) {
+      return Math.round(255 + (canal - 255) * parte);
+    });
+    return "#" + rgb.map(function (canal) {
+      var hex = canal.toString(16);
+      return hex.length < 2 ? "0" + hex : hex;
+    }).join("");
+  }
+
+  function crescimento(antes, depois) {
+    return antes > 0 ? decimal((depois - antes) / antes * 100, 1) + "%" : comSinal(depois);
+  }
+
+  function ganhoDosFinalistas(item) {
+    var dupla = finalistasDe(item);
+    return dupla[1] + " " + crescimento(item.primeiro[1], item.segundo[1]) + " · " +
+      dupla[0] + " " + crescimento(item.primeiro[0], item.segundo[0]);
+  }
+
   function saldoDosFinalistas(item) {
     var dupla = finalistasDe(item);
     return dupla[1] + " " + comSinal(item.segundo[1] - item.primeiro[1]) + " · " +
@@ -1345,6 +1400,9 @@ _PAGE_SCRIPT: Final = """\
     var metrica = estadoTurnos.metrica;
     if (metrica === "perdas") {
       return CORES_DAS_PERDAS[classeDaPerda(item)];
+    }
+    if (metrica === "ganhos") {
+      return corDoGanho(item);
     }
     if (semGrupo(item)) {
       return corDivergente(valorDaMetrica(item, "residuo"), limiteDaMetrica("residuo"));
@@ -1400,6 +1458,9 @@ _PAGE_SCRIPT: Final = """\
     var metrica = estadoTurnos.metrica;
     if (metrica === "perdas") {
       return saldoDosFinalistas(item);
+    }
+    if (metrica === "ganhos") {
+      return ganhoDosFinalistas(item);
     }
     if (semGrupo(item)) {
       return decimal(valorDaMetrica(item, "residuo"), 1) + " p.p. do cenário";
@@ -1555,6 +1616,8 @@ _PAGE_SCRIPT: Final = """\
     var metrica = estadoTurnos.metrica;
     if (metrica === "perdas") {
       legendaDasPerdas(lista);
+    } else if (metrica === "ganhos") {
+      legendaDosGanhos(lista);
     } else if (metrica === "desvio") {
       var contagem = {};
       TURNOS.municipios.forEach(function (item) {
@@ -1592,6 +1655,40 @@ _PAGE_SCRIPT: Final = """\
       lista.appendChild(faixa);
     }
     painelLegenda.querySelector(".nota").textContent = notaDosTurnos(metrica);
+  }
+
+  function legendaDosGanhos(lista) {
+    var limite = limiteDaMetrica("ganhos");
+    var contagem = {a: 0, b: 0, empate: 0};
+    TURNOS.municipios.forEach(function (item) {
+      var vantagem = vantagemNoGanho(item);
+      contagem[vantagem > 0 ? "a" : vantagem < 0 ? "b" : "empate"] += 1;
+    });
+    var exemplo = TURNOS.municipios[0];
+    var dupla = exemplo ? finalistasDe(exemplo) : [TURNOS.a, TURNOS.b];
+    [[1, "b"], [0, "a"]].forEach(function (par) {
+      var numero = dupla[par[0]];
+      var faixa = elemento("li", "");
+      faixa.style.display = "block";
+      var titulo = doGovernador() ? (par[1] === "a" ? rotuloA() : rotuloB()) :
+        nomeDoPartido(numero);
+      faixa.appendChild(elemento("span", titulo + " ganhou mais votos"));
+      var escala = elemento("div", "");
+      escala.className = "escala";
+      var cor = doGovernador() ? COR_SEM_PARTIDO : corDoPartido(numero);
+      escala.style.background = "linear-gradient(to right, " + clarear(cor, 0.15) + ", " +
+        clarear(cor, 1) + ")";
+      faixa.appendChild(escala);
+      var marcas = elemento("div", "");
+      marcas.className = "marcas";
+      marcas.appendChild(elemento("span", "0 p.p."));
+      marcas.appendChild(elemento("span", decimal(limite, 1).replace("+", "") + " p.p. ou mais"));
+      faixa.appendChild(marcas);
+      var total = contagem[par[1]];
+      faixa.appendChild(elemento("small", milhar(total) +
+        (total === 1 ? " município" : " municípios")));
+      lista.appendChild(faixa);
+    });
   }
 
   function legendaDasPerdas(lista) {
@@ -1649,6 +1746,13 @@ _PAGE_SCRIPT: Final = """\
     if (metrica === "residuo") {
       return "Fatia real do " + rotuloA() + " entre os finalistas menos a esperada no cenário. " +
         cenarioAtual().descricao + " " + pais + LIMITE_DO_MODELO + cobertura;
+    }
+    if (metrica === "ganhos") {
+      return "Cor do finalista que ganhou mais votos do 1º para o 2º turno. O tom mede a " +
+        "vantagem no ganho: votos ganhos por ele menos os ganhos pelo outro, em pontos " +
+        "percentuais das cédulas do 1º turno, para comparar municípios de qualquer tamanho " +
+        "sem exagerar onde um deles partia de poucos votos. O rótulo traz o crescimento de " +
+        "cada um em percentual; a tabela do lugar, em votos. " + cobertura;
     }
     if (metrica === "perdas") {
       return "Municípios onde cada finalista teve menos votos no 2º turno do que no 1º. O " +
@@ -2176,6 +2280,7 @@ def _payload(pagina: PaginaDoMapa) -> dict[str, object]:
     return {
         "logos": _merged(_logos, recortes),
         "siglas": _merged(_siglas, recortes),
+        "cores": _merged(_cores, recortes),
         "cargo": pagina.cargo,
         **_view(pagina.recorte),
         "visoes": _other_views(pagina),
@@ -2311,6 +2416,10 @@ def _logos(recorte: RecortePintado) -> dict[str, str]:
     for numero, marca in recorte.marcas.items():
         logos.setdefault(numero, marca.logo)
     return logos
+
+
+def _cores(recorte: RecortePintado) -> dict[str, str]:
+    return {numero: marca.cor for numero, marca in recorte.marcas.items()}
 
 
 def _siglas(recorte: RecortePintado) -> dict[str, str]:
