@@ -61,6 +61,11 @@ const DESTINOS = [
     descricao: "Prefeitos, eleitorado governado e vereadores de 2024 por partido.",
   },
   {
+    href: "/relatorios/secoes-turnos",
+    titulo: "Seções 1º × 2º turno",
+    descricao: "Arquivo já gerado: seções que o cenário de transferência explica mal.",
+  },
+  {
     href: "/mapa",
     titulo: "Mapa",
     descricao: "Arquivo de mapa já gerado.",

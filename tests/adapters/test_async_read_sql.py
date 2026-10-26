@@ -9,7 +9,7 @@ import pytest
 from tests.adapters.orm_fakes import ScriptedSession, SyncSessionBridge, memory_sessions
 
 from eleicoes.adapters.orm.models import Base, CorrespondenceSection
-from eleicoes.adapters.postgres_boletim_consulta import _PARTY_POWER, _TOTALS
+from eleicoes.adapters.postgres_boletim_consulta import _PARTY_POWER, _SECTION_VOTES, _TOTALS
 from eleicoes.adapters.postgres_boletim_consulta_async import AsyncPostgresBoletimReader
 from eleicoes.adapters.postgres_municipio_async import AsyncPostgresMunicipalityNames
 from eleicoes.adapters.postgres_relatorio_poder_async import AsyncPostgresPowerReportStore
@@ -130,6 +130,16 @@ def test_reader_maps_the_same_sql_as_the_sync_adapter() -> None:
     assert script.queries[0][0] == _TOTALS
     assert script.queries[3][0] == _PARTY_POWER["municipio"]
     assert script.queries[3][1] == (2026, 1, ["SE"], "presidente", 2026, 1, ["SE"], "presidente")
+
+
+def test_section_votes_use_the_sync_sql_and_grouping() -> None:
+    script = _Script()
+    script.push((1120, 1, 2, 300, 0, 3, 4, 13, 8), (1120, 1, 2, 300, 0, 3, 4, 22, 9))
+    reader = AsyncPostgresBoletimReader(_Connection(script))
+    secoes = asyncio.run(reader.section_votes(2026, 2, "SE", "presidente"))
+    assert script.queries[0][0] == _SECTION_VOTES
+    assert script.queries[0][1] == (2026, 2, "SE", "presidente", 2026, 2, "SE", "presidente")
+    assert secoes[0].nominais == ((13, 8), (22, 9))
 
 
 def test_unknown_level_does_not_query() -> None:

@@ -377,6 +377,23 @@ A cada 120 s o script lê `logs/urnas-2026-turno-2/resumo.log`. Quando a última
 
 Ficam na mesma pasta: `importados.log` (o que já foi importado), `acompanhar.log` (o resumo), `importar-XX.log` (a saída de cada importação) e `mapa.log`. Só uma cópia do script roda por vez.
 
+### Seções no 1º × 2º turno
+
+A mesma comparação, seção por seção, para as UFs que já têm 2º turno de presidente no banco:
+
+```bash
+uv run python scripts/relatorio_secoes_turnos.py --ano 2026 --sem-navegador
+```
+
+O HTML sai em `relatorios/secoes-turnos-{ano}.html` e o CSV com todas as seções pareadas fica ao lado, com o mesmo nome. As seções se pareiam por UF, município, zona e número; as que só aparecem num turno entram só na contagem. As cédulas são os votos de presidente nominais, brancos e nulos do boletim. O z robusto compara cada seção com as do mesmo município; município com menos de 8 seções comparáveis usa a zona, e zona pequena usa a UF. Seções com menos de 150 votos válidos no 1º turno ou de finalista no 2º ficam sem z. Ao lado de cada contagem de |z| > 3,5 vem o número que a normal esperaria por acaso. As verificações objetivas (cédulas acima dos aptos, cédulas que mudam mais de 50% entre os turnos, aptos que mudam mais de 5%) ficam separadas do z. Nada disso prova irregularidade. O frontend mostra o arquivo em **Seções 1º × 2º turno**.
+
+| Opção | Padrão | Uso |
+| --- | --- | --- |
+| `--ano` | `2026` | Ano da eleição. |
+| `--destino` | `relatorios/secoes-turnos-{ano}.html` | Caminho completo do HTML; o CSV troca a extensão. |
+| `--sem-navegador` | abre o navegador | Grava os arquivos e deixa o navegador fechado. |
+| `--apoiado` | `22` | Finalista que os eliminados apoiaram no 2º turno. Ordena os cenários. |
+
 
 ## Entender os arquivos da seção
 

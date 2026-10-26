@@ -14,6 +14,7 @@ from eleicoes.adapters.postgres_boletim_consulta import (
     _PARTY_POWER,
     _PRESENT_UFS,
     _RANKING,
+    _SECTION_VOTES,
     _SECTIONS,
     _TOTALS,
     _ZONES,
@@ -30,6 +31,7 @@ from eleicoes.adapters.postgres_boletim_consulta import (
     _total,
     _uf_code,
     _zona,
+    votos_por_secao,
 )
 from eleicoes.domain.boletim_consulta import (
     BlankNullProjection,
@@ -43,6 +45,7 @@ from eleicoes.domain.boletim_consulta import (
     SectionProjection,
     TotalCargo,
     VotosMunicipio,
+    VotosSecao,
     VotosZona,
 )
 from eleicoes.domain.errors import InvalidNivelError
@@ -148,6 +151,12 @@ class AsyncPostgresBoletimReader:
     ) -> tuple[BlankNullProjection, ...]:
         rows = await self._rows(_BLANKS, (ano, turno, uf, cargo))
         return tuple(_blank(row) for row in rows)
+
+    async def section_votes(
+        self, ano: int, turno: int, uf: str, cargo: str
+    ) -> tuple[VotosSecao, ...]:
+        params = (ano, turno, uf, cargo, ano, turno, uf, cargo)
+        return votos_por_secao(await self._rows(_SECTION_VOTES, params))
 
     async def present_ufs(self, ano: int, turno: int, cargo: str) -> tuple[str, ...]:
         rows = await self._rows(_PRESENT_UFS, (ano, turno, cargo))

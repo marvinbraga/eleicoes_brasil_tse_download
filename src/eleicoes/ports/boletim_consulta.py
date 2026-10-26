@@ -15,6 +15,7 @@ from eleicoes.domain.boletim_consulta import (
     SectionProjection,
     TotalCargo,
     VotosMunicipio,
+    VotosSecao,
     VotosZona,
 )
 
@@ -72,6 +73,10 @@ class BoletimReader(Protocol):
     def blank_projections(
         self, ano: int, turno: int, uf: str, cargo: str
     ) -> tuple[BlankNullProjection, ...]: ...
+
+    def section_votes(
+        self, ano: int, turno: int, uf: str, cargo: str
+    ) -> tuple[VotosSecao, ...]: ...
 
     def present_ufs(self, ano: int, turno: int, cargo: str) -> tuple[str, ...]: ...
 
@@ -135,5 +140,9 @@ class AsyncBoletimReader(Protocol):
     async def blank_projections(
         self, ano: int, turno: int, uf: str, cargo: str
     ) -> tuple[BlankNullProjection, ...]: ...
+
+    async def section_votes(
+        self, ano: int, turno: int, uf: str, cargo: str
+    ) -> tuple[VotosSecao, ...]: ...
 
     async def present_ufs(self, ano: int, turno: int, cargo: str) -> tuple[str, ...]: ...
