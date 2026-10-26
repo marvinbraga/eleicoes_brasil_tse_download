@@ -1,6 +1,7 @@
 """The RDV and log readers against a real 2026 section and synthetic logs."""
 
 import io
+import itertools
 import zipfile
 from pathlib import Path
 
@@ -90,8 +91,12 @@ def test_broken_log_and_bad_date_are_content_errors() -> None:
     assert dia_do_boletim("20261025T150214") == "25/10/2026"
 
 
+_RESUMOS = itertools.count()
+
+
 def _evento(dia: str, texto: str, urna: str = _URNA) -> str:
-    return f"{dia} 10:00:00\tINFO\t{urna}\tVOTA\t{texto}\tABCDEF"
+    """Cada linha real do log termina num resumo próprio; o contador faz o mesmo."""
+    return f"{dia} 10:00:00\tINFO\t{urna}\tVOTA\t{texto}\t{next(_RESUMOS):016X}"
 
 
 def _zip(membros: dict[str, str | bytes]) -> bytes:
@@ -101,3 +106,27 @@ def _zip(membros: dict[str, str | bytes]) -> bytes:
             dado = conteudo.encode("latin-1") if isinstance(conteudo, str) else conteudo
             arquivo.writestr(nome, dado)
     return saida.getvalue()
+
+
+def test_power_loss_right_after_the_last_office_is_counted_apart() -> None:
+    linhas = [
+        _evento(_DIA, "Eleitor foi habilitado"),
+        _evento(_DIA, "Voto confirmado para [Presidente]"),
+        _evento(_DIA, "Início das operações do logd"),
+        _evento(_DIA, "Eleitor foi habilitado"),
+        _evento(_DIA, "Voto confirmado para [Governador]"),
+        _evento(_DIA, "Início das operações do logd"),
+    ]
+
+    resumo = resumo_do_log(_zip({"logd.dat": "\n".join(linhas)}), _DIA)
+
+    assert resumo.computados == 0
+    assert resumo.interrompidos == 1
+    assert resumo.contagens() == (0, 1)
+
+
+def test_repeated_log_lines_are_the_same_event() -> None:
+    computado = _evento(_DIA, "O voto do eleitor foi computado")
+    texto = "\n".join([_evento(_DIA, "Eleitor foi habilitado"), computado, computado])
+
+    assert resumo_do_log(_zip({"logd.dat": texto}), _DIA).computados == 1

@@ -22,6 +22,10 @@ _COLUNAS: Final = 5
 _RECOMECO: Final = frozenset(
     {"Eleitor foi habilitado", "Urna desligada pela chave", "Votação suspensa"}
 )
+# A urna religou sem registro de desligamento: faltou energia.
+_REINICIO: Final = "Início das operações do logd"
+# O último cargo da cédula: confirmado ele, o voto já está gravado no RDV.
+_ULTIMO_CARGO: Final = "presidente"
 
 
 def resumo_do_log(payload: bytes, dia: str) -> ResumoLog:
@@ -29,34 +33,69 @@ def resumo_do_log(payload: bytes, dia: str) -> ResumoLog:
 
     Um voto de cargo só conta quando a votação do eleitor termina em "voto computado".
     Se a urna é desligada no meio, ou o eleitor é habilitado de novo, o que ele já tinha
-    confirmado é descartado, como a urna faz.
+    confirmado é descartado, como a urna faz. A urna grava o log na memória interna e na
+    externa, e depois de um reinício trechos podem aparecer de novo; cada linha traz o
+    próprio resumo, então linha repetida é o mesmo evento.
     """
-    computados = 0
-    urnas: set[str] = set()
-    votos = dict.fromkeys(CARGOS_NO_LOG, 0)
-    rotulos = {f"[{rotulo}]": cargo for cargo, rotulo in CARGOS_NO_LOG.items()}
-    logs = 0
+    contagem = _Contagem()
+    vistas: set[str] = set()
     for texto in _textos(payload):
-        logs += 1
-        pendentes: dict[str, int] = {}
+        contagem.logs += 1
+        contagem.pendentes = {}
         for linha in texto.splitlines():
             colunas = linha.split("\t")
-            if len(colunas) < _COLUNAS or not colunas[0].startswith(dia):
+            if len(colunas) < _COLUNAS or not colunas[0].startswith(dia) or linha in vistas:
                 continue
-            urnas.add(colunas[2])
-            evento = colunas[4]
-            if evento == _COMPUTADO:
-                computados += 1
-                for cargo, total in pendentes.items():
-                    votos[cargo] += total
-                pendentes = {}
-            elif evento in _RECOMECO:
-                pendentes = {}
-            elif evento.startswith((_CONFIRMADO, _ATRIBUIDO)):
-                votado = _cargo(evento, rotulos)
-                if votado is not None:
-                    pendentes[votado] = pendentes.get(votado, 0) + 1
-    return ResumoLog(computados, votos, frozenset(urnas), logs)
+            vistas.add(linha)
+            contagem.evento(colunas[2], colunas[4])
+    return contagem.resumo()
+
+
+class _Contagem:
+    def __init__(self) -> None:
+        self.computados = 0
+        self.interrompidos = 0
+        self.logs = 0
+        self.urnas: set[str] = set()
+        self.votos = dict.fromkeys(CARGOS_NO_LOG, 0)
+        self.por_urna: dict[str, tuple[int, dict[str, int]]] = {}
+        self.pendentes: dict[str, int] = {}
+        self._rotulos = {f"[{rotulo}]": cargo for cargo, rotulo in CARGOS_NO_LOG.items()}
+
+    def evento(self, urna: str, evento: str) -> None:
+        self.urnas.add(urna)
+        if evento == _COMPUTADO:
+            self._computar(urna)
+        elif evento == _REINICIO:
+            # Queda de energia logo depois do último cargo: a linha "computado" se perdeu.
+            if self.pendentes.get(_ULTIMO_CARGO):
+                self.interrompidos += 1
+            self.pendentes = {}
+        elif evento in _RECOMECO:
+            self.pendentes = {}
+        elif evento.startswith((_CONFIRMADO, _ATRIBUIDO)):
+            votado = _cargo(evento, self._rotulos)
+            if votado is not None:
+                self.pendentes[votado] = self.pendentes.get(votado, 0) + 1
+
+    def resumo(self) -> ResumoLog:
+        return ResumoLog(
+            self.computados,
+            self.votos,
+            frozenset(self.urnas),
+            self.logs,
+            self.por_urna,
+            self.interrompidos,
+        )
+
+    def _computar(self, urna: str) -> None:
+        self.computados += 1
+        total, votos = self.por_urna.get(urna, (0, dict.fromkeys(CARGOS_NO_LOG, 0)))
+        for cargo, quantidade in self.pendentes.items():
+            self.votos[cargo] += quantidade
+            votos[cargo] += quantidade
+        self.por_urna[urna] = (total + 1, votos)
+        self.pendentes = {}
 
 
 def dia_do_boletim(data_hora: str) -> str:

@@ -132,3 +132,33 @@ def _rdv() -> RegistroDigital:
 
 def _log() -> ResumoLog:
     return ResumoLog(10, {"presidente": 10}, frozenset({"02044893"}))
+
+
+def test_package_with_another_urns_log_confere_when_the_voting_urn_matches() -> None:
+    log = ResumoLog(
+        14,
+        {"presidente": 14},
+        frozenset({"02044893", "01750820"}),
+        2,
+        {"02044893": (10, {"presidente": 10}), "01750820": (4, {"presidente": 4})},
+    )
+
+    assert conferir(_boletim(), _rdv(), log).situacao == CONFERE
+
+
+def test_log_missing_votes_in_every_urn_diverges_with_the_breakdown() -> None:
+    log = ResumoLog(8, {"presidente": 8}, frozenset({"02044893"}), 1, {"02044893": (8, {})})
+
+    conferencia = conferir(_boletim(), _rdv(), log)
+
+    assert conferencia.divergencias == ("log_computados",)
+    assert conferencia.detalhes["log"] == "BU 10 | log pacote 8, urna 02044893 8"
+
+
+def test_vote_cut_by_a_power_loss_after_the_last_office_still_counts() -> None:
+    log = ResumoLog(9, {"presidente": 9}, frozenset({"02044893"}), 1, {}, 1)
+
+    conferencia = conferir(_boletim(), _rdv(), log)
+
+    assert conferencia.situacao == CONFERE
+    assert "queda" in conferencia.detalhes

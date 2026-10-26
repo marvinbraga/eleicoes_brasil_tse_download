@@ -52,6 +52,16 @@ class ResumoLog:
     votos_por_cargo: Mapping[str, int]
     urnas: frozenset[str]
     logs: int = 1
+    # Por urna: (votos computados, votos por cargo). O pacote de uma seção pode trazer o log
+    # de urnas usadas em contingência ou na recuperação de outra seção.
+    por_urna: Mapping[str, tuple[int, Mapping[str, int]]] = field(default_factory=dict)
+    # Votos com o último cargo confirmado e a urna religada em seguida, sem a linha "computado".
+    interrompidos: int = 0
+
+    def contagens(self) -> tuple[int, ...]:
+        """O total do pacote e o de cada urna, com e sem os votos interrompidos por queda."""
+        totais = (self.computados, *(total for total, _ in self.por_urna.values()))
+        return tuple(sorted({*totais, *(total + self.interrompidos for total in totais)}))
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,19 +143,17 @@ def _contra_rdv(boletim: Boletim, rdv: RegistroDigital, detalhes: dict[str, str]
 
 
 def _contra_log(boletim: Boletim, log: ResumoLog, detalhes: dict[str, str]) -> list[str]:
-    found: list[str] = []
-    if log.computados != boletim.eleitores_computados:
-        found.append("log_computados")
-        detalhes["log"] = f"BU {boletim.eleitores_computados} | log {log.computados}"
-    comparecimento = {linha.cargo: linha.comparecimento_cargo for linha in boletim.votos}
-    for cargo in CARGOS_NO_LOG:
-        esperado = comparecimento.get(cargo)
-        if esperado is None:
-            continue
-        registrado = log.votos_por_cargo.get(cargo, 0)
-        if registrado != esperado:
-            found.append(f"log_cargo:{cargo}")
-            detalhes[f"log:{cargo}"] = f"BU {esperado} | log {registrado}"
+    """Os votos por cargo já são conferidos voto a voto pelo RDV; o log confere eleitores."""
+    if log.interrompidos:
+        detalhes["queda"] = f"{log.interrompidos} voto(s) sem a linha 'computado' por queda"
+    if boletim.eleitores_computados in log.contagens():
+        return []
+    partes = [f"pacote {log.computados}"]
+    partes.extend(f"urna {urna} {total}" for urna, (total, _) in sorted(log.por_urna.items()))
+    if log.interrompidos:
+        partes.append(f"interrompidos {log.interrompidos}")
+    detalhes["log"] = f"BU {boletim.eleitores_computados} | log " + ", ".join(partes)
+    found = ["log_computados"]
     if f"{boletim.numero_interno_urna:08d}" not in log.urnas:
         found.append("log_sem_a_urna_do_bu")
     return found
