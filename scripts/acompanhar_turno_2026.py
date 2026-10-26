@@ -248,21 +248,34 @@ def _importar(uf: str) -> int:
 def _gerar_mapa() -> int:
     """Refaz o mapa dos dois turnos e põe o relatório de seções para rodar ao lado.
 
-    O relatório de seções lê o banco seção a seção e pode levar muito tempo em UF grande;
-    ele não segura a próxima importação. Se um ainda roda, o novo fica para o próximo lote.
+    Cada mapa roda num processo novo: assim ele usa o código atual do projeto, e não o que
+    este script carregou quando começou. O relatório de seções lê o banco seção a seção e
+    pode levar muito tempo em UF grande; ele não segura a próxima importação.
     """
-    from eleicoes.use_cases.apresentar_mapa import main
-
-    codigos = [
-        rodar_com_log(
-            PASTA / "mapa.log",
-            lambda turno=turno: main(
-                ["--ano", ANO, "--turno", turno, "--cargo", "presidente", "--sem-navegador"]
-            ),
-            f"mapa turno {turno}",
-        )
-        for turno in ("1", "2")
-    ]
+    codigos = []
+    for turno in ("1", "2"):
+        with (PASTA / "mapa.log").open("a", encoding="utf-8") as destino:
+            destino.write(f"\n===== {_agora()} início mapa turno {turno} =====\n")
+            destino.flush()
+            codigo = subprocess.run(  # noqa: S603 - comando fixo, sem entrada externa
+                [
+                    sys.executable,
+                    str(RAIZ / "scripts" / "relatorio_mapa.py"),
+                    "--ano",
+                    ANO,
+                    "--turno",
+                    turno,
+                    "--cargo",
+                    "presidente",
+                    "--sem-navegador",
+                ],
+                cwd=RAIZ,
+                stdout=destino,
+                stderr=subprocess.STDOUT,
+                check=False,
+            ).returncode
+            destino.write(f"===== {_agora()} fim mapa turno {turno} saída={codigo} =====\n")
+        codigos.append(codigo)
     _secoes_ao_lado()
     return next((codigo for codigo in codigos if codigo != 0), 0)
 

@@ -50,6 +50,8 @@ _REQUIRED = (
     "camada(mundo, estiloMundo, null, null)",
     "camada(brasil, estilo, null, 4)",
     "camada(colecao(ufs, pintura.ufsObjeto), estilo, 4, 6)",
+    "var camadaDivisas = camada(colecao(ufs, pintura.ufsObjeto), function () {",
+    "return alvo !== camadaDivisas;",
     "camada(colecao(municipios, pintura.municipiosObjeto), estilo, 6, 28, true)",
     "properties.logo = pintura.logos[item.numero]",
     "IBGE",
@@ -241,7 +243,7 @@ def test_abroad_places_become_points_on_top() -> None:
     assert "var VOTOS_DO_RAIO_MAXIMO = 30000;" in html
     assert 'geometry: {type: "Point", coordinates: [item.lon, item.lat]}' in html
     assert "camada(colecaoDePontos(pintura.exterior || []), estiloPonto, null, null, true)" in html
-    assert "{hitTolerance: 4}" in html
+    assert "{hitTolerance: 4, layerFilter: function (alvo) {" in html
     assert r'.replace(/ \(ZZ\)$/, "")' in html
     mundo = html.split("function estiloMundo()", 1)[1].split("function estilo(", 1)[0]
     assert "estiloPonto" not in mundo

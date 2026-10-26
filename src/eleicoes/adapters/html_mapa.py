@@ -780,7 +780,9 @@ _PAGE_SCRIPT: Final = """\
   function pintadoNoPixel(pixel) {
     var achado = mapa.forEachFeatureAtPixel(pixel, function (feature) {
       return feature.get("cor") ? feature : undefined;
-    }, {hitTolerance: 4});
+    }, {hitTolerance: 4, layerFilter: function (alvo) {
+      return alvo !== camadaDivisas;
+    }});
     return achado || null;
   }
 
@@ -1958,6 +1960,14 @@ _PAGE_SCRIPT: Final = """\
   var camadaBrasil = camada(brasil, estilo, null, 4);
   var camadaUfs = camada(colecao(ufs, pintura.ufsObjeto), estilo, 4, 6);
   var camadaMunicipios = camada(colecao(municipios, pintura.municipiosObjeto), estilo, 6, 28, true);
+  // Só o contorno das UFs, por cima dos municípios: as divisas seguem visíveis com o zoom.
+  var DIVISAS = [
+    new ol.style.Style({stroke: new ol.style.Stroke({color: "rgba(255,255,255,.85)", width: 4})}),
+    new ol.style.Style({stroke: new ol.style.Stroke({color: "#111111", width: 1.8})})
+  ];
+  var camadaDivisas = camada(colecao(ufs, pintura.ufsObjeto), function () {
+    return DIVISAS;
+  }, 6, null);
   var camadaPontos = camada(colecaoDePontos(pintura.exterior || []), estiloPonto, null, null, true);
 
   var mapa = new ol.Map({
@@ -1967,6 +1977,7 @@ _PAGE_SCRIPT: Final = """\
       camadaBrasil,
       camadaUfs,
       camadaMunicipios,
+      camadaDivisas,
       camadaPontos
     ],
     controls: ol.control.defaults.defaults().extend([
