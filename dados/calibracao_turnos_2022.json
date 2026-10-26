@@ -1,0 +1,385 @@
+{
+  "descricao": {
+    "eleicao": "Ano, cargo, finalistas (a é o apoiado, como em 2026) e URLs dos zips do TSE.",
+    "parametros": "Constantes de mapa_turnos usadas na conta e o método do quantil.",
+    "referencia_normal": "P(|Z| > limiar) para Z normal padrão, o z robusto sem caudas.",
+    "municipios_pareados": "Lugares, exterior incluído, presentes nos dois turnos.",
+    "sem_par": "Lugares presentes num turno só; ficam fora da conta.",
+    "melhor_ajuste": "Chave do cenário com o menor |residuo| nacional.",
+    "cenarios[].parte_de_a": "Parte dos votos dos eliminados que vai para a; null no proporcional.",
+    "cenarios[].nacional": "Brasil e exterior somados: fatia esperada e real de a entre os votos dos finalistas, residuo = real - esperado e o mesmo resíduo em votos do 2º turno.",
+    "cenarios[].municipios": "Municípios do Brasil lidos por UF. com_base tem z (piso de votos e grupo mínimo); sem_base não tem. As frações dividem por com_base: acima_do_moderado é |z| > limiar_moderado (moderados + fora), moderado só a faixa do meio e fora |z| > limiar_fora.",
+    "cenarios[].quantis_abs_z": "Quantis de |z| nos municípios com base, pela chave da ordem p.",
+    "cenarios[].limiares_por_fracao": "Para cada fração alvo, o menor |z| observado tal que |z| > abs_z marque no máximo essa fração dos municípios com base; marcados é quantos passam.",
+    "cenarios[].fora_por_uf": "Municípios fora do esperado (|z| > limiar_fora) por UF.",
+    "cenarios[].exterior": "As cidades do exterior (ZZ) lidas como um grupo só, contadas à parte."
+  },
+  "eleicao": {
+    "ano": 2022,
+    "cargo": "presidente",
+    "a": 22,
+    "b": 13,
+    "fontes": [
+      "https://cdn.tse.jus.br/estatistica/sead/odsele/votacao_candidato_munzona/votacao_candidato_munzona_2022.zip",
+      "https://cdn.tse.jus.br/estatistica/sead/odsele/detalhe_votacao_munzona/detalhe_votacao_munzona_2022.zip"
+    ]
+  },
+  "parametros": {
+    "piso_de_votos": 1000,
+    "minimo_no_grupo": 8,
+    "limiar_moderado": 2.0,
+    "limiar_fora": 3.5,
+    "agrupamento": "UF; o exterior (ZZ) é um grupo à parte",
+    "metodo_do_quantil": "interpolação linear entre as ordens (tipo 7 de Hyndman e Fan)"
+  },
+  "referencia_normal": {
+    "acima_do_moderado": 0.0455,
+    "fora": 0.000465
+  },
+  "municipios_pareados": 5708,
+  "sem_par": 1,
+  "melhor_ajuste": "maioriaa",
+  "cenarios": [
+    {
+      "chave": "todosa",
+      "rotulo": "Todos apoiam o 22",
+      "parte_de_a": 1.0,
+      "nacional": {
+        "esperado_a": 0.515693,
+        "real_a": 0.490976,
+        "residuo": -0.024717,
+        "votos_de_diferenca": -2930244
+      },
+      "municipios": {
+        "lugares": 5570,
+        "com_base": 5562,
+        "sem_base": 8,
+        "moderados": 335,
+        "fora_a": 21,
+        "fora_b": 30,
+        "fracao_acima_do_moderado": 0.069399,
+        "fracao_moderado": 0.06023,
+        "fracao_fora": 0.009169
+      },
+      "quantis_abs_z": {
+        "0.9": 1.765121,
+        "0.95": 2.22178,
+        "0.99": 3.406502,
+        "0.995": 4.029341,
+        "0.999": 7.11536
+      },
+      "limiares_por_fracao": {
+        "0.01": {
+          "abs_z": 3.420515,
+          "marcados": 55
+        },
+        "0.001": {
+          "abs_z": 7.695361,
+          "marcados": 5
+        }
+      },
+      "fora_por_uf": {
+        "AC": 2,
+        "BA": 9,
+        "CE": 7,
+        "GO": 1,
+        "MT": 1,
+        "MG": 1,
+        "PB": 4,
+        "PE": 1,
+        "PI": 4,
+        "PR": 2,
+        "RN": 6,
+        "RS": 7,
+        "SC": 1,
+        "SP": 5
+      },
+      "exterior": {
+        "lugares": 138,
+        "com_base": 48,
+        "sem_base": 90,
+        "moderados": 3,
+        "fora_a": 0,
+        "fora_b": 0,
+        "fracao_acima_do_moderado": 0.0625,
+        "fracao_moderado": 0.0625,
+        "fracao_fora": 0.0
+      }
+    },
+    {
+      "chave": "maioriaa",
+      "rotulo": "75% para o 22",
+      "parte_de_a": 0.75,
+      "nacional": {
+        "esperado_a": 0.494763,
+        "real_a": 0.490976,
+        "residuo": -0.003788,
+        "votos_de_diferenca": -449024
+      },
+      "municipios": {
+        "lugares": 5570,
+        "com_base": 5562,
+        "sem_base": 8,
+        "moderados": 361,
+        "fora_a": 36,
+        "fora_b": 18,
+        "fracao_acima_do_moderado": 0.074613,
+        "fracao_moderado": 0.064905,
+        "fracao_fora": 0.009709
+      },
+      "quantis_abs_z": {
+        "0.9": 1.807006,
+        "0.95": 2.279346,
+        "0.99": 3.476912,
+        "0.995": 4.082234,
+        "0.999": 6.792074
+      },
+      "limiares_por_fracao": {
+        "0.01": {
+          "abs_z": 3.480127,
+          "marcados": 55
+        },
+        "0.001": {
+          "abs_z": 7.060894,
+          "marcados": 5
+        }
+      },
+      "fora_por_uf": {
+        "AC": 1,
+        "BA": 11,
+        "CE": 5,
+        "GO": 2,
+        "MA": 1,
+        "MT": 3,
+        "MS": 1,
+        "MG": 1,
+        "PB": 2,
+        "PE": 2,
+        "PI": 6,
+        "PR": 2,
+        "RN": 6,
+        "RS": 6,
+        "SC": 1,
+        "SP": 4
+      },
+      "exterior": {
+        "lugares": 138,
+        "com_base": 48,
+        "sem_base": 90,
+        "moderados": 2,
+        "fora_a": 0,
+        "fora_b": 0,
+        "fracao_acima_do_moderado": 0.041667,
+        "fracao_moderado": 0.041667,
+        "fracao_fora": 0.0
+      }
+    },
+    {
+      "chave": "dividido",
+      "rotulo": "Metade para cada",
+      "parte_de_a": 0.5,
+      "nacional": {
+        "esperado_a": 0.473834,
+        "real_a": 0.490976,
+        "residuo": 0.017142,
+        "votos_de_diferenca": 2032196
+      },
+      "municipios": {
+        "lugares": 5570,
+        "com_base": 5562,
+        "sem_base": 8,
+        "moderados": 322,
+        "fora_a": 41,
+        "fora_b": 18,
+        "fracao_acima_do_moderado": 0.068501,
+        "fracao_moderado": 0.057893,
+        "fracao_fora": 0.010608
+      },
+      "quantis_abs_z": {
+        "0.9": 1.715421,
+        "0.95": 2.209413,
+        "0.99": 3.521748,
+        "0.995": 4.026176,
+        "0.999": 6.302978
+      },
+      "limiares_por_fracao": {
+        "0.01": {
+          "abs_z": 3.523978,
+          "marcados": 55
+        },
+        "0.001": {
+          "abs_z": 6.630567,
+          "marcados": 5
+        }
+      },
+      "fora_por_uf": {
+        "BA": 11,
+        "CE": 3,
+        "ES": 2,
+        "GO": 4,
+        "MA": 2,
+        "MT": 4,
+        "MS": 4,
+        "MG": 2,
+        "PB": 3,
+        "PE": 1,
+        "PI": 8,
+        "PR": 2,
+        "RN": 4,
+        "RS": 1,
+        "RR": 2,
+        "SC": 1,
+        "SP": 4,
+        "SE": 1
+      },
+      "exterior": {
+        "lugares": 138,
+        "com_base": 48,
+        "sem_base": 90,
+        "moderados": 1,
+        "fora_a": 0,
+        "fora_b": 0,
+        "fracao_acima_do_moderado": 0.020833,
+        "fracao_moderado": 0.020833,
+        "fracao_fora": 0.0
+      }
+    },
+    {
+      "chave": "proporcional",
+      "rotulo": "Como no 1º turno",
+      "parte_de_a": null,
+      "nacional": {
+        "esperado_a": 0.471443,
+        "real_a": 0.490976,
+        "residuo": 0.019532,
+        "votos_de_diferenca": 2315616
+      },
+      "municipios": {
+        "lugares": 5570,
+        "com_base": 5562,
+        "sem_base": 8,
+        "moderados": 292,
+        "fora_a": 41,
+        "fora_b": 9,
+        "fracao_acima_do_moderado": 0.061489,
+        "fracao_moderado": 0.052499,
+        "fracao_fora": 0.00899
+      },
+      "quantis_abs_z": {
+        "0.9": 1.707678,
+        "0.95": 2.127194,
+        "0.99": 3.410202,
+        "0.995": 4.128385,
+        "0.999": 6.859821
+      },
+      "limiares_por_fracao": {
+        "0.01": {
+          "abs_z": 3.419379,
+          "marcados": 55
+        },
+        "0.001": {
+          "abs_z": 7.185302,
+          "marcados": 5
+        }
+      },
+      "fora_por_uf": {
+        "AC": 1,
+        "BA": 12,
+        "CE": 2,
+        "GO": 2,
+        "MA": 1,
+        "MT": 1,
+        "MG": 2,
+        "PA": 4,
+        "PB": 2,
+        "PE": 2,
+        "PI": 7,
+        "PR": 2,
+        "RN": 5,
+        "RS": 2,
+        "SC": 1,
+        "TO": 4
+      },
+      "exterior": {
+        "lugares": 138,
+        "com_base": 48,
+        "sem_base": 90,
+        "moderados": 4,
+        "fora_a": 0,
+        "fora_b": 0,
+        "fracao_acima_do_moderado": 0.083333,
+        "fracao_moderado": 0.083333,
+        "fracao_fora": 0.0
+      }
+    },
+    {
+      "chave": "maioriab",
+      "rotulo": "75% para o 13",
+      "parte_de_a": 0.25,
+      "nacional": {
+        "esperado_a": 0.452905,
+        "real_a": 0.490976,
+        "residuo": 0.038071,
+        "votos_de_diferenca": 4513416
+      },
+      "municipios": {
+        "lugares": 5570,
+        "com_base": 5562,
+        "sem_base": 8,
+        "moderados": 286,
+        "fora_a": 41,
+        "fora_b": 10,
+        "fracao_acima_do_moderado": 0.06059,
+        "fracao_moderado": 0.05142,
+        "fracao_fora": 0.009169
+      },
+      "quantis_abs_z": {
+        "0.9": 1.692624,
+        "0.95": 2.122929,
+        "0.99": 3.417791,
+        "0.995": 3.933621,
+        "0.999": 5.585864
+      },
+      "limiares_por_fracao": {
+        "0.01": {
+          "abs_z": 3.422458,
+          "marcados": 55
+        },
+        "0.001": {
+          "abs_z": 5.657888,
+          "marcados": 5
+        }
+      },
+      "fora_por_uf": {
+        "AC": 1,
+        "BA": 11,
+        "CE": 2,
+        "ES": 2,
+        "MA": 2,
+        "MT": 2,
+        "MS": 1,
+        "MG": 2,
+        "PB": 4,
+        "PE": 1,
+        "PI": 8,
+        "PR": 1,
+        "RN": 5,
+        "RS": 5,
+        "RR": 1,
+        "SC": 2,
+        "SP": 1
+      },
+      "exterior": {
+        "lugares": 138,
+        "com_base": 48,
+        "sem_base": 90,
+        "moderados": 1,
+        "fora_a": 0,
+        "fora_b": 0,
+        "fracao_acima_do_moderado": 0.020833,
+        "fracao_moderado": 0.020833,
+        "fracao_fora": 0.0
+      }
+    }
+  ]
+}
