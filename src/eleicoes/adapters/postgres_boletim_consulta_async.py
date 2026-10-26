@@ -155,7 +155,7 @@ class AsyncPostgresBoletimReader:
     async def section_votes(
         self, ano: int, turno: int, uf: str, cargo: str
     ) -> tuple[VotosSecao, ...]:
-        params = (ano, turno, uf, cargo, ano, turno, uf, cargo)
+        params = (ano, turno, uf, cargo)
         return votos_por_secao(await self._rows(_SECTION_VOTES, params))
 
     async def present_ufs(self, ano: int, turno: int, cargo: str) -> tuple[str, ...]:

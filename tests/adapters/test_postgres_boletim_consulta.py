@@ -495,7 +495,7 @@ def test_section_votes_take_max_of_section_figures_and_group_the_numbers() -> No
     assert "SUM(eleitores_aptos)" not in sql
     assert "LEFT JOIN nominais" in sql
     assert "presidente" not in sql
-    assert params == (2026, 2, "AC", "presidente", 2026, 2, "AC", "presidente")
+    assert params == (2026, 2, "AC", "presidente")
     assert len(secoes) == 2
     first, empty = secoes
     assert (first.municipio, first.zona, first.secao) == (1120, 8, 3)

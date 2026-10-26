@@ -194,8 +194,26 @@ WHERE ano = %s
 GROUP BY municipio
 """
 
+# Uma leitura só de raw.boletim: a tabela é grande, e a UF lida duas vezes custava
+# o dobro de acesso a disco (MG passava de meia hora).
 _SECTION_VOTES: Final = """
-WITH secoes AS (
+WITH linhas AS MATERIALIZED (
+    SELECT
+        municipio,
+        zona,
+        secao,
+        eleitores_aptos,
+        eleitores_complemento,
+        tipo_voto,
+        numero,
+        quantidade
+    FROM raw.boletim
+    WHERE ano = %s
+      AND turno = %s
+      AND uf = %s
+      AND cargo = %s
+),
+secoes AS (
     SELECT
         municipio,
         zona,
@@ -204,21 +222,13 @@ WITH secoes AS (
         MAX(eleitores_complemento) AS eleitores_complemento,
         COALESCE(SUM(quantidade) FILTER (WHERE tipo_voto = 'branco'), 0) AS branco,
         COALESCE(SUM(quantidade) FILTER (WHERE tipo_voto = 'nulo'), 0) AS nulo
-    FROM raw.boletim
-    WHERE ano = %s
-      AND turno = %s
-      AND uf = %s
-      AND cargo = %s
+    FROM linhas
     GROUP BY municipio, zona, secao
 ),
 nominais AS (
     SELECT municipio, zona, secao, numero, SUM(quantidade) AS quantidade
-    FROM raw.boletim
-    WHERE ano = %s
-      AND turno = %s
-      AND uf = %s
-      AND cargo = %s
-      AND tipo_voto = 'nominal'
+    FROM linhas
+    WHERE tipo_voto = 'nominal'
       AND numero IS NOT NULL
     GROUP BY municipio, zona, secao, numero
 )
@@ -684,7 +694,7 @@ class PostgresBoletimReader:
         return tuple(_blank(row) for row in rows)
 
     def section_votes(self, ano: int, turno: int, uf: str, cargo: str) -> tuple[VotosSecao, ...]:
-        params = (ano, turno, uf, cargo, ano, turno, uf, cargo)
+        params = (ano, turno, uf, cargo)
         return votos_por_secao(self._rows(_SECTION_VOTES, params))
 
     def present_ufs(self, ano: int, turno: int, cargo: str) -> tuple[str, ...]:

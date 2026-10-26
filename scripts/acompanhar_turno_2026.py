@@ -14,6 +14,7 @@ importados.log, na mesma pasta. Para quando as 27 UFs e o exterior (ZZ) estão i
 import argparse
 import os
 import re
+import subprocess
 import sys
 import time
 from collections.abc import Callable, Mapping
@@ -245,9 +246,12 @@ def _importar(uf: str) -> int:
 
 
 def _gerar_mapa() -> int:
-    """Refaz o mapa dos dois turnos e o relatório de seções; devolve a primeira falha."""
+    """Refaz o mapa dos dois turnos e põe o relatório de seções para rodar ao lado.
+
+    O relatório de seções lê o banco seção a seção e pode levar muito tempo em UF grande;
+    ele não segura a próxima importação. Se um ainda roda, o novo fica para o próximo lote.
+    """
     from eleicoes.use_cases.apresentar_mapa import main
-    from eleicoes.use_cases.apresentar_secoes_turnos import main as secoes
 
     codigos = [
         rodar_com_log(
@@ -259,12 +263,33 @@ def _gerar_mapa() -> int:
         )
         for turno in ("1", "2")
     ]
-    codigos.append(
-        rodar_com_log(
-            PASTA / "secoes.log", lambda: secoes(["--ano", ANO, "--sem-navegador"]), "seções"
-        )
-    )
+    _secoes_ao_lado()
     return next((codigo for codigo in codigos if codigo != 0), 0)
+
+
+_SECOES: list[subprocess.Popen[bytes]] = []
+
+
+def _secoes_ao_lado() -> None:
+    if _SECOES and _SECOES[-1].poll() is None:
+        return
+    with (PASTA / "secoes.log").open("a", encoding="utf-8") as destino:
+        destino.write(f"\n===== {_agora()} início seções =====\n")
+        destino.flush()
+        _SECOES.append(
+            subprocess.Popen(  # noqa: S603 - comando fixo, sem entrada externa
+                [
+                    sys.executable,
+                    str(RAIZ / "scripts" / "relatorio_secoes_turnos.py"),
+                    "--ano",
+                    ANO,
+                    "--sem-navegador",
+                ],
+                cwd=RAIZ,
+                stdout=destino,
+                stderr=subprocess.STDOUT,
+            )
+        )
 
 
 def _assinar(uf: str) -> str:

@@ -138,7 +138,7 @@ def test_section_votes_use_the_sync_sql_and_grouping() -> None:
     reader = AsyncPostgresBoletimReader(_Connection(script))
     secoes = asyncio.run(reader.section_votes(2026, 2, "SE", "presidente"))
     assert script.queries[0][0] == _SECTION_VOTES
-    assert script.queries[0][1] == (2026, 2, "SE", "presidente", 2026, 2, "SE", "presidente")
+    assert script.queries[0][1] == (2026, 2, "SE", "presidente")
     assert secoes[0].nominais == ((13, 8), (22, 9))
 
 
