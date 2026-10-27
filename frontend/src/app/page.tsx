@@ -66,6 +66,11 @@ const DESTINOS = [
     descricao: "Arquivo já gerado: seções que o cenário de transferência explica mal.",
   },
   {
+    href: "/relatorios/origem-votos",
+    titulo: "De onde vieram os votos",
+    descricao: "Arquivo já gerado: eliminados, brancos e nulos e comparecimento por município.",
+  },
+  {
     href: "/mapa",
     titulo: "Mapa",
     descricao: "Arquivo de mapa já gerado.",

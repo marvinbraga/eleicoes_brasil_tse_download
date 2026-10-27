@@ -30,6 +30,7 @@ const ITENS = [
   { href: "/relatorios/marca", rotulo: "Força da marca" },
   { href: "/relatorios/municipais-2024", rotulo: "Municipais 2024" },
   { href: "/relatorios/secoes-turnos", rotulo: "Seções 1º × 2º turno" },
+  { href: "/relatorios/origem-votos", rotulo: "De onde vieram os votos" },
   { href: "/mapa", rotulo: "Mapa" },
 ] as const;
 
