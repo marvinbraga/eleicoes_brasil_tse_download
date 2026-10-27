@@ -59,6 +59,22 @@ def test_changed_rdv_diverges(tmp_path: Path) -> None:
     assert "hash_difere:rdv.dat" in resultado.conferencia.divergencias
 
 
+def test_download_in_progress_is_ignored_or_reported_as_unreadable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bu = _secao(tmp_path, "0028")
+    (bu.parent / f".{_NOME}-log.jez.partial").write_bytes(b"metade")
+    assert verificar_secao("AC", str(bu)).situacao == "valida"
+
+    def sumiu(self: Path) -> bytes:
+        raise FileNotFoundError(str(self))
+
+    monkeypatch.setattr(Path, "read_bytes", sumiu)
+    resultado = verificar_secao("AC", str(bu))
+    assert resultado.situacao == ILEGIVEL
+    assert resultado.erro == "FileNotFoundError"
+
+
 def test_two_processes_give_the_same_answer(tmp_path: Path) -> None:
     secoes = [("AC", _secao(tmp_path, "0028")), ("AC", _secao(tmp_path, "0029"))]
 

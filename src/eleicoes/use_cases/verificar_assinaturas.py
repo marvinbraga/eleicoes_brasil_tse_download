@@ -34,6 +34,8 @@ _SUFIXO_BU: Final = "-bu.dat"
 _SUFIXO_VSC: Final = "-vota.vsc"
 # Marcador que o download grava quando o TSE não publica a imagem do BU.
 _SUFIXO_AUSENTE: Final = ".ausente"
+# O download grava em ".{nome}.partial" e só depois troca pelo nome definitivo.
+_PREFIXO_PARCIAL: Final = "."
 _ORDEM: Final = (VALIDA, DIVERGE, SEM_ASSINATURA, ILEGIVEL)
 _ROTULOS: Final = {
     VALIDA: "Assinatura válida",
@@ -77,7 +79,8 @@ def verificar_secao(uf: str, caminho: str) -> ResultadoAssinatura:
         no_disco = _no_disco(pasta)
         bu = next(item for item in no_disco if item.nome.endswith(_SUFIXO_BU))
         numero_urna = leitores.bu.read(bu.nome, (pasta / bu.nome).read_bytes()).numero_interno_urna
-    except ElectionError as error:
+    except (ElectionError, OSError) as error:
+        # OSError: o download em andamento pode trocar um arquivo entre a listagem e a leitura.
         return ResultadoAssinatura(uf, caminho, None, type(error).__name__)
     conferencia = conferir_assinaturas(
         pacote, no_disco, prefixo, numero_urna, autoridades(), verificar_assinatura
@@ -89,7 +92,11 @@ def _no_disco(pasta: Path) -> list[ArquivoNoDisco]:
     found: list[ArquivoNoDisco] = []
     for arquivo in sorted(pasta.iterdir()):
         nome = arquivo.name
-        if nome.endswith((_SUFIXO_VSC, _SUFIXO_AUSENTE)) or not arquivo.is_file():
+        if (
+            nome.startswith(_PREFIXO_PARCIAL)
+            or nome.endswith((_SUFIXO_VSC, _SUFIXO_AUSENTE))
+            or not arquivo.is_file()
+        ):
             continue
         conteudo = arquivo.read_bytes()
         found.append(ArquivoNoDisco(nome, len(conteudo), sha512(conteudo)))
