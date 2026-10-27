@@ -150,7 +150,7 @@ def subtitulo(votos: VotosPorEstado) -> str:
             f"{base} diferença de votos, com {baixadas} urnas com boletim baixado"
             " (o índice de download não informa quantas são esperadas)"
         )
-    return f"{base} diferença de votos, com {_um_decimal(fatia)} das urnas"
+    return f"{base} diferença de votos, com {_cobertura(fatia)} das urnas"
 
 
 def _linhas(votos: VotosPorEstado) -> tuple[LinhaEstado, ...]:
@@ -201,7 +201,7 @@ def _estado(
     selo = (
         ""
         if parcial is None
-        else f'<span class="parcial">parcial: {_um_decimal(parcial)} das urnas</span>'
+        else f'<span class="parcial">parcial: {_cobertura(parcial)} das urnas</span>'
     )
     absolutos = (
         f"{votos.a}: {format_integer(linha.votos_a)} · {votos.b}: {format_integer(linha.votos_b)}"
@@ -355,6 +355,15 @@ def _p(texto: str) -> str:
 
 def _sigla(numero: int, marca: Marca) -> str:
     return marca.sigla or str(numero)
+
+
+def _cobertura(fatia: Fraction) -> str:
+    """Duas casas, truncadas: com uma urna faltando, nunca arredonda para 100%."""
+    if fatia >= 1:
+        return "100%"
+    centesimos = int(fatia * 10_000)
+    inteiro, resto = divmod(centesimos, 100)
+    return f"{format_integer(inteiro)},{resto:02d}%"
 
 
 def _um_decimal(fatia: Fraction) -> str:

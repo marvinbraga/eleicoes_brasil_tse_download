@@ -87,7 +87,7 @@ def test_execute_writes_the_page_and_opens_it(tmp_path: Path) -> None:
     assert (report.votos.vitorias_a, report.votos.vitorias_b) == (1, 2)
     html = destino.read_text(encoding="utf-8")
     assert "Como votou cada estado" in html
-    assert "com 75,0% das urnas" in html
+    assert "com 75,00% das urnas" in html
     assert "26/10/2026" in html
 
 

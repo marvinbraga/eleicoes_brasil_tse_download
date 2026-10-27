@@ -56,7 +56,7 @@ def test_page_has_title_finalists_rows_and_footer() -> None:
     texto = _texto(html)
     assert html.startswith("<!DOCTYPE html>")
     assert f"<h1>{TITULO}</h1>" in html
-    assert "Em % dos votos válidos e na diferença de votos, com 90,5% das urnas" in texto
+    assert "Em % dos votos válidos e na diferença de votos, com 90,47% das urnas" in texto
     assert "PT · 13" in texto and "PL · 22" in texto
     assert texto.count("venceu em 1 estado ") == 2
     assert "+1,13 mi" in texto and "+2,02 mi" in texto
@@ -69,7 +69,7 @@ def test_page_has_title_finalists_rows_and_footer() -> None:
     assert "190 de 210 seções" in texto
     assert "seções do 1º turno no índice de download" in texto
     assert 'src="data:image/png;base64,AAAA"' in html
-    assert "parcial: 90,0% das urnas" in texto
+    assert "parcial: 90,00% das urnas" in texto
 
 
 def test_rows_follow_the_reference_share_and_winner_side() -> None:
@@ -121,7 +121,7 @@ def test_first_round_coverage_names_its_own_round() -> None:
     assert "seções do 1º turno no índice de download)" in _texto(
         html_dos_estados(votos, _MARCAS, _AGORA, _DADOS)
     )
-    assert subtitulo(votos).endswith("com 100,0% das urnas")
+    assert subtitulo(votos).endswith("com 100% das urnas")
 
 
 def test_text_color_contrasts_with_the_party_color() -> None:
@@ -144,3 +144,13 @@ def test_missing_mark_names_the_party() -> None:
     with pytest.raises(MarkMissingError) as error:
         html_dos_estados(_segundo(), {13: _MARCAS[13]}, _AGORA, _DADOS)
     assert error.value.partidos == (22,)
+
+
+def test_coverage_never_rounds_up_to_a_full_hundred() -> None:
+    from fractions import Fraction
+
+    from eleicoes.adapters.html_votos_por_estado import _cobertura
+
+    assert _cobertura(Fraction(499_178, 499_207)) == "99,99%"
+    assert _cobertura(Fraction(1)) == "100%"
+    assert _cobertura(Fraction(905, 1000)) == "90,50%"
