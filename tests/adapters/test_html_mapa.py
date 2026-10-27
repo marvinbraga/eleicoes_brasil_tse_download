@@ -379,7 +379,7 @@ def test_hover_highlights_and_details_the_place() -> None:
     assert pintura["municipios"][0]["nulo"] == 1
     assert "properties.votosSegundo = item.votosSegundo;" in html
     assert "var emDestaque = feature === destacado;" in html
-    assert 'misturar(corDoLugar(feature), emDestaque ? "1/1" : feature.get("peso"))' in html
+    assert 'misturar(corDoLugar(feature), emDestaque ? "1/1" : tomDoLugar(feature))' in html
     assert 'font: emDestaque ? "bold 14px sans-serif" : "12px sans-serif"' in html
     assert 'zIndex: emDestaque ? Z_DESTAQUE : votosValidos(feature.get("peso"))' in html
     assert "new ol.Overlay({element: painelDetalhe, stopEvent: false})" in html
@@ -561,4 +561,5 @@ def test_close_races_blend_the_runner_up_color_under_the_leader() -> None:
     assert "var MARGEM_DA_MESCLA = 0.10;" in html
     assert "var TETO_DO_SEGUNDO = 0.45;" in html
     assert "function corComSegundo(feature, cor) {" in html
+    assert "var TOM_DA_MESCLA = 0.8;" in html
     assert "Disputa apertada (menos de 10 p.p. entre o 1º e o 2º)" in html

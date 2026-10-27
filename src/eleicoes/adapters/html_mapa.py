@@ -403,7 +403,7 @@ _PAGE_SCRIPT: Final = """\
       return estiloMundo();
     }
     var emDestaque = feature === destacado;
-    var tinta = misturar(corDoLugar(feature), emDestaque ? "1/1" : feature.get("peso"));
+    var tinta = misturar(corDoLugar(feature), emDestaque ? "1/1" : tomDoLugar(feature));
     var estilos = [new ol.style.Style({
       zIndex: emDestaque ? Z_DESTAQUE : 0,
       fill: new ol.style.Fill({color: tinta.fill}),
@@ -442,6 +442,29 @@ _PAGE_SCRIPT: Final = """\
   // mistura, crescendo até o empate. Ela nunca passa do teto: a cor do líder segue majoritária.
   var MARGEM_DA_MESCLA = 0.10;
   var TETO_DO_SEGUNDO = 0.45;
+
+  // Na disputa apertada a fatia do líder fica perto de 50% e o tom sairia quase branco,
+  // escondendo a mistura; ali o tom fica em pelo menos TOM_DA_MESCLA.
+  var TOM_DA_MESCLA = 0.8;
+
+  function tomDoLugar(feature) {
+    var peso = feature.get("peso");
+    if (CRUZAMENTO || COMPARATIVO || margemDoLider(feature) >= MARGEM_DA_MESCLA) {
+      return peso;
+    }
+    return String(Math.max(fracao(peso), TOM_DA_MESCLA));
+  }
+
+  function margemDoLider(feature) {
+    var votosSegundo = Number(feature.get("votosSegundo"));
+    var partes = String(feature.get("peso") == null ? "" : feature.get("peso")).split("/");
+    var lider = Number(partes[0]);
+    var validos = partes.length === 2 ? Number(partes[1]) : NaN;
+    if (!feature.get("segundo") || !eInteiro(votosSegundo) || !eInteiro(lider) || !(validos > 0)) {
+      return Infinity;
+    }
+    return (lider - votosSegundo) / validos;
+  }
 
   function corComSegundo(feature, cor) {
     var segundo = feature.get("segundo");
@@ -562,7 +585,7 @@ _PAGE_SCRIPT: Final = """\
 
   function estiloPonto(feature, resolution) {
     var emDestaque = feature === destacado;
-    var tinta = misturar(corDoLugar(feature), emDestaque ? "1/1" : feature.get("peso"));
+    var tinta = misturar(corDoLugar(feature), emDestaque ? "1/1" : tomDoLugar(feature));
     var votos = votosValidos(feature.get("peso"));
     var raio = raioDoPonto(votos) + (emDestaque ? 2 : 0);
     var estilos = [new ol.style.Style({
@@ -2252,8 +2275,8 @@ def html_do_mapa(pagina: PaginaDoMapa) -> str:
         '<div id="legenda" class="ol-unselectable"><button type="button" aria-expanded="true"'
         ' aria-controls="legenda-itens">Partidos</button><div id="legenda-itens">'
         '<ul></ul><p class="nota">Tom mais forte: fatia maior dos votos válidos do líder. '
-        "Disputa apertada (menos de 10 p.p. entre o 1º e o 2º): a cor do 2º colocado entra "
-        "na mistura, sem passar da cor do líder.</p>"
+        "Disputa apertada (menos de 10 p.p. entre o 1º e o 2º): tom forte, com a cor do 2º "
+        "colocado misturada, sem passar da cor do líder.</p>"
         "</div></div></div>\n"
         f"{_footer(pagina)}\n"
         f"{_scripts(pagina)}\n"
