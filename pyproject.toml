@@ -34,6 +34,8 @@ packages = ["src/eleicoes"]
 "src/eleicoes/adapters/sql/views.sql" = "eleicoes/adapters/sql/views.sql"
 "src/eleicoes/adapters/asn1/bu.asn1" = "eleicoes/adapters/asn1/bu.asn1"
 "src/eleicoes/adapters/asn1/rdv.asn1" = "eleicoes/adapters/asn1/rdv.asn1"
+"src/eleicoes/adapters/asn1/assinatura.asn1" = "eleicoes/adapters/asn1/assinatura.asn1"
+"src/eleicoes/adapters/asn1/autoridades_urna.pem" = "eleicoes/adapters/asn1/autoridades_urna.pem"
 
 [tool.hatch.build.targets.sdist]
 include = ["src/eleicoes", "tests", "pyproject.toml", ".env.example"]

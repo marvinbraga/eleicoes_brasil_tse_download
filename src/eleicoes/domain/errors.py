@@ -157,6 +157,12 @@ class InvalidBoletimContentError(ElectionError):
         super().__init__(f"invalid boletim field: {field}")
 
 
+class InvalidSignatureFileError(ElectionError):
+    def __init__(self, field: str) -> None:
+        self.field = field
+        super().__init__(f"invalid urn signature file field: {field}")
+
+
 class InvalidBoletimError(ElectionError):
     def __init__(self, arquivo: str) -> None:
         self.arquivo = arquivo
