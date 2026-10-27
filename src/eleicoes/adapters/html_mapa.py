@@ -1391,6 +1391,44 @@ _PAGE_SCRIPT: Final = """\
     return perdeuA ? "perdeu_a" : perdeuB ? "perdeu_b" : "nenhum";
   }
 
+  // Percentual que o finalista perdeu sobre os próprios votos do 1º turno (0 se não perdeu).
+  function perdaPercentual(antes, depois) {
+    return antes > 0 && depois < antes ? (antes - depois) / antes * 100 : 0;
+  }
+
+  // A maior perda do lugar: a do único que perdeu, ou a maior das duas.
+  function maiorPerda(item) {
+    return Math.max(
+      perdaPercentual(item.primeiro[0], item.segundo[0]),
+      perdaPercentual(item.primeiro[1], item.segundo[1])
+    );
+  }
+
+  // Tom pela perda percentual, até o percentil 95 das perdas observadas.
+  function limiteDaPerda() {
+    var chave = TURNOS.cargo + "|perda";
+    if (LIMITES_DAS_METRICAS[chave]) {
+      return LIMITES_DAS_METRICAS[chave];
+    }
+    var valores = TURNOS.municipios.map(maiorPerda).filter(function (valor) {
+      return valor > 0;
+    }).sort(function (x, y) {
+      return x - y;
+    });
+    var p95 = valores.length ? valores[Math.floor((valores.length - 1) * 0.95)] : 1;
+    LIMITES_DAS_METRICAS[chave] = Math.max(1, Math.ceil(p95));
+    return LIMITES_DAS_METRICAS[chave];
+  }
+
+  function corDaPerda(item) {
+    var classe = classeDaPerda(item);
+    if (classe === "nenhum") {
+      return CORES_DAS_PERDAS.nenhum;
+    }
+    var parte = Math.min(1, maiorPerda(item) / limiteDaPerda());
+    return clarear(CORES_DAS_PERDAS[classe], 0.2 + 0.8 * parte);
+  }
+
   function rotuloDaPerda(chave) {
     return {
       perdeu_b: "Só o " + rotuloB() + " perdeu votos",
@@ -1459,7 +1497,7 @@ _PAGE_SCRIPT: Final = """\
   function corDosTurnos(item) {
     var metrica = estadoTurnos.metrica;
     if (metrica === "perdas") {
-      return CORES_DAS_PERDAS[classeDaPerda(item)];
+      return corDaPerda(item);
     }
     if (metrica === "ganhos") {
       return corDoGanho(item);
@@ -1760,17 +1798,35 @@ _PAGE_SCRIPT: Final = """\
       perdidos.perdeu_a += Math.min(0, item.segundo[0] - item.primeiro[0]);
       perdidos.perdeu_b += Math.min(0, item.segundo[1] - item.primeiro[1]);
     });
+    var limite = limiteDaPerda();
     ORDEM_DAS_PERDAS.forEach(function (chave) {
       var item = document.createElement("li");
-      var amostra = elemento("span", "");
-      amostra.className = "amostra";
-      amostra.style.background = CORES_DAS_PERDAS[chave];
-      item.appendChild(amostra);
-      var texto = elemento("span", rotuloDaPerda(chave));
       var total = contagem[chave] || 0;
-      texto.appendChild(elemento("small", milhar(total) +
-        (total === 1 ? " município" : " municípios")));
-      item.appendChild(texto);
+      var resumo = milhar(total) + (total === 1 ? " município" : " municípios");
+      if (chave === "nenhum") {
+        var amostra = elemento("span", "");
+        amostra.className = "amostra";
+        amostra.style.background = CORES_DAS_PERDAS[chave];
+        item.appendChild(amostra);
+        var texto = elemento("span", rotuloDaPerda(chave));
+        texto.appendChild(elemento("small", resumo));
+        item.appendChild(texto);
+        lista.appendChild(item);
+        return;
+      }
+      item.style.display = "block";
+      item.appendChild(elemento("span", rotuloDaPerda(chave)));
+      var escala = elemento("div", "");
+      escala.className = "escala";
+      escala.style.background = "linear-gradient(to right, " +
+        clarear(CORES_DAS_PERDAS[chave], 0.2) + ", " + clarear(CORES_DAS_PERDAS[chave], 1) + ")";
+      item.appendChild(escala);
+      var marcas = elemento("div", "");
+      marcas.className = "marcas";
+      marcas.appendChild(elemento("span", "0%"));
+      marcas.appendChild(elemento("span", milhar(limite) + "% ou mais"));
+      item.appendChild(marcas);
+      item.appendChild(elemento("small", resumo));
       lista.appendChild(item);
     });
     var resumo = elemento("li", "");
@@ -1816,7 +1872,9 @@ _PAGE_SCRIPT: Final = """\
     }
     if (metrica === "perdas") {
       return "Municípios onde cada finalista teve menos votos no 2º turno do que no 1º. O " +
-        "rótulo traz o saldo de cada um. Perder votos acompanha, quase sempre, a queda do " +
+        "tom mede o percentual perdido sobre os votos dele no 1º turno (onde os dois " +
+        "perderam, a maior das duas perdas). O rótulo traz o saldo de cada um. " +
+        "Perder votos acompanha, quase sempre, a queda do " +
         "comparecimento (veja Total de cédulas). " + cobertura;
     }
     if (metrica === "abstencao") {
