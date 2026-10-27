@@ -71,6 +71,11 @@ const DESTINOS = [
     descricao: "Arquivo já gerado: fatia e diferença de votos dos dois mais votados por UF.",
   },
   {
+    href: "/relatorios/regioes-porte",
+    titulo: "Regiões e porte",
+    descricao: "Arquivo já gerado: onde cada finalista cresceu, por região e porte do município.",
+  },
+  {
     href: "/mapa",
     titulo: "Mapa",
     descricao: "Arquivo de mapa já gerado.",

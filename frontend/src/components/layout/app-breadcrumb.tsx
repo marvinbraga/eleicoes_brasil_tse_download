@@ -37,6 +37,7 @@ const TRILHAS: Record<string, Trilha> = {
   "/relatorios/municipais-2024": { pagina: "Municipais 2024", relatorios: true },
   "/relatorios/secoes-turnos": { pagina: "Seções 1º × 2º turno", relatorios: true },
   "/relatorios/estados": { pagina: "Como votou cada estado", relatorios: true },
+  "/relatorios/regioes-porte": { pagina: "Regiões e porte", relatorios: true },
   "/mapa": { pagina: "Mapa", relatorios: false },
 };
 
