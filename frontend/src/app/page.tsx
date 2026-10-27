@@ -66,6 +66,11 @@ const DESTINOS = [
     descricao: "Arquivo já gerado: seções que o cenário de transferência explica mal.",
   },
   {
+    href: "/relatorios/regioes-porte",
+    titulo: "Regiões e porte",
+    descricao: "Arquivo já gerado: onde cada finalista cresceu, por região e porte do município.",
+  },
+  {
     href: "/mapa",
     titulo: "Mapa",
     descricao: "Arquivo de mapa já gerado.",
