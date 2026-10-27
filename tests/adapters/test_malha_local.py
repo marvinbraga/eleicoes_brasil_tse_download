@@ -214,3 +214,22 @@ def test_twenty_character_acronym_is_accepted(tmp_path: Path) -> None:
     marks = f'{{"22": {{"cor": "#112233", "arquivo": "22.png", "sigla": "{sigla}"}}}}'
     _write_fixture(tmp_path, marcas=marks)
     assert LocalMeshAssets(tmp_path).load().marcas[22].sigla == sigla
+
+
+def test_marks_alone_skip_the_mesh_files(tmp_path: Path) -> None:
+    (tmp_path / "logomarcas").mkdir()
+    (tmp_path / "marcas.json").write_text(
+        '{"22": {"cor": "#112233", "arquivo": "22.png", "sigla": "PL"}}', encoding="utf-8"
+    )
+    (tmp_path / "logomarcas" / "22.png").write_bytes(_ONE_PIXEL_PNG)
+
+    marcas = LocalMeshAssets(tmp_path).marcas()
+
+    assert marcas[22].cor == "#112233"
+    assert marcas[22].sigla == "PL"
+    assert marcas[22].logo.startswith("data:image/png;base64,")
+
+
+def test_marks_alone_name_the_missing_file(tmp_path: Path) -> None:
+    with pytest.raises(MeshMissingError, match="marcas.json"):
+        LocalMeshAssets(tmp_path).marcas()

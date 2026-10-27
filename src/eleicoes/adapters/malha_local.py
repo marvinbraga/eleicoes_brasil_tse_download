@@ -87,6 +87,10 @@ class LocalMeshAssets:
             exterior=self._coordinates(),
         )
 
+    def marcas(self) -> dict[int, Marca]:
+        """Só as cores e logos dos partidos, sem ler a malha."""
+        return self._marks(self._read(_MARKS_NAME))
+
     def _coordinates(self) -> dict[str, tuple[float, float]]:
         if self._exterior is None:
             return {}
