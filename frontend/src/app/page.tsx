@@ -76,6 +76,11 @@ const DESTINOS = [
     descricao: "Arquivo já gerado: onde cada finalista cresceu, por região e porte do município.",
   },
   {
+    href: "/relatorios/origem-votos",
+    titulo: "De onde vieram os votos",
+    descricao: "Arquivo já gerado: eliminados, brancos e nulos e comparecimento por município.",
+  },
+  {
     href: "/mapa",
     titulo: "Mapa",
     descricao: "Arquivo de mapa já gerado.",

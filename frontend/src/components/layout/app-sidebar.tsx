@@ -32,6 +32,7 @@ const ITENS = [
   { href: "/relatorios/secoes-turnos", rotulo: "Seções 1º × 2º turno" },
   { href: "/relatorios/estados", rotulo: "Como votou cada estado" },
   { href: "/relatorios/regioes-porte", rotulo: "Regiões e porte" },
+  { href: "/relatorios/origem-votos", rotulo: "De onde vieram os votos" },
   { href: "/mapa", rotulo: "Mapa" },
 ] as const;
 

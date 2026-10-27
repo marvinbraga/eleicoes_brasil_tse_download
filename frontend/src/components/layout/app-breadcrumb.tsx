@@ -38,6 +38,7 @@ const TRILHAS: Record<string, Trilha> = {
   "/relatorios/secoes-turnos": { pagina: "Seções 1º × 2º turno", relatorios: true },
   "/relatorios/estados": { pagina: "Como votou cada estado", relatorios: true },
   "/relatorios/regioes-porte": { pagina: "Regiões e porte", relatorios: true },
+  "/relatorios/origem-votos": { pagina: "De onde vieram os votos", relatorios: true },
   "/mapa": { pagina: "Mapa", relatorios: false },
 };
 
