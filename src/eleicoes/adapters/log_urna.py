@@ -18,6 +18,7 @@ _COMPUTADO: Final = "O voto do eleitor foi computado"
 _CONFIRMADO: Final = "Voto confirmado para "
 _ATRIBUIDO: Final = "Atribuido voto"
 _COLUNAS: Final = 5
+_GERANDO: Final = "Gerando arquivo de resultado"
 # Eventos depois dos quais a votação em curso recomeça do zero.
 _RECOMECO: Final = frozenset(
     {"Eleitor foi habilitado", "Urna desligada pela chave", "Votação suspensa"}
@@ -96,6 +97,26 @@ class _Contagem:
             votos[cargo] += quantidade
         self.por_urna[urna] = (total + 1, votos)
         self.pendentes = {}
+
+
+def urnas_que_geraram_resultado(payload: bytes) -> frozenset[int]:
+    """As urnas que registram "Gerando arquivo de resultado" no log do pacote.
+
+    Normalmente é só a urna da votação. Quando a mídia de resultado falha, outra urna roda o
+    Recuperador de Dados (módulo RED), regrava BU, RDV e log e assina o vota.vsc com o
+    próprio certificado: o assinante difere da urna do BU, e o log mostra a recuperação.
+    """
+    found: set[int] = set()
+    for texto in _textos(payload):
+        for linha in texto.splitlines():
+            colunas = linha.split("\t")
+            if (
+                len(colunas) >= _COLUNAS
+                and colunas[4].startswith(_GERANDO)
+                and colunas[2].isdigit()
+            ):
+                found.add(int(colunas[2]))
+    return frozenset(found)
 
 
 def dia_do_boletim(data_hora: str) -> str:

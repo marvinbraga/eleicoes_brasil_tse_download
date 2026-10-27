@@ -9,7 +9,7 @@ import pytest
 
 from eleicoes.adapters.asn1.boletim_reader import Asn1BoletimReader
 from eleicoes.adapters.asn1.rdv_reader import Asn1RdvReader
-from eleicoes.adapters.log_urna import dia_do_boletim, resumo_do_log
+from eleicoes.adapters.log_urna import dia_do_boletim, resumo_do_log, urnas_que_geraram_resultado
 from eleicoes.domain.errors import InvalidBoletimContentError
 from eleicoes.domain.integridade_urna import CONFERE, ResumoLog, conferir
 
@@ -130,3 +130,18 @@ def test_repeated_log_lines_are_the_same_event() -> None:
     texto = "\n".join([_evento(_DIA, "Eleitor foi habilitado"), computado, computado])
 
     assert resumo_do_log(_zip({"logd.dat": texto}), _DIA).computados == 1
+
+
+def test_urns_that_generated_result_files_include_a_recovery_urn() -> None:
+    votacao = _zip({"logd.dat": _evento(_DIA, "Gerando arquivo de resultado [bu.dat] + [Início]")})
+    recuperacao = "\n".join(
+        [
+            _evento(_DIA, "Gerando arquivo de resultado [bu.dat] + [Término]", "01758779"),
+            _evento(_DIA, "Urna ligada", "00000002"),
+            "linha curta",
+        ]
+    )
+
+    found = urnas_que_geraram_resultado(_zip({"anterior.jez": votacao, "logd.dat": recuperacao}))
+
+    assert found == frozenset({int(_URNA), 1758779})
