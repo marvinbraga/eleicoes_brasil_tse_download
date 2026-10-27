@@ -66,6 +66,11 @@ const DESTINOS = [
     descricao: "Arquivo já gerado: seções que o cenário de transferência explica mal.",
   },
   {
+    href: "/relatorios/estados",
+    titulo: "Como votou cada estado",
+    descricao: "Arquivo já gerado: fatia e diferença de votos dos dois mais votados por UF.",
+  },
+  {
     href: "/mapa",
     titulo: "Mapa",
     descricao: "Arquivo de mapa já gerado.",
