@@ -1,5 +1,6 @@
 """The vota.vsc reader decodes the 2026 layout and the certificates it carries."""
 
+import base64
 from pathlib import Path
 
 import pytest
@@ -59,6 +60,17 @@ def test_garbage_is_reported_as_an_invalid_signature_file(vsc: bytes) -> None:
         leitor.read(b"\x30\x03\x02\x01\x01")
     with pytest.raises(InvalidSignatureFileError):
         leitor.read(vsc[: len(vsc) // 2])
+
+
+def test_der_certificate_may_end_in_zero_padding_but_nothing_else() -> None:
+    pasta = Path(__file__).resolve().parents[2] / "src" / "eleicoes" / "adapters" / "asn1"
+    texto = (pasta / "autoridades_urna.pem").read_text(encoding="utf-8")
+    corpo = texto.split("-----BEGIN CERTIFICATE-----")[1].split("-----END CERTIFICATE-----")[0]
+    der = base64.b64decode("".join(corpo.split()))
+
+    assert ler_certificado(der + b"\x00").sujeito == "AC URNA"
+    with pytest.raises(InvalidSignatureFileError):
+        ler_certificado(der + b"\x01")
 
 
 def test_broken_certificates_are_invalid() -> None:

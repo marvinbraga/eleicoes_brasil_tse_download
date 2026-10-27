@@ -150,7 +150,9 @@ def _valor(der: bytes, tlv: _Tlv) -> bytes:
 
 def _certificado(der: bytes) -> Certificado:
     raiz = _tlv(der, 0)
-    if raiz[3] != len(der):
+    # Parte das urnas UE2013/UE2015 grava o DER seguido de um byte zero; o script do TSE lê
+    # com o OpenSSL, que ignora a sobra. Só zeros são aceitos depois do certificado.
+    if der[raiz[3] :].strip(b"\x00"):
         raise ValueError("bytes após o certificado")
     tbs, algoritmo_assinatura, bits_assinatura = _filhos(der, raiz)
     campos = _filhos(der, tbs)
