@@ -276,8 +276,33 @@ def _gerar_mapa() -> int:
             ).returncode
             destino.write(f"===== {_agora()} fim mapa turno {turno} saída={codigo} =====\n")
         codigos.append(codigo)
+    codigos.append(_relatorio_de_estados())
     _secoes_ao_lado()
     return next((codigo for codigo in codigos if codigo != 0), 0)
+
+
+def _relatorio_de_estados() -> int:
+    """Depois do mapa, que atualiza o 2º turno gravado no banco, refaz "Como votou cada estado"."""
+    with (PASTA / "mapa.log").open("a", encoding="utf-8") as destino:
+        destino.write(f"\n===== {_agora()} início estados =====\n")
+        destino.flush()
+        codigo = subprocess.run(  # noqa: S603 - comando fixo, sem entrada externa
+            [
+                sys.executable,
+                str(RAIZ / "scripts" / "relatorio_estados.py"),
+                "--ano",
+                ANO,
+                "--turno",
+                TURNO,
+                "--sem-navegador",
+            ],
+            cwd=RAIZ,
+            stdout=destino,
+            stderr=subprocess.STDOUT,
+            check=False,
+        ).returncode
+        destino.write(f"===== {_agora()} fim estados saída={codigo} =====\n")
+    return codigo
 
 
 def _secoes_ao_lado() -> None:
