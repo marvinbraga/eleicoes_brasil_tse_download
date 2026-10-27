@@ -306,28 +306,37 @@ def _relatorio_de_estados() -> int:
 
 
 def _secoes_ao_lado() -> None:
-    """Uma cópia por vez, mesmo entre reinícios deste script (flock), e com o disco em
-    prioridade ociosa (ionice): o relatório de seções não atrasa o mapa nem a importação."""
-    with (PASTA / "secoes.log").open("a", encoding="utf-8") as destino:
-        destino.write(f"\n===== {_agora()} início seções =====\n")
-        destino.flush()
-        subprocess.Popen(  # noqa: S603 - comando fixo, sem entrada externa
-            [
-                "flock",
-                "--nonblock",
-                str(PASTA / "secoes.lock"),
-                "ionice",
-                "-c3",
-                sys.executable,
-                str(RAIZ / "scripts" / "relatorio_secoes_turnos.py"),
-                "--ano",
-                ANO,
-                "--sem-navegador",
-            ],
-            cwd=RAIZ,
-            stdout=destino,
-            stderr=subprocess.STDOUT,
-        )
+    """Relatórios lentos (seções, regiões e porte, origem dos votos) rodam ao lado, um por vez
+    mesmo entre reinícios deste script (flock) e com o disco em prioridade ociosa (ionice):
+    não atrasam o mapa nem a próxima importação."""
+    for nome, script in _RELATORIOS_AO_LADO:
+        with (PASTA / f"{nome}.log").open("a", encoding="utf-8") as destino:
+            destino.write(f"\n===== {_agora()} início {nome} =====\n")
+            destino.flush()
+            subprocess.Popen(  # noqa: S603 - comando fixo, sem entrada externa
+                [
+                    "flock",
+                    "--nonblock",
+                    str(PASTA / f"{nome}.lock"),
+                    "ionice",
+                    "-c3",
+                    sys.executable,
+                    str(RAIZ / "scripts" / script),
+                    "--ano",
+                    ANO,
+                    "--sem-navegador",
+                ],
+                cwd=RAIZ,
+                stdout=destino,
+                stderr=subprocess.STDOUT,
+            )
+
+
+_RELATORIOS_AO_LADO: Final = (
+    ("secoes", "relatorio_secoes_turnos.py"),
+    ("regioes-porte", "relatorio_regioes_porte.py"),
+    ("origem-votos", "relatorio_origem_votos.py"),
+)
 
 
 def _assinar(uf: str) -> str:
