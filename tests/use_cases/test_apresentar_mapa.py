@@ -781,6 +781,39 @@ def test_no_second_round_keeps_the_page_without_turnos(tmp_path: Path) -> None:
     assert '"turnos": null' in destino.read_text(encoding="utf-8")
 
 
+def test_checks_are_left_out_when_the_places_come_from_the_test(tmp_path: Path) -> None:
+    destino = tmp_path / "mapa.html"
+    main(
+        ["--cargo", "presidente", "--destino", str(destino), "--sem-navegador"],
+        store=_Memory(),
+        assets=_Assets(),
+        collect=lambda _ano, turno: (_bujari(),) if turno == 1 else (_second_round_place(6, 4),),
+        present=lambda _ano, _turno: ("AC",),
+    )
+
+    assert '"verificacoes": null' in destino.read_text(encoding="utf-8")
+
+
+def test_checks_read_the_reports_of_the_year(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from eleicoes.domain.mapa import PonteTseIbge
+    from eleicoes.use_cases.apresentar_mapa import _verificacoes_de
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "relatorios").mkdir()
+    (tmp_path / "relatorios" / "integridade-urnas-2026-turno-2.csv").write_text(
+        "uf,municipio,situacao\nAC,1007,confere\n", encoding="utf-8"
+    )
+    ponte = PonteTseIbge({"01007": "1200138"}, {"AC": "12"})
+
+    found = _verificacoes_de(2026)(ponte)
+
+    assert found is not None
+    assert found["integridade"] == {"1200138": [1, 0, 0, 0, 0]}
+    assert _verificacoes_de(2022)(ponte) is None
+
+
 def _reuse_run(
     tmp_path: Path,
     last_load: datetime | None,

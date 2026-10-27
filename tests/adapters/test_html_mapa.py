@@ -563,3 +563,30 @@ def test_close_races_blend_the_runner_up_color_under_the_leader() -> None:
     assert "function corComSegundo(feature, cor) {" in html
     assert "var TOM_DA_MESCLA = 0.8;" in html
     assert "Disputa apertada (menos de 10 p.p. entre o 1º e o 2º)" in html
+
+
+def test_turnos_paint_flips_new_votes_sections_and_urn_checks() -> None:
+    html = html_do_mapa(_page())
+
+    assert 'virada: "Quem virou",' in html
+    assert 'novos: "Quem levou os votos novos",' in html
+    assert 'secoes: "Seções fora do esperado",' in html
+    assert 'integridade: "Integridade das urnas",' in html
+    assert 'return depois > 0 ? "manteve_a" : "virou_b";' in html
+    assert "return total > 0 ? Math.max(0, Math.min(1, ganhoB / total)) : null;" in html
+    assert "milhar(Math.round(avaliadas * 0.000465))" in html
+    assert "if (c[1] + c[4] > 0) {" in html
+    assert "var TETO_DA_INTEGRIDADE = 0.01;" in html
+    assert 'var chave = tipo + "|" + item.codigo;' in html
+
+
+def test_page_carries_the_checks_per_place() -> None:
+    from eleicoes.domain.mapa_turnos import ComparativoTurnos as Comparativo
+    from eleicoes.domain.mapa_turnos import cenarios
+
+    lugar = _lugar_de_bujari(Apuracao(400, 500, 0, 1, 2))
+    comparativo = Comparativo(22, 13, cenarios(22, 13), None, (), (lugar,), (), ("AC",), 0, ())
+    verificacoes = {"integridade": {"1200138": [3, 0, 0, 1, 0]}, "situacoes": ["confere"]}
+    html = html_do_mapa(replace(_page(), turnos=comparativo, verificacoes=verificacoes))
+
+    assert json.loads(_block(html, "pintura"))["turnos"]["verificacoes"] == verificacoes

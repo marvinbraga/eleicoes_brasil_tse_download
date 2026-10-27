@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 
 from eleicoes.adapters.arquivo_atomico import gravar_texto
 from eleicoes.adapters.html_mapa import html_do_mapa
+from eleicoes.adapters.verificacoes_mapa import ler_verificacoes
 from eleicoes.domain.errors import (
     SCHEMA_OUTDATED_HINT,
     ElectionError,
@@ -28,6 +29,7 @@ from eleicoes.domain.mapa import (
     MeshMismatchError,
     MeshMissingError,
     PaginaDoMapa,
+    PonteTseIbge,
     RecortePintado,
     recorte_pintado,
 )
@@ -72,6 +74,7 @@ OpenReport = Callable[[Path], bool]
 _MESH_DIR = Path("downloads/malha")
 _EXTERIOR_CSV = Path("dados/exterior.csv")
 _CALIBRACAO = Path("dados/calibracao_turnos_2022.json")
+Verificacoes = Callable[[PonteTseIbge], Mapping[str, object] | None]
 _VIEWS: Final = ("presidente", "governador")
 _PRIMEIRO_TURNO: Final = 1
 _SEGUNDO_TURNO: Final = 2
@@ -105,6 +108,7 @@ class PresentMap:
         last_load: LastLoad | None = None,
         participation: Participation | None = None,
         calibracao: Mapping[str, object] | None = None,
+        verificacoes: Verificacoes | None = None,
     ) -> None:
         self._collect = collect
         self._store = store
@@ -116,6 +120,7 @@ class PresentMap:
         self._last_load = last_load
         self._participation = participation
         self._calibracao = calibracao
+        self._verificacoes = verificacoes
 
     def execute(
         self,
@@ -138,6 +143,7 @@ class PresentMap:
                 page,
                 turnos=_turnos(stored.places, segundo, mesh, self._apoiado, participacao),
                 calibracao=self._calibracao,
+                verificacoes=None if self._verificacoes is None else self._verificacoes(mesh.ponte),
                 turnos_governador=_turnos_de_governador(stored.places, segundo, mesh),
             )
         opened = _write(destino, self._render(page), self._open)
@@ -300,9 +306,21 @@ def _present(
             _last_load_for(reader, collect, rounds[1]),
             _participation_for(reader, collect, rounds[2]),
             ler_calibracao(_CALIBRACAO),
+            None if collect is not None else _verificacoes_de(int(args.ano)),
         ).execute(args.ano, args.turno, str(args.cargo), destino, atualizar=bool(args.atualizar))
     finally:
         cache.close()
+
+
+def _verificacoes_de(ano: int) -> Verificacoes:
+    def verificacoes(ponte: PonteTseIbge) -> Mapping[str, object] | None:
+        return ler_verificacoes(
+            Path(f"relatorios/secoes-turnos-{ano}.csv"),
+            Path(f"relatorios/integridade-urnas-{ano}-turno-2.csv"),
+            ponte,
+        )
+
+    return verificacoes
 
 
 def ler_calibracao(caminho: Path) -> dict[str, object] | None:

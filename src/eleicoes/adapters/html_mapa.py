@@ -155,7 +155,8 @@ _PAGE_SCRIPT: Final = """\
   };
   var CLASSES_DOS_TURNOS = ["fora_a", "moderado_a", "dentro", "moderado_b", "fora_b", "sem_base"];
   var METRICAS = [
-    "desvio", "residuo", "ganhos", "perdas", "a", "b", "branco", "nulo", "cedulas", "abstencao"
+    "desvio", "residuo", "virada", "novos", "ganhos", "perdas", "secoes", "integridade",
+    "a", "b", "branco", "nulo", "cedulas", "abstencao"
   ];
   var COR_SEM_PARTIDO = "#8c8c8c";
   var ORDEM_DAS_PERDAS = ["perdeu_b", "perdeu_a", "os_dois", "nenhum"];
@@ -175,6 +176,17 @@ _PAGE_SCRIPT: Final = """\
   };
   var INDICE_DA_METRICA = {a: 0, b: 1, branco: 3, nulo: 4};
   var LIMITES_DAS_METRICAS = {};
+  // Declaradas aqui em cima: a pintura inicial roda antes das funções que as usam.
+  var SOMAS_DAS_VERIFICACOES = {};
+  var ORDEM_DA_VIRADA = ["virou_b", "virou_a", "manteve_b", "manteve_a", "empate"];
+  var COR_DAS_SECOES = "#d9480f";
+  var TETO_DA_INTEGRIDADE = 0.01;
+  var CORES_DA_INTEGRIDADE = {
+    confere: "#2b8a3e",
+    faltam: "#f08c00",
+    problema: "#c92a2a",
+    sem_dados: "#cfcfcf"
+  };
   var COR_NEUTRA = [247, 247, 247];
   var COR_POSITIVA = [27, 120, 55];
   var COR_NEGATIVA = [118, 42, 131];
@@ -1139,6 +1151,10 @@ _PAGE_SCRIPT: Final = """\
       cedulas: "Total de cédulas",
       abstencao: "Abstenção",
       perdas: "Quem perdeu votos",
+      virada: "Quem virou",
+      novos: "Quem levou os votos novos",
+      secoes: "Seções fora do esperado",
+      integridade: "Integridade das urnas",
       ganhos: "Quem ganhou votos"
     }[chave];
   }
@@ -1502,6 +1518,19 @@ _PAGE_SCRIPT: Final = """\
     if (metrica === "ganhos") {
       return corDoGanho(item);
     }
+    if (metrica === "virada") {
+      return corDaVirada(item);
+    }
+    if (metrica === "novos") {
+      return corDosNovos(item);
+    }
+    if (metrica === "secoes") {
+      return corDasSecoes(item);
+    }
+    if (metrica === "integridade") {
+      return agregado(item) ? corDaIntegridadeSomada(item) :
+        CORES_DA_INTEGRIDADE[classeDaIntegridade(item)];
+    }
     if (semGrupo(item)) {
       return corDivergente(valorDaMetrica(item, "residuo"), limiteDaMetrica("residuo"));
     }
@@ -1559,6 +1588,18 @@ _PAGE_SCRIPT: Final = """\
     }
     if (metrica === "ganhos") {
       return ganhoDosFinalistas(item);
+    }
+    if (metrica === "virada") {
+      return rotuloDaVirada(classeDaVirada(item), item);
+    }
+    if (metrica === "novos") {
+      return textoDosNovos(item);
+    }
+    if (metrica === "secoes") {
+      return textoDasSecoes(item);
+    }
+    if (metrica === "integridade") {
+      return textoDaIntegridade(item);
     }
     if (semGrupo(item)) {
       return decimal(valorDaMetrica(item, "residuo"), 1) + " p.p. do cenário";
@@ -1716,6 +1757,14 @@ _PAGE_SCRIPT: Final = """\
       legendaDasPerdas(lista);
     } else if (metrica === "ganhos") {
       legendaDosGanhos(lista);
+    } else if (metrica === "virada") {
+      legendaDaVirada(lista);
+    } else if (metrica === "novos") {
+      legendaDosNovos(lista);
+    } else if (metrica === "secoes") {
+      legendaDasSecoes(lista);
+    } else if (metrica === "integridade") {
+      legendaDaIntegridade(lista);
     } else if (metrica === "desvio") {
       var contagem = {};
       TURNOS.municipios.forEach(function (item) {
@@ -1753,6 +1802,342 @@ _PAGE_SCRIPT: Final = """\
       lista.appendChild(faixa);
     }
     painelLegenda.querySelector(".nota").textContent = notaDosTurnos(metrica);
+  }
+
+  // ----- Quem virou: líder entre os finalistas no 1º e no 2º turno.
+  function classeDaVirada(item) {
+    var antes = item.primeiro[0] - item.primeiro[1];
+    var depois = item.segundo[0] - item.segundo[1];
+    if (antes === 0 || depois === 0) {
+      return "empate";
+    }
+    if (antes > 0) {
+      return depois > 0 ? "manteve_a" : "virou_b";
+    }
+    return depois < 0 ? "manteve_b" : "virou_a";
+  }
+
+  function corDaVirada(item) {
+    var classe = classeDaVirada(item);
+    if (classe === "empate") {
+      return "#bdbdbd";
+    }
+    var dupla = finalistasDe(item);
+    var cor = corDoPartido(classe.slice(-1) === "a" ? dupla[0] : dupla[1]);
+    return classe.indexOf("virou") === 0 ? clarear(cor, 1) : clarear(cor, 0.3);
+  }
+
+  function rotuloDaVirada(chave, item) {
+    var dupla = item ? finalistasDe(item) : [rotuloA(), rotuloB()];
+    return {
+      virou_b: "Virou para o " + dupla[1],
+      virou_a: "Virou para o " + dupla[0],
+      manteve_b: "Manteve o " + dupla[1],
+      manteve_a: "Manteve o " + dupla[0],
+      empate: "Empate num dos turnos"
+    }[chave];
+  }
+
+  // ----- Quem levou os votos novos: a parte do saldo dos finalistas que ficou com cada um.
+  function parteDosNovos(item) {
+    var ganhoA = item.segundo[0] - item.primeiro[0];
+    var ganhoB = item.segundo[1] - item.primeiro[1];
+    var total = ganhoA + ganhoB;
+    return total > 0 ? Math.max(0, Math.min(1, ganhoB / total)) : null;
+  }
+
+  function corDosNovos(item) {
+    var parte = parteDosNovos(item);
+    if (parte === null) {
+      return "#d9d9d9";
+    }
+    var dupla = finalistasDe(item);
+    var cor = corDoPartido(parte >= 0.5 ? dupla[1] : dupla[0]);
+    return clarear(cor, 0.15 + 0.85 * Math.abs(parte - 0.5) * 2);
+  }
+
+  function textoDosNovos(item) {
+    var parte = parteDosNovos(item);
+    if (parte === null) {
+      return "sem votos novos";
+    }
+    var dupla = finalistasDe(item);
+    return parte >= 0.5 ? dupla[1] + " levou " + fatia(parte) :
+      dupla[0] + " levou " + fatia(1 - parte);
+  }
+
+  // ----- Seções fora do esperado e integridade das urnas, somadas por município.
+  function verificacoes() {
+    return (TURNOS && TURNOS.verificacoes) || {};
+  }
+
+  // UF e país somam os municípios; a chave de cada município já é a da malha.
+
+  function codigosDoAgregado(item) {
+    var todos = Object.keys(verificacoes().secoes || {}).concat(
+      Object.keys(verificacoes().integridade || {}));
+    if (String(item.codigo).length !== 2) {
+      return todos;
+    }
+    var daUf = {};
+    TURNOS.municipios.forEach(function (lugar) {
+      if (lugar.uf === item.uf) {
+        daUf[lugar.codigo] = true;
+      }
+    });
+    return todos.filter(function (codigo) {
+      return daUf[codigo];
+    });
+  }
+
+  function somarSecoes(soma, dados) {
+    soma = soma || {comZ: 0, fora: {}};
+    soma.comZ += dados.comZ;
+    Object.keys(dados.fora).forEach(function (cenario) {
+      soma.fora[cenario] = (soma.fora[cenario] || 0) + dados.fora[cenario];
+    });
+    return soma;
+  }
+
+  function somarIntegridade(soma, contagem) {
+    soma = soma || [0, 0, 0, 0, 0];
+    return soma.map(function (valor, i) {
+      return valor + contagem[i];
+    });
+  }
+
+  function verificacaoDe(tipo, item) {
+    var porCodigo = verificacoes()[tipo] || {};
+    if (!agregado(item)) {
+      return porCodigo[item.codigo];
+    }
+    var chave = tipo + "|" + item.codigo;
+    if (!SOMAS_DAS_VERIFICACOES.hasOwnProperty(chave)) {
+      var vistos = {};
+      var soma;
+      codigosDoAgregado(item).forEach(function (codigo) {
+        if (vistos[codigo] || !porCodigo[codigo]) {
+          return;
+        }
+        vistos[codigo] = true;
+        soma = tipo === "secoes" ? somarSecoes(soma, porCodigo[codigo]) :
+          somarIntegridade(soma, porCodigo[codigo]);
+      });
+      SOMAS_DAS_VERIFICACOES[chave] = soma;
+    }
+    return SOMAS_DAS_VERIFICACOES[chave];
+  }
+
+  function cenarioDasSecoes(dados) {
+    return dados.fora.hasOwnProperty(estadoTurnos.cenario) ? estadoTurnos.cenario : "proporcional";
+  }
+
+  function fatiaForaDoEsperado(item) {
+    var dados = verificacaoDe("secoes", item);
+    if (!dados || !dados.comZ) {
+      return null;
+    }
+    return (dados.fora[cenarioDasSecoes(dados)] || 0) / dados.comZ;
+  }
+
+  function limiteDasSecoes() {
+    var chave = "secoes|" + estadoTurnos.cenario;
+    if (LIMITES_DAS_METRICAS[chave]) {
+      return LIMITES_DAS_METRICAS[chave];
+    }
+    var valores = TURNOS.municipios.map(fatiaForaDoEsperado).filter(function (valor) {
+      return valor !== null && valor > 0;
+    }).sort(function (x, y) {
+      return x - y;
+    });
+    var p95 = valores.length ? valores[Math.floor((valores.length - 1) * 0.95)] : 0.01;
+    LIMITES_DAS_METRICAS[chave] = Math.max(0.01, p95);
+    return LIMITES_DAS_METRICAS[chave];
+  }
+
+  function corDasSecoes(item) {
+    var parte = fatiaForaDoEsperado(item);
+    if (parte === null) {
+      return "#cfcfcf";
+    }
+    return clarear(COR_DAS_SECOES, 0.08 + 0.92 * Math.min(1, parte / limiteDasSecoes()));
+  }
+
+  function textoDasSecoes(item) {
+    var dados = verificacaoDe("secoes", item);
+    if (!dados || !dados.comZ) {
+      return "sem seções avaliadas";
+    }
+    var fora = dados.fora[cenarioDasSecoes(dados)] || 0;
+    return milhar(fora) + " de " + milhar(dados.comZ) + " seções";
+  }
+
+  // [confere, diverge, sem_rdv, sem_log, ilegivel], na ordem de "situacoes".
+  function classeDaIntegridade(item) {
+    var c = verificacaoDe("integridade", item);
+    if (!c) {
+      return "sem_dados";
+    }
+    if (c[1] + c[4] > 0) {
+      return "problema";
+    }
+    return c[2] + c[3] > 0 ? "faltam" : "confere";
+  }
+
+  // UF e país têm centenas de milhares de seções: uma só que não confere pintaria tudo de
+  // vermelho. Ali a cor vai do verde ao vermelho pela parte que não confere, cheia em
+  // TETO_DA_INTEGRIDADE.
+
+  function corDaIntegridadeSomada(item) {
+    var c = verificacaoDe("integridade", item);
+    if (!c) {
+      return CORES_DA_INTEGRIDADE.sem_dados;
+    }
+    var total = c[0] + c[1] + c[2] + c[3] + c[4];
+    var parte = total ? Math.min(1, (total - c[0]) / total / TETO_DA_INTEGRIDADE) : 0;
+    var de = canais(CORES_DA_INTEGRIDADE.confere);
+    var para = canais(CORES_DA_INTEGRIDADE.problema);
+    return "#" + de.map(function (canal, i) {
+      var hex = Math.round(canal + (para[i] - canal) * parte).toString(16);
+      return hex.length < 2 ? "0" + hex : hex;
+    }).join("");
+  }
+
+  function textoDaIntegridade(item) {
+    var c = verificacaoDe("integridade", item);
+    if (!c) {
+      return "sem verificação";
+    }
+    var total = c[0] + c[1] + c[2] + c[3] + c[4];
+    if (c[0] === total) {
+      return "todas conferem (" + milhar(total) + ")";
+    }
+    return milhar(total - c[0]) + " de " + milhar(total) + " não conferem";
+  }
+
+  function legendaPorClasse(lista, ordem, contar, rotulo, cor) {
+    var contagem = {};
+    TURNOS.municipios.forEach(function (item) {
+      var classe = contar(item);
+      contagem[classe] = (contagem[classe] || 0) + 1;
+    });
+    ordem.forEach(function (chave) {
+      var item = document.createElement("li");
+      var amostra = elemento("span", "");
+      amostra.className = "amostra";
+      amostra.style.background = cor(chave);
+      item.appendChild(amostra);
+      var texto = elemento("span", rotulo(chave));
+      var total = contagem[chave] || 0;
+      texto.appendChild(elemento("small", milhar(total) +
+        (total === 1 ? " município" : " municípios")));
+      item.appendChild(texto);
+      lista.appendChild(item);
+    });
+  }
+
+  function legendaDaVirada(lista) {
+    var exemplo = TURNOS.municipios[0];
+    legendaPorClasse(lista, ORDEM_DA_VIRADA, classeDaVirada, function (chave) {
+      return rotuloDaVirada(chave, exemplo);
+    }, function (chave) {
+      if (chave === "empate" || !exemplo || doGovernador()) {
+        return chave === "empate" ? "#bdbdbd" : COR_SEM_PARTIDO;
+      }
+      var dupla = finalistasDe(exemplo);
+      var cor = corDoPartido(chave.slice(-1) === "a" ? dupla[0] : dupla[1]);
+      return chave.indexOf("virou") === 0 ? clarear(cor, 1) : clarear(cor, 0.3);
+    });
+  }
+
+  function legendaDosNovos(lista) {
+    var exemplo = TURNOS.municipios[0];
+    var dupla = exemplo ? finalistasDe(exemplo) : [TURNOS.a, TURNOS.b];
+    var contagem = {a: 0, b: 0, nenhum: 0};
+    TURNOS.municipios.forEach(function (item) {
+      var parte = parteDosNovos(item);
+      contagem[parte === null ? "nenhum" : parte >= 0.5 ? "b" : "a"] += 1;
+    });
+    [[1, "b"], [0, "a"]].forEach(function (par) {
+      var faixa = elemento("li", "");
+      faixa.style.display = "block";
+      var nome = doGovernador() ? (par[1] === "a" ? rotuloA() : rotuloB()) :
+        nomeDoPartido(dupla[par[0]]);
+      faixa.appendChild(elemento("span", nome + " levou a maior parte"));
+      var cor = doGovernador() ? COR_SEM_PARTIDO : corDoPartido(dupla[par[0]]);
+      var escala = elemento("div", "");
+      escala.className = "escala";
+      escala.style.background = "linear-gradient(to right, " + clarear(cor, 0.15) + ", " +
+        clarear(cor, 1) + ")";
+      faixa.appendChild(escala);
+      var marcas = elemento("div", "");
+      marcas.className = "marcas";
+      marcas.appendChild(elemento("span", "50%"));
+      marcas.appendChild(elemento("span", "100%"));
+      faixa.appendChild(marcas);
+      faixa.appendChild(elemento("small", milhar(contagem[par[1]]) + " municípios"));
+      lista.appendChild(faixa);
+    });
+  }
+
+  function legendaDasSecoes(lista) {
+    var limite = limiteDasSecoes();
+    var faixa = elemento("li", "");
+    faixa.style.display = "block";
+    faixa.appendChild(elemento("span", "Seções com |z| > 3,5, em % das seções avaliadas"));
+    var escala = elemento("div", "");
+    escala.className = "escala";
+    escala.style.background = "linear-gradient(to right, " + clarear(COR_DAS_SECOES, 0.08) +
+      ", " + clarear(COR_DAS_SECOES, 1) + ")";
+    faixa.appendChild(escala);
+    var marcas = elemento("div", "");
+    marcas.className = "marcas";
+    marcas.appendChild(elemento("span", "0%"));
+    marcas.appendChild(elemento("span", fatia(limite) + " ou mais"));
+    faixa.appendChild(marcas);
+    var municipios = 0;
+    var secoes = 0;
+    var avaliadas = 0;
+    Object.keys(verificacoes().secoes || {}).forEach(function (codigo) {
+      var dados = verificacoes().secoes[codigo];
+      var fora = dados.fora[cenarioDasSecoes(dados)] || 0;
+      municipios += fora > 0 ? 1 : 0;
+      secoes += fora;
+      avaliadas += dados.comZ;
+    });
+    faixa.appendChild(elemento("small", milhar(secoes) + " de " + milhar(avaliadas) +
+      " seções avaliadas, em " + milhar(municipios) + " municípios. A normal esperaria " +
+      milhar(Math.round(avaliadas * 0.000465)) + " por acaso."));
+    lista.appendChild(faixa);
+  }
+
+  function legendaDaIntegridade(lista) {
+    legendaPorClasse(lista, ["confere", "faltam", "problema", "sem_dados"], classeDaIntegridade,
+      function (chave) {
+        return {
+          confere: "Todas as seções conferem",
+          faltam: "Falta RDV ou log em alguma seção",
+          problema: "Alguma seção não confere",
+          sem_dados: "Sem verificação"
+        }[chave];
+      }, function (chave) {
+        return CORES_DA_INTEGRIDADE[chave];
+      });
+  }
+
+  function notaDasVerificacoes(metrica) {
+    var v = verificacoes();
+    if (metrica === "secoes") {
+      return "Seções eleitorais do município com |z| > 3,5 no relatório de seções (" +
+        "relatório de " + (v.secoesEm || "?") + "), no cenário escolhido; cenários sem " +
+        "seção avaliada usam \\"Como no 1º turno\\". Fora do esperado não prova " +
+        "irregularidade: com milhares de seções, parte delas cai na cauda por acaso. ";
+    }
+    return "Cada seção conferida entre boletim de urna, RDV (cada voto gravado) e log da " +
+      "urna (verificação de " + (v.integridadeEm || "?") + "). \\"Não confere\\" inclui log " +
+      "incompleto por falha de equipamento; o relatório de integridade explica cada caso. " +
+      "Estados e país vão do verde ao vermelho pela parte das seções que não confere " +
+      "(vermelho cheio a partir de 1%). ";
   }
 
   function legendaDosGanhos(lista) {
@@ -1863,6 +2248,19 @@ _PAGE_SCRIPT: Final = """\
       return "Fatia real do " + rotuloA() + " entre os finalistas menos a esperada no cenário. " +
         cenarioAtual().descricao + " " + pais + LIMITE_DO_MODELO + cobertura;
     }
+    if (metrica === "virada") {
+      return "Líder entre os dois finalistas no 1º e no 2º turno. Tom forte: o município " +
+        "mudou de lado; tom claro: manteve o líder do 1º turno. " + cobertura;
+    }
+    if (metrica === "novos") {
+      return "Votos novos: o que os dois finalistas ganharam juntos do 1º para o 2º turno " +
+        "(eleitores dos eliminados, brancos e nulos que viraram voto e comparecimento a " +
+        "mais). Cor de quem levou a maior parte; tom mais forte quanto mais perto de 100%. " +
+        "O relatório De onde vieram os votos detalha as três fontes. " + cobertura;
+    }
+    if (metrica === "secoes" || metrica === "integridade") {
+      return notaDasVerificacoes(metrica) + cobertura;
+    }
     if (metrica === "ganhos") {
       return "Cor do finalista que ganhou mais votos do 1º para o 2º turno. O tom mede a " +
         "vantagem no ganho: votos ganhos por ele menos os ganhos pelo outro, em pontos " +
@@ -1890,6 +2288,12 @@ _PAGE_SCRIPT: Final = """\
   }
 
   function metricaDisponivel(chave) {
+    if (chave === "secoes") {
+      return !doGovernador() && Boolean(verificacoes().secoes);
+    }
+    if (chave === "integridade") {
+      return Boolean(verificacoes().integridade);
+    }
     return chave !== "abstencao" || TURNOS.municipios.some(function (item) {
       return Boolean(item.participacao);
     });
@@ -2407,7 +2811,11 @@ def _payload(pagina: PaginaDoMapa) -> dict[str, object]:
         "titulos": _titles(pagina),
         "turnos": None
         if pagina.turnos is None
-        else {**_turnos(pagina.turnos), "calibracao": pagina.calibracao},
+        else {
+            **_turnos(pagina.turnos),
+            "calibracao": pagina.calibracao,
+            "verificacoes": pagina.verificacoes,
+        },
         "turnosgov": (
             None if pagina.turnos_governador is None else _turnos(pagina.turnos_governador)
         ),
