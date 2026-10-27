@@ -148,3 +148,7 @@ cython_debug/
 
 # Backups locais do banco
 /backups/
+
+# Ferramentas locais: worktrees de agentes e capturas do Playwright.
+.claude/worktrees/
+.playwright-mcp/
