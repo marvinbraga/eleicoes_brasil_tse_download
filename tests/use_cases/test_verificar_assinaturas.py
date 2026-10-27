@@ -75,6 +75,57 @@ def test_download_in_progress_is_ignored_or_reported_as_unreadable(
     assert resultado.erro == "FileNotFoundError"
 
 
+def test_signer_other_than_the_bu_urn_needs_the_recovery_in_the_log(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dataclasses import replace
+
+    from eleicoes.use_cases import verificar_assinaturas as caso
+
+    leitores = caso._leitores()
+    ler_bu = leitores.bu.read
+    monkeypatch.setattr(
+        leitores.bu,
+        "read",
+        lambda nome, dados: replace(ler_bu(nome, dados), numero_interno_urna=1841837),
+    )
+    bu = _secao(tmp_path, "0028")
+    sem_recuperacao = verificar_secao("AC", str(bu))
+    monkeypatch.setattr(caso, "_recuperadoras", lambda _log: frozenset({2295748}))
+    com_recuperacao = verificar_secao("AC", str(bu))
+
+    def quebrado(_log: Path) -> frozenset[int]:
+        raise OSError
+
+    monkeypatch.setattr(caso, "_recuperadoras", quebrado)
+    ilegivel = verificar_secao("AC", str(bu))
+
+    assert sem_recuperacao.situacao == "diverge"
+    assert com_recuperacao.situacao == "valida"
+    assert com_recuperacao.conferencia is not None and com_recuperacao.conferencia.recuperada
+    assert ilegivel.situacao == ILEGIVEL
+
+
+def test_recovery_urns_come_from_the_log_when_there_is_one(tmp_path: Path) -> None:
+    from eleicoes.use_cases.verificar_assinaturas import _recuperadoras
+
+    log = tmp_path / "log.jez"
+    assert _recuperadoras(log) == frozenset()
+    log.write_bytes(_log("01758779"))
+    assert _recuperadoras(log) == frozenset({1758779})
+
+
+def _log(urna: str) -> bytes:
+    import io
+    import zipfile
+
+    linha = f"25/10/2026 21:28:01\tINFO\t{urna}\tRED\tGerando arquivo de resultado [bu.dat]\tAB"
+    saida = io.BytesIO()
+    with zipfile.ZipFile(saida, "w") as arquivo:
+        arquivo.writestr("logd.dat", linha.encode("latin-1"))
+    return saida.getvalue()
+
+
 def test_two_processes_give_the_same_answer(tmp_path: Path) -> None:
     secoes = [("AC", _secao(tmp_path, "0028")), ("AC", _secao(tmp_path, "0029"))]
 

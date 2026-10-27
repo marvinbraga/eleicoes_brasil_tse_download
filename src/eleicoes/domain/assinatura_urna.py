@@ -108,6 +108,8 @@ class ConferenciaAssinatura:
     nao_baixados: int
     divergencias: tuple[str, ...] = ()
     detalhes: Mapping[str, str] = field(default_factory=dict)
+    # Assinado pela urna que rodou o Recuperador de Dados, não pela urna do BU.
+    recuperada: bool = False
 
 
 def sha512(conteudo: bytes) -> bytes:
@@ -127,7 +129,9 @@ def conferir_assinaturas(
     numero_interno_urna: int | None,
     autoridades: Mapping[str, Certificado],
     verificar: Verificador,
+    recuperadoras: frozenset[int] = frozenset(),
 ) -> ConferenciaAssinatura:
+    """recuperadoras: urnas que, pelo log do pacote, geraram os arquivos de resultado."""
     divergencias: list[str] = []
     detalhes: dict[str, str] = {}
     hardware = pacote.hardware
@@ -137,7 +141,7 @@ def conferir_assinaturas(
         divergencias.append("algoritmo_difere_do_certificado")
     divergencias.extend(_contra_lista(pacote, prefixo))
     divergencias.extend(_contra_disco(pacote, no_disco, detalhes))
-    divergencias.extend(_contra_urna(pacote, numero_interno_urna, detalhes))
+    divergencias.extend(_contra_urna(pacote, numero_interno_urna, recuperadoras, detalhes))
     divergencias.extend(_assinaturas(pacote, no_disco, verificar))
     cadeia = _cadeia(certificado, hardware.data_hora, autoridades, verificar, detalhes)
     if cadeia in (CADEIA_INVALIDA, CADEIA_EMISSOR_DESCONHECIDO):
@@ -159,6 +163,7 @@ def conferir_assinaturas(
         sum(1 for item in hardware.arquivos if item.nome not in nomes_no_disco),
         tuple(divergencias),
         detalhes,
+        _recuperada(pacote, numero_interno_urna, recuperadoras),
     )
 
 
@@ -196,8 +201,18 @@ def _contra_disco(
     return found
 
 
+def _recuperada(
+    pacote: PacoteAssinaturas, numero_interno_urna: int | None, recuperadoras: frozenset[int]
+) -> bool:
+    do_certificado = numero_da_urna(pacote.certificado.sujeito)
+    return numero_interno_urna not in (None, do_certificado) and do_certificado in recuperadoras
+
+
 def _contra_urna(
-    pacote: PacoteAssinaturas, numero_interno_urna: int | None, detalhes: dict[str, str]
+    pacote: PacoteAssinaturas,
+    numero_interno_urna: int | None,
+    recuperadoras: frozenset[int],
+    detalhes: dict[str, str],
 ) -> list[str]:
     do_certificado = numero_da_urna(pacote.certificado.sujeito)
     do_usuario = numero_da_urna(pacote.hardware.usuario) or pacote.hardware.serial
@@ -206,6 +221,9 @@ def _contra_urna(
         return ["assinante_difere_do_certificado"]
     if numero_interno_urna is not None and do_certificado != numero_interno_urna:
         detalhes["urna"] = f"certificado {do_certificado} | BU {numero_interno_urna}"
+        if do_certificado in recuperadoras:
+            detalhes["urna"] += " | o log mostra a recuperação dos dados nessa urna"
+            return []
         return ["urna_difere_do_bu"]
     return []
 

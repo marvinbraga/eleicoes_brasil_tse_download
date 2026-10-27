@@ -167,3 +167,23 @@ def test_urn_number_comes_from_the_digits() -> None:
     assert numero_da_urna("UEAO02468149") == 2468149
     assert numero_da_urna("ueao01813372") == 1813372
     assert numero_da_urna("UEAO") is None
+
+
+def test_recovery_urn_may_sign_for_the_bu_urn(pacote: PacoteAssinaturas) -> None:
+    def conferir(recuperadoras: frozenset[int]) -> ConferenciaAssinatura:
+        return conferir_assinaturas(
+            pacote,
+            _disco("bu.dat"),
+            _NOME,
+            1841837,
+            autoridades(),
+            verificar_assinatura,
+            recuperadoras,
+        )
+
+    assert conferir(frozenset({1841837})).divergencias == ("urna_difere_do_bu",)
+    recuperada = conferir(frozenset({1841837, _URNA}))
+    assert recuperada.situacao == VALIDA
+    assert recuperada.recuperada
+    assert "recuperação" in recuperada.detalhes["urna"]
+    assert not _conferir(pacote).recuperada

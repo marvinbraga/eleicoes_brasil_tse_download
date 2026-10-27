@@ -32,6 +32,8 @@ ILEGIVEL: Final = "ilegivel"
 SEM_ASSINATURA: Final = "sem_assinatura"
 _SUFIXO_BU: Final = "-bu.dat"
 _SUFIXO_VSC: Final = "-vota.vsc"
+_SUFIXO_LOG: Final = "-log.jez"
+_URNA_DIFERE: Final = "urna_difere_do_bu"
 # Marcador que o download grava quando o TSE não publica a imagem do BU.
 _SUFIXO_AUSENTE: Final = ".ausente"
 # O download grava em ".{nome}.partial" e só depois troca pelo nome definitivo.
@@ -85,7 +87,30 @@ def verificar_secao(uf: str, caminho: str) -> ResultadoAssinatura:
     conferencia = conferir_assinaturas(
         pacote, no_disco, prefixo, numero_urna, autoridades(), verificar_assinatura
     )
+    if _URNA_DIFERE in conferencia.divergencias:
+        # Só aqui o log é aberto: assinante diferente da urna do BU pede a recuperação de dados.
+        try:
+            recuperadoras = _recuperadoras(pasta / f"{prefixo}{_SUFIXO_LOG}")
+        except (ElectionError, OSError) as error:
+            return ResultadoAssinatura(uf, caminho, None, type(error).__name__)
+        conferencia = conferir_assinaturas(
+            pacote,
+            no_disco,
+            prefixo,
+            numero_urna,
+            autoridades(),
+            verificar_assinatura,
+            recuperadoras,
+        )
     return ResultadoAssinatura(uf, caminho, conferencia)
+
+
+def _recuperadoras(log: Path) -> frozenset[int]:
+    from eleicoes.adapters.log_urna import urnas_que_geraram_resultado
+
+    if not log.is_file():
+        return frozenset()
+    return urnas_que_geraram_resultado(log.read_bytes())
 
 
 def _no_disco(pasta: Path) -> list[ArquivoNoDisco]:
@@ -130,6 +155,8 @@ def resumo_por_uf(resultados: Sequence[ResultadoAssinatura]) -> dict[str, Counte
         if item.conferencia is not None:
             contagem[f"cadeia:{item.conferencia.cadeia}"] += 1
             contagem[f"algoritmo:{item.conferencia.algoritmo}"] += 1
+            if item.conferencia.recuperada:
+                contagem["recuperada"] += 1
     return found
 
 
@@ -150,6 +177,7 @@ def gravar_csv(destino: Path, resultados: Sequence[ResultadoAssinatura]) -> None
                 "conferidos",
                 "nao_baixados",
                 "divergencias",
+                "recuperada",
                 "detalhes",
                 "arquivo",
             ]
@@ -174,6 +202,7 @@ def html_da_verificacao(ano: int, turno: int, resultados: Sequence[ResultadoAssi
         "<h2>Por UF</h2>\n<table><thead><tr><th>UF</th><th>Seções</th>"
         + "".join(f"<th>{_ROTULOS[chave]}</th>" for chave in _ORDEM)
         + "<th>Cadeia até a AC</th><th>AC vencida na data</th><th>Ed521</th><th>ECDSA</th>"
+        + "<th>Assinada pela urna de recuperação</th>"
         + "</tr></thead><tbody>"
         + linhas_uf
         + _linha_uf("Total", total)
@@ -237,6 +266,7 @@ def _linha(item: ResultadoAssinatura) -> list[object]:
             "",
             item.erro,
             "",
+            "",
             item.caminho,
         ]
     detalhes = "; ".join(f"{chave}: {texto}" for chave, texto in conferencia.detalhes.items())
@@ -252,6 +282,7 @@ def _linha(item: ResultadoAssinatura) -> list[object]:
         "|".join(nome.split("-", 1)[-1] for nome in conferencia.conferidos),
         conferencia.nao_baixados,
         "|".join(conferencia.divergencias),
+        "sim" if conferencia.recuperada else "",
         detalhes,
         item.caminho,
     ]
@@ -265,6 +296,7 @@ def _linha_uf(uf: str, contagem: Counter[str]) -> str:
         f"cadeia:{CADEIA_AC_VENCIDA}",
         "algoritmo:ed521",
         "algoritmo:ecdsa_p521",
+        "recuperada",
     )
     return (
         f"<tr><th>{escape(uf)}</th><td>{_milhar(secoes)}</td>{celulas}"
@@ -277,14 +309,15 @@ def _tabela_de_problemas(problemas: Sequence[ResultadoAssinatura]) -> str:
     if not problemas:
         return "<h2>Seções com assinatura que não confere</h2>\n<p>Nenhuma.</p>\n"
     linhas = "".join(
-        "<tr>" + "".join(f"<td>{escape(str(valor))}</td>" for valor in _linha(item)[:12]) + "</tr>"
+        "<tr>" + "".join(f"<td>{escape(str(valor))}</td>" for valor in _linha(item)[:13]) + "</tr>"
         for item in problemas
     )
     return (
         "<h2>Seções com assinatura que não confere</h2>\n<table><thead><tr><th>UF</th>"
         "<th>Seção</th><th>Situação</th><th>Modelo</th><th>Algoritmo</th><th>Urna</th>"
         "<th>Emissor</th><th>Cadeia</th><th>Conferidos</th><th>Não baixados</th>"
-        f"<th>Divergências</th><th>Detalhes</th></tr></thead><tbody>{linhas}</tbody></table>\n"
+        "<th>Divergências</th><th>Recuperada</th><th>Detalhes</th></tr></thead>"
+        f"<tbody>{linhas}</tbody></table>\n"
     )
 
 
@@ -313,6 +346,9 @@ def _metodo() -> str:
         "assinatura de software (CEPESC), de algoritmo proprietário. A AC URNA, que emite os "
         "certificados das urnas UE2009 a UE2015, venceu em 18/07/2026, antes da eleição: essas "
         "seções aparecem como “AC vencida na data”, com assinatura e cadeia de resto válidas. "
+        "Quando a mídia de resultado falha, outra urna roda o Recuperador de Dados, regrava os "
+        "arquivos e os assina com o próprio certificado; o assinante só é aceito diferente da "
+        "urna do BU se o log do pacote mostrar essa urna gerando os arquivos de resultado. "
         "Arquivos listados pela urna e não publicados pelo TSE (foto do BU da zona, "
         "biometria e outros) entram só pela assinatura da lista.</p>"
     )
