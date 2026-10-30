@@ -36,6 +36,10 @@ const TRILHAS: Record<string, Trilha> = {
   "/relatorios/marca": { pagina: "Força da marca", relatorios: true },
   "/relatorios/municipais-2024": { pagina: "Municipais 2024", relatorios: true },
   "/relatorios/secoes-turnos": { pagina: "Seções 1º × 2º turno", relatorios: true },
+  "/relatorios/pl-pouco-pt-muito": {
+    pagina: "PL com poucos e PT com muitos",
+    relatorios: true,
+  },
   "/relatorios/estados": { pagina: "Como votou cada estado", relatorios: true },
   "/relatorios/regioes-porte": { pagina: "Regiões e porte", relatorios: true },
   "/relatorios/origem-votos": { pagina: "De onde vieram os votos", relatorios: true },

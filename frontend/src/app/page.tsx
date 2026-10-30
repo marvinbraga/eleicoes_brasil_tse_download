@@ -66,6 +66,12 @@ const DESTINOS = [
     descricao: "Arquivo já gerado: seções que o cenário de transferência explica mal.",
   },
   {
+    href: "/relatorios/pl-pouco-pt-muito",
+    titulo: "PL com poucos e PT com muitos",
+    descricao:
+      "Arquivo já gerado: seções em que o PL teve 1, 2, 3… votos e o PT teve muitos, nos dois turnos.",
+  },
+  {
     href: "/relatorios/estados",
     titulo: "Como votou cada estado",
     descricao: "Arquivo já gerado: fatia e diferença de votos dos dois mais votados por UF.",
